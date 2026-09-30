@@ -23,8 +23,17 @@ USER_AGENT = "HermesCompetitorCheck/1.8 (+owner-requested competitor summary)"
 LOGIN_HINT = re.compile(rb"<input[^>]+type=[\"']?password|/(?:login|signin|sign-in|auth|account)(?:[/?#]|$)", re.I)
 
 
+NO_SUCH_NAME = {getattr(socket, n) for n in ("EAI_NONAME", "EAI_NODATA") if hasattr(socket, n)}
+
+
 def system_resolver(host: str) -> list[str]:
-    return sorted({ai[4][0] for ai in socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)})
+    """A name that does not exist is no addresses (plan() then says UNRESOLVED); a resolver that fails stays an error."""
+    try:
+        return sorted({ai[4][0] for ai in socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)})
+    except socket.gaierror as exc:
+        if exc.errno in NO_SUCH_NAME:
+            return []
+        raise
 
 
 def tls_connector(plan: dict, request: bytes) -> bytes:

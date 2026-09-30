@@ -29,6 +29,21 @@ class Net:
         return self.pages.get((plan["host"], path), resp(404, b""))
 
 
+class TestSystemResolver(unittest.TestCase):
+    def test_a_name_that_does_not_exist_is_unresolved_not_an_unreadable_robots(self):
+        import socket
+        from unittest import mock
+        from service import crawler
+        with mock.patch.object(socket, "getaddrinfo", side_effect=socket.gaierror(socket.EAI_NONAME, "Name or service not known")):
+            self.assertEqual(crawler.system_resolver("no-such.example"), [])
+            with self.assertRaises(FetchRefused) as e:
+                Crawler().fetch("https://no-such.example/")
+            self.assertEqual(e.exception.code, "UNRESOLVED")
+        with mock.patch.object(socket, "getaddrinfo", side_effect=socket.gaierror(socket.EAI_AGAIN, "Temporary failure")):
+            with self.assertRaises(socket.gaierror):
+                crawler.system_resolver("shop.example")
+
+
 class TestCrawler(unittest.TestCase):
     def test_connects_to_the_pinned_address_with_the_hostname_for_tls(self):
         n = Net({"shop.example": [PUBLIC]}, {("shop.example", "/menu"): resp()})

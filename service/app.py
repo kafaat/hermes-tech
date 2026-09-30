@@ -30,8 +30,7 @@ log = logging.getLogger("hermes.app")
 COMMIT = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "")          # lets a caller wait for THIS build, not the previous one
 
 
-def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | None = None,
-                      retention_max_age_hours: float = 26, monitor_token: str = ""):
+def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | None = None, monitor_token: str = ""):
     class H(BaseHTTPRequestHandler):
         def _reply(self, status: int, body: str, ctype: str = "text/plain; charset=utf-8"):
             data = body.encode("utf-8")
@@ -63,7 +62,7 @@ def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | N
                         return self._reply(503, "db_unreachable")
                     return self._reply(503, json.dumps({"status": "db_unreachable", "error": type(exc).__name__}),
                                        "application/json")
-                status, body = assess(signals, retention_max_age_hours)
+                status, body = assess(signals)
                 if not full:
                     return self._reply(status, body["status"])
                 return self._reply(status, json.dumps(body), "application/json")
@@ -114,7 +113,7 @@ def main():
     port = int(os.environ.get("PORT", "8080"))
     server = ThreadingHTTPServer(("0.0.0.0", port), make_http_handler(
         webhook, os.environ.get("HERMES_VERIFY_TOKEN", ""), Database(url, "hermes_monitor"),
-        float(os.environ.get("HERMES_RETENTION_MAX_AGE_HOURS", "26")), os.environ.get("HERMES_MONITOR_TOKEN", "")))
+        os.environ.get("HERMES_MONITOR_TOKEN", "")))
 
     def on_term(signum, frame):                    # Railway sends SIGTERM, then SIGKILL after drainingSeconds: stop taking
         log.info("SIGTERM: draining")               # requests, let the current task finish (its lease covers a kill anyway)

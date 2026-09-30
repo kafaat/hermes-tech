@@ -39,14 +39,14 @@
 | --- | --- | --- |
 | مخططات JSON والعقود والفهرس والسياسات | 34 فحصًا ناجحًا من 34 | tools/validate.py · الطبقة 1 |
 | قواعد الاتساق المنطقي والسياسة الإحصائية ومعجم الإخفاقات | 136 فحصًا ناجحًا من 136 | tools/validate.py · الطبقة 2 |
-| الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 247 فحصًا ناجحًا من 247 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
+| الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 250 فحصًا ناجحًا من 250 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
 | الاختبارات الآلية | 193 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
-| حالات SQL على Postgres فعلي | 47 حالة و56 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
+| حالات SQL على Postgres فعلي | 47 حالة و57 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
-المجموع: 417/417 فحصًا ناجحًا في أداة التحقق، و193 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
+المجموع: 420/420 فحصًا ناجحًا في أداة التحقق، و193 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
 
 ### وسوم المصدر
@@ -163,7 +163,7 @@ hermes-tech/
 ├── contracts/            agent_contract.schema.json · registry(.schema).json · 8 × *.contract.json
 ├── runtime/              agent_runtime_state · agent_call · ops_summary (schemas) · examples
 ├── policies/             acceptance_policy.json · acceptance_policy.schema.json · complaint_keywords.json · complaint_keywords.schema.json · content_rules.json · content_rules.schema.json · fetch_policy.json
-├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011   (11 files)
+├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012   (12 files)
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
 ├── db/tests/             concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
@@ -197,7 +197,7 @@ hermes-tech/
 المخطط في المساحة app على Supabase Postgres 15 أو أحدث. كل جدول يخص عميلًا يحمل customer_id غير فارغ.
 
 <!-- gen:migrations -->
-الترحيلات 11 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
+الترحيلات 12 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
 
 - `0001_core` — الأنواع والجداول والقيود
 - `0002_rls` — الأدوار ودوال الهوية وأمن الصف
@@ -210,6 +210,7 @@ hermes-tech/
 - `0009_v17_authority` — طبقة السلطة: الاقتراح والقرار والاستهلاك وعميل العامل من عقد الإيجار (1.7)
 - `0010_v18_closure` — إغلاق مراجعة 1.7: ساعة الحائط، آلة حالات التسليم، توجيه webhook، تدقيق الآثار، المحو الدوري (1.8)
 - `0011_monitor_signals` — دور المراقبة: دالة واحدة تعيد أرقامًا لا صفوفًا لمراقب خارجي (تأخر المحو، صفوف تنتظر إنسانًا)
+- `0012_monitor_epoch` — موعد المحو المتوقع في دالة المراقبة: من آخر نجاح أو من بدء المراقبة، فلا إنذار كاذب قبل أول تشغيل
 <!-- /gen:migrations -->
 
 ![الشكل 2 · الكيانات الرئيسية والعلاقات (مبسّط)](diagrams/erd.png)
@@ -399,7 +400,7 @@ create policy kb_facts_worker_rw on app.kb_facts for all to hermes_worker
 46. `the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)`
 47. `the external monitor gets numbers, never rows: its role holds EXECUTE on one function and nothing else, and`
 
-الملف db/tests/rls_isolation_test.sql ينفّذ 47 حالة داخل معاملة تُلغى في النهاية، ويطلب run_isolation.sh ظهور 56 إشعار نجاح (بعض الحالات تطلق أكثر من إشعار)، بعد تطبيق كل الترحيلات بدور مالك عادي. العناوين بلغة الملف نفسه لأنها الحالات كما تُنفَّذ.
+الملف db/tests/rls_isolation_test.sql ينفّذ 47 حالة داخل معاملة تُلغى في النهاية، ويطلب run_isolation.sh ظهور 57 إشعار نجاح (بعض الحالات تطلق أكثر من إشعار)، بعد تطبيق كل الترحيلات بدور مالك عادي. العناوين بلغة الملف نفسه لأنها الحالات كما تُنفَّذ.
 <!-- /gen:sql_cases -->
 
 ## 6. عقود الوكلاء
@@ -949,8 +950,8 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | --- | --- | --- |
 | المخططات | العقود والفهرس وحالة التشغيل وسجل النداءات والسياسات | 34 |
 | المنطق | قواعد 6.2، وسياسة الشكاوى، وسياسة القبول الواحدة، ومعجم الإخفاقات | 136 |
-| SQL | الحالة النهائية بعد كل الترحيلات: أمن الصف وFORCE والسياسات والمنح والدوال، والحراسات | 247 |
-| **المجموع** | فاشل: 0 | **417** |
+| SQL | الحالة النهائية بعد كل الترحيلات: أمن الصف وFORCE والسياسات والمنح والدوال، والحراسات | 250 |
+| **المجموع** | فاشل: 0 | **420** |
 <!-- /gen:validator -->
 
 طبقة SQL منذ 1.8 تقرأ الحالة النهائية بعد تطبيق كل الترحيلات بالترتيب (tools/sql_state.py): السياسة التي أسقطها ترحيل لاحق غير موجودة، والسحب على مستوى الجدول يزيل منح الأعمدة، و«create or replace» يستبدل. في 1.7 كانت تفحص نص الترحيلات مجتمعة، فنجح فحص كان يشترط نص سياسة حذفها 0009.
@@ -1711,10 +1712,14 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | ما لا تراه المنصة | ما بُني | التحقق |
 | --- | --- | --- |
 | فحص الصحة يجري عند النشر فقط، فتعطّل القاعدة أو تراكم الطابور بعده لا يظهر | ‎GET /deps‎ في hermes-app: يستدعي `app.health_signals()` بدور `hermes_monitor` ويعيد 503 مع أسماء الإشارات الفاشلة، لمراقب خارجي يطلبه كل بضع دقائق | الحالة 47، tests/test_service_telemetry.py، فحصان في e2e |
-| المهمة المجدولة لا تُقتل إن علقت، والتشغيل التالي يُتخطّى بصمت ما دامت السابقة تعمل | مهلة اتصال 10 ث، ومهلة استعلام 5 د، ومهلة قفل 30 ث في service/jobs.py؛ و`retention_stale` في ‎/deps‎ إن مضت 26 ساعة بلا محو مسجّل | تشغيل محلي: statement_timeout=5min وlock_timeout=30s |
+| المهمة المجدولة لا تُقتل إن علقت، والتشغيل التالي يُتخطّى بصمت ما دامت السابقة تعمل | مهلة اتصال 10 ث، ومهلة استعلام 5 د، ومهلة قفل 30 ث في service/jobs.py؛ و`retention_stale` في ‎/deps‎ حين يتجاوز الوقت `retention_due_at`: آخر نجاح، أو بدء المراقبة إن لم يعمل قط، + 26 ساعة (0012). القاعدة وحدها تعرف الموعد، فلا إنذار كاذب في بيئة جديدة قبل أول تشغيل | تشغيل محلي: statement_timeout=5min وlock_timeout=30s؛ الحالتان 45b و47 |
 | النشر يرسل SIGTERM ثم SIGKILL، والنسخة القديمة تبقى تستقبل أثناء التداخل | إيقاف نظيف: الخادم يتوقف عن القبول، والعامل يُنهي مهمته ثم يخرج؛ overlapSeconds=45 وdrainingSeconds=30 على hermes-app | خروج نظيف خلال أقل من ثانية محليًا |
 
 الترحيل 0011 يفصل دورين: `hermes_monitor` لا يملك إلا EXECUTE على دالة واحدة، و`hermes_monitor_reader` (بلا دخول) يملك الدالة ولا يقرأ إلا أعمدة الأوقات والأعلام، بسياسات ضيقة. الدالة لا يملكها مالك الترحيلات عمدًا: الجداول مُجبَرة (FORCE)، فدالة definer بصفته لا ترى شيئًا دون سياسات للمالك تفتح كل دالة definer أخرى معها.
+
+**الصف في retention_runs يعني نجاحًا.** يُكتب داخل معاملة المحو نفسها، فإن فشل التشغيل (صلاحية، مهلة، قفل) تراجع الصف معه، ولا يستطيع تشغيل فاشل إسكات الإنذار. الحالة 45b تُفشل المحو عمدًا وتتحقق أن لا صف سُجِّل.
+
+**الأرقام لمن يحمل الرمز.** دون ترويسة `X-Monitor-Token` مساوية لـ`HERMES_MONITOR_TOKEN` يعيد ‎/deps‎ الرمز وكلمة واحدة (ok أو degraded)، وهو كل ما يقرؤه فحص uptime بسيط. الأعداد (الطابور، النصوص المتأخرة) نبض تشغيلي لا يُعطى لكل عابر؛ وبلا رمز مضبوط لا يحصل عليها أحد.
 
 الإشارات: عمر آخر محو، والنصوص المتأخرة عن 31 يومًا، وصفوف الصندوق الصادر التي تنتظر إنسانًا (تطابق `v_outbox_attention`)، والأحداث الموجَّهة غير المعالجة لأكثر من 5 دقائق، والأحداث غير الموجَّهة (للعلم، لا تُفشل الفحص).
 

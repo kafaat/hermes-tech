@@ -16,7 +16,7 @@ check each step. Seeding is idempotent and uses a fixed staging tenant; every ru
   6. the delivery receipt webhook         -> routed, processed, task succeeded
   7. audit: enqueue by the leased agent and the owner's decision, in the chain
   8. GET /deps (external monitor): without X-Monitor-Token only the code and one word; with it, numbers only, and
-     after this run nothing but a never-run purge may fail
+     nothing failing after this run (a purge not yet due is not stale: the database knows when it is due)
 """
 from __future__ import annotations
 import hashlib, hmac, json, os, socket, subprocess, sys, time, urllib.error, urllib.request, uuid
@@ -197,10 +197,12 @@ def main():
             deps = json.loads(raw)
         except ValueError:
             deps = {}
-        signals = {"retention_age_seconds", "overdue_bodies", "outbox_attention", "webhook_backlog", "webhook_unrouted"}
-        check(set(deps) == {"status", "failing"} | signals and all(deps[k] is None or isinstance(deps[k], int) for k in signals)
+        counts = {"retention_age_seconds", "overdue_bodies", "outbox_attention", "webhook_backlog", "webhook_unrouted"}
+        check(set(deps) == {"status", "failing", "retention_due_at", "retention_stale"} | counts
+              and all(deps[k] is None or isinstance(deps[k], int) for k in counts) and isinstance(deps["retention_stale"], bool)
               and (code == 200) == (deps["failing"] == []), f"/deps answers with numbers only ({code} {deps.get('failing')})")
-        check(not set(deps.get("failing", ["?"])) - {"retention_stale"}, "/deps: no backlog after the run (a fresh database never purged)")
+        check(code == 200 and deps.get("failing") == [],
+              f"/deps: nothing failing after the run, a purge not yet due included (due {deps.get('retention_due_at')})")
     finally:
         if proc:
             proc.terminate(); proc.wait(10)

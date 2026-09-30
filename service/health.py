@@ -3,20 +3,23 @@ Kept apart from service.app so it is tested without a database driver (tests/tes
 from __future__ import annotations
 import hmac
 
-SIGNALS = ("retention_age_seconds", "overdue_bodies", "outbox_attention", "webhook_backlog", "webhook_unrouted")
+SIGNALS = ("retention_age_seconds", "retention_due_at", "retention_stale", "overdue_bodies", "outbox_attention",
+           "webhook_backlog", "webhook_unrouted")
 
 
-def assess(signals: dict, retention_max_age_hours: float = 26) -> tuple[int, dict]:
-    """Signals from app.health_signals() -> (status, body). The purge runs daily: 26 h leaves two hours of slack
-    before a missed or skipped run alerts. Unrouted events wait for an operator by design and never fail."""
-    age = signals["retention_age_seconds"]
+def assess(signals: dict) -> tuple[int, dict]:
+    """Signals from app.health_signals() -> (status, body). The database decides when the purge is due (0012: last
+    success, or the start of monitoring, + 26 h), so a new environment does not alert before its first run and no
+    reader of /deps needs to know the schedule. Unrouted events wait for an operator by design and never fail."""
     failing = [name for name, bad in (
-        ("retention_stale", age is None or age > retention_max_age_hours * 3600),
+        ("retention_stale", bool(signals["retention_stale"])),
         ("overdue_bodies", signals["overdue_bodies"] > 0),
         ("outbox_attention", signals["outbox_attention"] > 0),
         ("webhook_backlog", signals["webhook_backlog"] > 0)) if bad]
+    due = signals["retention_due_at"]
     return (503 if failing else 200), {"status": "degraded" if failing else "ok", "failing": failing,
-                                       **{k: signals[k] for k in SIGNALS}}
+                                       **{k: signals[k] for k in SIGNALS},
+                                       "retention_due_at": due.isoformat() if hasattr(due, "isoformat") else due}
 
 
 def authorized(header: str | None, token: str) -> bool:

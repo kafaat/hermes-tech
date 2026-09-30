@@ -44,7 +44,7 @@
 
 | الدالة | تقرأ | لماذا بصلاحيات المالك | من ينفّذها | الحماية | الاختبار |
 |---|---|---|---|---|---|
-| `app.health_signals()` | أعمدة الأوقات والأعلام في `retention_runs` و`inquiries` و`outbox` و`webhook_events` | المراقب الخارجي يحتاج أعدادًا عبر كل العملاء ولا يجوز أن يقرأ صفًا | hermes_monitor فقط | مالكها `hermes_monitor_reader` لا مالك الترحيلات: بلا دخول، بلا كتابة، منح أعمدة وسياسات ضيقة، ولا CREATE على المخطط؛ تعيد صفًا واحدًا من الأعداد | 47 |
+| `app.health_signals()` (أُعيد إنشاؤها في 0012) | أعمدة الأوقات والأعلام في `retention_runs` و`inquiries` و`outbox` و`webhook_events`، و`monitor_epoch.started_at` | المراقب الخارجي يحتاج أعدادًا عبر كل العملاء ولا يجوز أن يقرأ صفًا | hermes_monitor فقط | مالكها `hermes_monitor_reader` لا مالك الترحيلات: بلا دخول، بلا كتابة، منح أعمدة وسياسات ضيقة، ولا CREATE على المخطط؛ تعيد صفًا واحدًا من الأعداد وموعد المحو المتوقع | 45b، 47 |
  (مصدر واحد؛ يطابقه المتحقق مع الحالة النهائية للترحيلات، والحالة 46 مع الكتالوج)
 
 FORCE-EXCEPTIONS: approvals, audit_log, customer_users, operators, outbox_topics, task_leases, tasks

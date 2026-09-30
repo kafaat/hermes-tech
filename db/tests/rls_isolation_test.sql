@@ -990,7 +990,8 @@ do $$ declare bad text; begin
      and has_column_privilege('hermes_monitor_reader', c.oid, a.attnum, 'SELECT')
      and format('%s.%s', c.relname, a.attname) not in ('retention_runs.job', 'retention_runs.ran_at', 'inquiries.received_at',
        'inquiries.body_purged_at', 'outbox.dispatched_at', 'outbox.failed_at', 'outbox.needs_human_check', 'outbox.sending_until',
-       'webhook_events.customer_id', 'webhook_events.signature_valid', 'webhook_events.received_at', 'webhook_events.processed_at');
+       'webhook_events.customer_id', 'webhook_events.signature_valid', 'webhook_events.received_at', 'webhook_events.processed_at',
+       'monitor_epoch.started_at');
   if bad is not null then raise exception 'FAIL reader role reads columns beyond timestamps and flags: %', bad; end if;
   select string_agg(format('%s:%s', c.relname, p.pr), ',') into bad from pg_class c
    cross join (values ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE')) p(pr)
@@ -1012,8 +1013,30 @@ do $$ declare s record; begin
   if s.retention_age_seconds is null or s.retention_age_seconds > 60 then raise exception 'FAIL retention age % after case 45', s.retention_age_seconds; end if;
   if s.overdue_bodies <> 0 then raise exception 'FAIL overdue bodies after the purge: %', s.overdue_bodies; end if;
   if s.outbox_attention is null or s.webhook_backlog is null or s.webhook_unrouted is null then raise exception 'FAIL null signal'; end if;
+  if s.retention_stale or s.retention_due_at < now() + interval '25 hours' then
+    raise exception 'FAIL just purged, yet stale=% due=%', s.retention_stale, s.retention_due_at;
+  end if;
 end $$;
 reset role;
+-- a purge that never ran is due 26 h after monitoring began (0012), not at once; past that it is stale
+do $$ declare s record; begin
+  begin
+    delete from app.retention_runs;
+    select * into s from app.health_signals();
+    if s.retention_age_seconds is not null or s.retention_stale then raise exception 'FAIL never ran, stale before due: %', s; end if;
+    update app.monitor_epoch set started_at = now() - interval '27 hours';
+    select * into s from app.health_signals();
+    if not s.retention_stale then raise exception 'FAIL never ran and 27 h since monitoring began, yet not stale'; end if;
+    update app.monitor_epoch set started_at = now();
+    insert into app.retention_runs (job, rows_affected, ran_at) values ('inquiry_body_30d', 0, now() - interval '27 hours');
+    select * into s from app.health_signals();
+    if not s.retention_stale then raise exception 'FAIL last success 27 h ago, yet not stale'; end if;
+    raise exception 'ROLLBACK 47b';
+  exception when raise_exception then
+    if sqlerrm <> 'ROLLBACK 47b' then raise; end if;
+  end;
+  raise notice 'PASS retention is due 26 h after the last success, or after monitoring began when it never ran';
+end $$;
 do $$ begin
   if (select count(*) from app.v_outbox_attention) <> (select outbox_attention from app.health_signals()) then
     raise exception 'FAIL outbox_attention differs from v_outbox_attention';

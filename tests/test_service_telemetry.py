@@ -1,4 +1,5 @@
-import sys, unittest
+import json, sys, unittest
+from datetime import datetime, timezone
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from service.telemetry import sanitize_span, SanitizingExporter, MAPPING
@@ -44,20 +45,22 @@ class TestTelemetry(unittest.TestCase):
 
 
 class TestDepsAssessment(unittest.TestCase):
-    """GET /deps: what an external uptime monitor sees (numbers from app.health_signals(), SQL case 47)."""
-    OK = {"retention_age_seconds": 3600, "overdue_bodies": 0, "outbox_attention": 0, "webhook_backlog": 0, "webhook_unrouted": 3}
+    """GET /deps: what an external uptime monitor sees (app.health_signals(), SQL cases 45b and 47)."""
+    DUE = datetime(2026, 10, 1, 5, 17, tzinfo=timezone.utc)
+    OK = {"retention_age_seconds": 3600, "retention_due_at": DUE, "retention_stale": False, "overdue_bodies": 0,
+          "outbox_attention": 0, "webhook_backlog": 0, "webhook_unrouted": 3}
 
-    def test_healthy_signals_are_200_and_carry_numbers_only(self):
+    def test_healthy_signals_are_200_and_carry_numbers_and_the_due_time_only(self):
         status, body = assess(self.OK)
         self.assertEqual((status, body["status"], body["failing"]), (200, "ok", []))
         self.assertEqual(set(body), {"status", "failing", *SIGNALS})
-        self.assertTrue(all(isinstance(body[k], int) for k in SIGNALS))
+        self.assertEqual(body["retention_due_at"], "2026-10-01T05:17:00+00:00")
+        json.dumps(body)                                      # serialisable as it leaves
 
-    def test_a_missed_or_never_run_purge_fails_after_26_hours(self):
-        self.assertEqual(assess({**self.OK, "retention_age_seconds": 26 * 3600})[0], 200)
-        for age in (26 * 3600 + 1, None):
-            status, body = assess({**self.OK, "retention_age_seconds": age})
-            self.assertEqual((status, body["failing"]), (503, ["retention_stale"]))
+    def test_the_database_decides_staleness_and_a_never_run_purge_is_not_stale_before_its_due_time(self):
+        self.assertEqual(assess({**self.OK, "retention_age_seconds": None})[0], 200)
+        status, body = assess({**self.OK, "retention_stale": True})
+        self.assertEqual((status, body["failing"]), (503, ["retention_stale"]))
 
     def test_each_backlog_fails_by_name_and_unrouted_events_never_do(self):
         for key in ("overdue_bodies", "outbox_attention", "webhook_backlog"):

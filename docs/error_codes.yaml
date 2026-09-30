@@ -70,6 +70,8 @@ codes:
   OUTBOX_AMBIGUOUS_NEEDS_HUMAN:  {kind: error, since: "1.8", src: "0010", ar: "إرسال منتهي الحجز بلا نتيجة: لا يُعاد تلقائيًا، يحسمه دليل المزوّد أو مشغّل"}
   OUTBOX_NOT_CLAIMED:            {kind: error, since: "1.8", src: "0010", ar: "تسجيل إرسال لصف لم يُحجز"}
   OUTBOX_BAD_TRANSITION:         {kind: error, since: "1.8", src: "0010", ar: "انتقال حالة غير مسموح"}
+  OUTBOX_TARGET_REQUIRED:        {kind: error, since: "1.8", src: "0014", ar: "أثر بلا موافقة يحتاج هدفًا يعرّفه"}
+  OUTBOX_TARGET_CONFLICT:        {kind: error, since: "1.8", src: "0014", ar: "أثر آخر بالموضوع والهدف نفسيهما وبحمولة مختلفة"}
   OUTBOX_NEEDS_HUMAN:            {kind: error, since: "1.8", src: "0010", ar: "الصف ينتظر مشغّلًا بجلسة aal2"}
   OUTBOX_FINAL:                  {kind: error, since: "1.8", src: "0010", ar: "نتيجة الأثر نهائية"}
   OUTBOX_OUTCOME_UNKNOWN:        {kind: error, since: "1.8", src: "0010", ar: "نتيجة إرسال خارج القائمة"}

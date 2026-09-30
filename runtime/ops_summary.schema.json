@@ -193,6 +193,8 @@
               "OUTBOX_AMBIGUOUS_NEEDS_HUMAN",
               "OUTBOX_BAD_CLAIM",
               "OUTBOX_BAD_TRANSITION",
+              "OUTBOX_TARGET_REQUIRED",
+              "OUTBOX_TARGET_CONFLICT",
               "OUTBOX_FINAL",
               "OUTBOX_IMMUTABLE",
               "OUTBOX_LEASE_HELD",

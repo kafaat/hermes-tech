@@ -911,6 +911,36 @@ do $$ declare before bigint; begin
   raise notice 'PASS a failed purge records no run: the latest retention_runs row is the latest success';
 end $$;
 
+-- 49. an effect without an approval is enqueued once per target: a re-run task gets its row back, never a second
+--     notice; a different payload for the same target is refused, and a missing target too (0014)
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000a');
+set local role hermes_worker;
+do $$ declare id1 bigint; id2 bigint; pay jsonb := '{"event":"wamid.T49","reason":"complaint","categories":[],"sla_minutes":60}'; begin
+  id1 := app.enqueue_outbox('notify.owner', pay, null, 'wamid.T49');
+  id2 := app.enqueue_outbox('notify.owner', pay, null, 'wamid.T49');
+  if id1 is distinct from id2 then raise exception 'FAIL a re-run enqueued a second owner notice (% and %)', id1, id2; end if;
+  begin
+    perform app.enqueue_outbox('notify.owner', pay || '{"reason":"other"}', null, 'wamid.T49');
+    raise exception 'FAIL a different notice for the same target was accepted';
+  exception when raise_exception then if sqlerrm <> 'OUTBOX_TARGET_CONFLICT' then raise; end if;
+  end;
+  begin
+    perform app.enqueue_outbox('notify.owner', pay, null, null);
+    raise exception 'FAIL a notice without a target was accepted';
+  exception when invalid_parameter_value then if sqlerrm <> 'OUTBOX_TARGET_REQUIRED' then raise; end if;
+  end;
+  raise notice 'PASS an effect without an approval is enqueued once per target';
+end $$;
+reset role;
+select set_config('app.task_id', '', true), set_config('app.task_token', '', true);
+do $$ begin
+  if (select count(*) from app.outbox where target_id = 'wamid.T49') <> 1 then raise exception 'FAIL more than one row for the target'; end if;
+  if not exists (select 1 from pg_indexes where schemaname = 'app' and indexname = 'outbox_effect_once') then
+    raise exception 'FAIL no unique index backs the target identity';
+  end if;
+  raise notice 'PASS one outbox row per target, backed by a unique index';
+end $$;
+
 -- 46. the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)
 do $$ declare got text; bad text; begin
   select string_agg(relname, ',' order by relname collate "C") into got from pg_class

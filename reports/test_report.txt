@@ -177,11 +177,12 @@ test_proposal_also_denied (test_validator_negative.TestValidatorNegative.test_pr
 test_public_execute_not_revoked (test_validator_negative.TestValidatorNegative.test_public_execute_not_revoked) ... ok
 test_schema_invalid_contract_reports_not_crashes (test_validator_negative.TestValidatorNegative.test_schema_invalid_contract_reports_not_crashes) ... ok
 test_schema_rejects_legacy_field (test_validator_negative.TestValidatorNegative.test_schema_rejects_legacy_field) ... ok
+test_schema_scoped_default_privileges_do_not_count (test_validator_negative.TestValidatorNegative.test_schema_scoped_default_privileges_do_not_count) ... ok
 test_unbudgeted_model (test_validator_negative.TestValidatorNegative.test_unbudgeted_model) ... ok
 test_unlisted_security_definer_function (test_validator_negative.TestValidatorNegative.test_unlisted_security_definer_function) ... ok
 test_weekly_checks_above_package (test_validator_negative.TestValidatorNegative.test_weekly_checks_above_package) ... ok
 
 ----------------------------------------------------------------------
-Ran 182 tests in 22.250s
+Ran 183 tests in 22.860s
 
 OK

@@ -1,0 +1,86 @@
+# Database run: migrations 0001-0010 as the plain owner hermes_owner, all isolation cases, three race scripts
+# commit 3b55d78 (tree as committed) · PostgreSQL 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu · 2026-09-30T12:01:38Z
+# Same scripts run in CI (job database, Postgres 15) and on Railway staging (db-migrate, Postgres 18).
+# The ERROR line under concurrency_lease is the expected refusal: worker A writing after its lease expired.
+
+$ bash db/tests/run_isolation.sh
+== db/migrations/0001_core.sql (as hermes_owner)
+== db/migrations/0002_rls.sql (as hermes_owner)
+== db/migrations/0003_guards_audit.sql (as hermes_owner)
+== db/migrations/0004_measurement_views.sql (as hermes_owner)
+== db/migrations/0005_v11_channels_quality_queue.sql (as hermes_owner)
+== db/migrations/0006_v12_hardening.sql (as hermes_owner)
+== db/migrations/0007_v15_atomic_budget_idempotency.sql (as hermes_owner)
+== db/migrations/0008_v16_leases_terminal_pause.sql (as hermes_owner)
+== db/migrations/0009_v17_authority.sql (as hermes_owner)
+== db/migrations/0010_v18_closure.sql (as hermes_owner)
+NOTICE:  PASS worker read isolation
+NOTICE:  PASS worker write isolation
+NOTICE:  PASS unscoped worker
+NOTICE:  PASS owner isolation
+NOTICE:  PASS publish guard
+NOTICE:  PASS audit append-only
+NOTICE:  PASS outbox approval check
+NOTICE:  PASS unsigned event not processable
+NOTICE:  PASS webhook idempotency
+NOTICE:  PASS dispatcher lease binds the tenant
+NOTICE:  PASS definer helper closed to worker
+NOTICE:  PASS is_operator closed to worker
+NOTICE:  PASS helper scope and audit_verify closed
+NOTICE:  PASS lead provenance required
+NOTICE:  PASS atomic budget reservation
+NOTICE:  PASS idempotency claim
+NOTICE:  PASS single probe
+NOTICE:  PASS key scope enforced
+NOTICE:  PASS key lease and terminal state
+NOTICE:  PASS probe lease
+NOTICE:  PASS pause on repeated overshoot
+NOTICE:  PASS prod deploy guard
+NOTICE:  PASS activation and verification guards
+NOTICE:  PASS competitor limit
+NOTICE:  PASS audit chain detects tampering
+NOTICE:  PASS per-task cap
+NOTICE:  PASS self-chosen tenant ignored
+NOTICE:  PASS wrong token refused
+NOTICE:  PASS acquisition needs an acquisition lease
+NOTICE:  PASS lease, takeover and fencing
+NOTICE:  PASS dead letter
+NOTICE:  PASS worker proposes only
+NOTICE:  PASS session aal and approval scopes
+NOTICE:  PASS outbox verifies, consumes once and freezes the payload
+NOTICE:  PASS published content bound and immutable
+NOTICE:  PASS deploy bound to its artifact; rollback restores an approved one
+NOTICE:  PASS fact approval is owner-only and edit-sensitive
+NOTICE:  PASS audit chain is time-zone independent
+NOTICE:  PASS composite ownership keys
+NOTICE:  PASS reply window
+NOTICE:  PASS lease expiry takes effect mid-transaction
+NOTICE:  PASS stale holder refused everywhere; tasks change only through lease functions
+NOTICE:  PASS redelivery returns the existing outbox row
+NOTICE:  PASS ambiguous send waits for an aal2 operator; outcomes are final
+NOTICE:  PASS webhook routed by channel identity; worker sets processed_at only
+NOTICE:  PASS effects audited in their transaction; audit rows cannot impersonate
+NOTICE:  PASS consumption only through the outbox trigger
+NOTICE:  PASS retention purges old bodies without reading them
+NOTICE:  PASS FORCE inventory matches the catalog
+NOTICE:  PASS function privileges and definer inventory match the catalog
+NOTICE:  PASS no broad or inherited privilege survives
+NOTICE:  PASS every worker policy is bound to a lease
+NOTICE:  INFO table owner: owner=hermes_owner superuser=f bypassrls=f (with superuser or bypassrls the FORCE exceptions are moot; run_isolation.sh uses a plain owner)
+NOTICE:  PASS an unleased worker sees nothing in any table
+isolation: 53/53 PASS
+
+$ bash db/tests/concurrency_reserve.sh
+A=OK B=BUDGET_EXCEEDED_AGENT
+concurrency: PASS (one reservation, one refusal)
+
+$ bash db/tests/concurrency_outbox.sh
+A=ID=8 B=ID=8 rows=1
+concurrency_outbox: PASS (one effect, both deliveries answered with it)
+
+$ bash db/tests/concurrency_lease.sh
+BEFORE=1
+AFTER=0
+ERROR:  new row violates row-level security policy for table "kb_facts"
+CLAIMED=00000000-0000-0000-0000-0000000000e1
+concurrency_lease: PASS (expiry ends the tenant mid-transaction; recovery takes the task; stale completion refused)

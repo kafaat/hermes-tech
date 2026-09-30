@@ -2,7 +2,11 @@
 """Map every specification claim to what enforces it, and COMPUTE its status.
 
   python tools/check_claims.py            report; exit 1 only if a ref points at nothing
-  python tools/check_claims.py --release  also exit 1 if any claim is gap/unbuilt with a fix_before_* decision
+  python tools/check_claims.py --release  also exit 1 if any claim is gap/unbuilt/manual with a fix_before_* decision
+
+A written procedure (doc:) never clears a fix_before_* decision: that a file exists proves nothing ran. A recorded
+run does: run:<file>#<run id> needs the file to carry that run id on a line that reports a pass, and makes the claim
+"evidenced" (a result that happened, with its id, not a behaviour re-checked on every push).
 """
 import re, sys, yaml
 from pathlib import Path
@@ -26,11 +30,17 @@ def ref_exists(ref):
         return (ROOT / val).exists() and Path(val).name in workflow, "ci"
     if kind == "doc":
         return (ROOT / val).exists(), "doc"
+    if kind == "run":
+        path, _, run_id = val.partition("#")
+        f = ROOT / path
+        ok = bool(run_id) and f.exists() and any(run_id in l and ("PASS" in l or "نجح" in l)
+                                                 for l in f.read_text(encoding="utf-8").splitlines())
+        return ok, "run"
     return False, "?"
 
 
 def status(claim, broken):
-    """verified_here > ci_only > structural > manual > gap; service claims without code are unbuilt."""
+    """verified_here > ci_only > structural > evidenced > manual > gap; service claims without code are unbuilt."""
     kinds = []
     for r in claim.get("refs", []):
         ok, where = ref_exists(r)
@@ -43,7 +53,8 @@ def status(claim, broken):
     claim["_ci_pending"] = "ci" in kinds       # a production (database/CI) counterpart still waits for its first run
     if claim.get("component") == "service" and not {"here", "ci"} & set(kinds):
         return "unbuilt"
-    for k, st in (("here", "verified_here"), ("ci", "ci_only"), ("structural", "structural"), ("doc", "manual")):
+    for k, st in (("here", "verified_here"), ("ci", "ci_only"), ("structural", "structural"), ("run", "evidenced"),
+                  ("doc", "manual")):
         if k in kinds:
             return st
     return "gap"

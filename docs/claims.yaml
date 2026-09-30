@@ -4,13 +4,15 @@
 #   ci_only       : a behavioural test exists and runs in CI on real Postgres on every push (spec 28.4);
 #                   the status is computed from refs, and this tool does not read CI results
 #   structural    : only the validator's static check (the SQL or file is there; behaviour not exercised)
-#   manual        : only a written procedure
+#   evidenced     : a recorded run: run:<file>#<run id>, the file carrying that id on a line reporting a pass
+#   manual        : only a written procedure (a doc: that exists proves nothing ran; it never clears fix_before_*)
 #   gap           : nothing enforces it
 # component "service" = code of the running service. v1.8 built the pre-pilot paths in service/ (webhook handler,
 # outbox dispatcher, crawler, renderer, log redaction, telemetry filter) and the retention job in 0010; a service
 # claim is UNBUILT only while no behavioural test (py: here, sql:/ci: in CI) exists for it. The worker loop that
 # wires these together, and staging end-to-end runs, are pilot conditions of their own (P1-P3).
 # ref kinds: py:<test function>  sql:<case number>  val:<validator message fragment>  ci:<script>  doc:<file>
+#            run:<file>#<run id>
 version: 1.0.0
 claims:
   - {id: C4.1, section: "4.2", claim: "لا نشر لمحتوى دون موافقة approved", component: database, refs: ["sql:5", "sql:32"]}

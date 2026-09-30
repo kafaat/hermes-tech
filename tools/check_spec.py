@@ -75,7 +75,8 @@ MIGRATION_DESCRIPTIONS = {
     "0011_monitor_signals": "دور المراقبة: دالة واحدة تعيد أرقامًا لا صفوفًا لمراقب خارجي (تأخر المحو، صفوف تنتظر إنسانًا)",
     "0012_monitor_epoch": "موعد المحو المتوقع في دالة المراقبة: من آخر نجاح أو من بدء المراقبة، فلا إنذار كاذب قبل أول تشغيل",
 }
-CLAIM_STATUS_AR = {"verified_here": "متحقق هنا", "ci_only": "في CI فقط", "structural": "بنيوي فقط", "manual": "إجرائي",
+CLAIM_STATUS_AR = {"verified_here": "متحقق هنا", "ci_only": "في CI فقط", "structural": "بنيوي فقط",
+                   "evidenced": "تشغيل مسجّل", "manual": "إجرائي",
                    "unbuilt": "غير مبني", "gap": "فجوة بقرار معلن"}
 
 
@@ -235,7 +236,7 @@ def gen_claims():
         counts[st] = counts.get(st, 0) + 1
     pend = sum(1 for _, _, p in rows if p)
     lines = ["| الحالة | العدد |", "| --- | --- |"]
-    for k in ("verified_here", "ci_only", "structural", "manual", "unbuilt", "gap"):
+    for k in ("verified_here", "ci_only", "structural", "evidenced", "manual", "unbuilt", "gap"):
         if counts.get(k):
             lines.append(f"| {CLAIM_STATUS_AR[k]} | {counts[k]} |")
     lines.append(f"| **المجموع** | **{len(rows)}** |")

@@ -37,6 +37,24 @@ class TestClaims(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("UNDECIDED CY", out)
 
+    def test_a_recorded_passing_run_clears_a_fix_before_claim_and_a_doc_alone_does_not(self):
+        def add(line, doc_line):
+            def m(t):
+                append_claim(line)(t)
+                (t / "docs/run_x.md").write_text(doc_line + "\n", encoding="utf-8")
+            return m
+        claim = '  - {id: CR, section: "x", claim: "x", component: process, refs: ["run:docs/run_x.md#20260101000000"], decision: "fix_before_pilot"}'
+        code, out = run(add(claim, "| 20260101000000 | pilot | نجح |"), "--release")
+        self.assertIn("CR      evidenced", out)
+        self.assertNotRegex(out, r"RELEASE BLOCKED.*\bCR\b")
+        for doc_line in ("| 20260101000000 | pilot | فشل |", "| 20269999999999 | pilot | نجح |"):   # failed, or another run
+            code, out = run(add(claim, doc_line))
+            self.assertEqual(code, 1)
+            self.assertIn("BROKEN REF CR", out)
+        doc_only = '  - {id: CD, section: "x", claim: "x", component: process, refs: ["doc:docs/load_targets.md"], decision: "fix_before_pilot"}'
+        code, out = run(append_claim(doc_only), "--release")
+        self.assertRegex(out, r"RELEASE BLOCKED.*\bCD\b")
+
     def test_release_is_blocked_by_fix_before_claims(self):
         code, out = run(lambda t: None, "--release")
         self.assertEqual(code, 1)

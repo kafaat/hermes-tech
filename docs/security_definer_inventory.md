@@ -16,7 +16,7 @@
 | `app.jwt_aal()` | مطالبة aal في جلسة Supabase | يستدعيها `is_operator` | authenticated | تعيد مستوى جلسة المستدعي فقط | 30 |
 | `app.worker_customer_id()` | `app.task_leases` | مصدر العميل الوحيد للعامل: عقد إيجار حي بمعرّف ورمز | كل الأدوار عبر السياسات | لا تقرأ `app.customer_id` أبدًا؛ رمز خاطئ أو منتهٍ = لا عميل | 25، 26 |
 | `app.worker_context()` | `app.task_leases` | يميّز سياق عميل من سياق اكتساب من لا سياق | كل الأدوار عبر السياسات | «لا سياق» لا يفتح صفوف العميل الفارغ | 27 |
-| `app.claim_task(text, text, int, int)` | `tasks`، `task_leases` | الموزّع الموثوق: يسحب المهمة وينشئ عقدًا برمز عشوائي ورقم تسييج | hermes_worker | SKIP LOCKED؛ استرداد العقود المنتهية؛ رسالة ميتة بعد الحد | 28 |
+| `app.claim_task(text, text, int, int, text[])` | `tasks`، `task_leases` | الموزّع الموثوق: يسحب المهمة وينشئ عقدًا برمز عشوائي ورقم تسييج | hermes_worker | SKIP LOCKED؛ استرداد العقود المنتهية؛ رسالة ميتة بعد الحد؛ منذ 0016 لا يسلّم إلا الأنواع التي يسمّيها المستدعي | 28، 51 |
 | `app.bind_task(uuid, uuid)` | `task_leases` | يربط الجلسة بالمهمة بعد التحقق من الرمز | hermes_worker | يرفض رمزًا خاطئًا أو منتهيًا | 26 |
 | `app.extend_task_lease(uuid, uuid, int)` | `task_leases` | نبضة العامل | hermes_worker | صاحب الرمز الحي فقط | 28 |
 | `app.complete_task(uuid, uuid, bigint, ...)` | `tasks`، `task_leases` | إنهاء المهمة بتسييج | hermes_worker | العامل القديم (رقم تسييج قديم) لا يُنهي مهمة استُلمت منه | 28 |

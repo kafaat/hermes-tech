@@ -25,6 +25,8 @@ from service.dispatcher import SEND_TIMEOUT_SECONDS, SENT, Dispatcher, WhatsAppC
 
 log = logging.getLogger("hermes.worker")
 AGENT = "agent_triage"
+KINDS = ("inbound.event", "outbox.resend")      # the task kinds this worker handles; claim_task leaves any other kind to a
+                                                # worker that knows it (0016: an older instance took a new kind mid-deploy)
 REPLY_WINDOW_HOURS = 19          # a reply:send proposal must be decidable inside the 20 h window (approvals_reply_window)
 
 # Questions answered only from owner-approved facts (kb_facts.topic). Keywords are normalised like complaints.
@@ -112,7 +114,8 @@ class Worker:
     # ------------------------------------------------------------ lease plumbing
     def claim(self) -> Task | None:
         with self.db.tx() as cur:
-            cur.execute("select task_id, token, fencing, customer_id from app.claim_task(%s, %s, %s)", (AGENT, self.name, self.lease))
+            cur.execute("select task_id, token, fencing, customer_id from app.claim_task(%s, %s, %s, 3, %s)",
+                        (AGENT, self.name, self.lease, list(KINDS)))
             r = cur.fetchone()
         return Task(str(r[0]), str(r[1]), r[2], str(r[3])) if r else None
 

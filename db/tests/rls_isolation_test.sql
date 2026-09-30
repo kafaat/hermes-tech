@@ -989,6 +989,32 @@ end $$;
 reset role;
 select set_config('request.jwt.claim.sub', '', true), set_config('request.jwt.claims', '', true);
 
+-- 51. a worker claims only the kinds it names; no list claims every kind, as before (0016)
+insert into app.tasks (public_ref, customer_id, agent_id, kind, idempotency_key, priority) values
+  ('t_k51new', '00000000-0000-0000-0000-00000000000a', 'agent_kindtest', 'future.kind', 'k51:new', 3),
+  ('t_k51old', '00000000-0000-0000-0000-00000000000a', 'agent_kindtest', 'inbound.event', 'k51:old', 0);
+set local role hermes_worker;
+do $$ declare r record; begin                     -- the worker cannot read tasks itself (RLS): record, compare below
+  select * into r from app.claim_task('agent_kindtest', 'w51', 60, 3, array['inbound.event']);
+  perform set_config('test.k51_first', coalesce(r.task_id::text, ''), true);
+  select * into r from app.claim_task('agent_kindtest', 'w51', 60, 3, array['inbound.event']);
+  perform set_config('test.k51_second', coalesce(r.task_id::text, ''), true);
+  select * into r from app.claim_task('agent_kindtest', 'w51', 60);
+  perform set_config('test.k51_any', coalesce(r.task_id::text, ''), true);
+end $$;
+reset role;
+do $$ begin
+  if current_setting('test.k51_first') is distinct from (select id::text from app.tasks where idempotency_key = 'k51:old') then
+    raise exception 'FAIL a worker claimed a kind it does not name (or nothing)';
+  end if;
+  if current_setting('test.k51_second') <> '' then raise exception 'FAIL the unknown kind was handed out'; end if;
+  if current_setting('test.k51_any') is distinct from (select id::text from app.tasks where idempotency_key = 'k51:new') then
+    raise exception 'FAIL without a list every kind is claimable';
+  end if;
+  raise notice 'PASS a worker claims only the task kinds it names';
+end $$;
+select set_config('app.task_id', '', true), set_config('app.task_token', '', true);
+
 -- 46. the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)
 do $$ declare got text; bad text; begin
   select string_agg(relname, ',' order by relname collate "C") into got from pg_class

@@ -8,7 +8,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 : "${DATABASE_URL:?DATABASE_URL is required (Railway: \${{Postgres.DATABASE_URL}})}"
-db() { psql "$DATABASE_URL" -q -v ON_ERROR_STOP=1 "$@"; }
+# client_min_messages=warning: "already exists, skipping" notices go to stderr, and Railway files stderr as errors.
+# The isolation run below keeps its notices: its PASS lines are the result.
+db() { PGOPTIONS="${PGOPTIONS:-} -c client_min_messages=warning" psql "$DATABASE_URL" -q -v ON_ERROR_STOP=1 "$@"; }
 
 db -f db/local/0000_supabase_shim.sql
 db -c "create table if not exists public.schema_migrations (name text primary key, applied_at timestamptz not null default now())"
@@ -18,7 +20,7 @@ for f in db/migrations/*.sql; do
     echo "== $name already applied"; continue
   fi
   echo "== $name (as hermes_owner)"
-  PGOPTIONS="-c role=hermes_owner" db -f "$f"
+  PGOPTIONS="-c role=hermes_owner" db -f "$f"      # db() appends client_min_messages
   db -c "insert into public.schema_migrations (name) values ('$name')"
 done
 

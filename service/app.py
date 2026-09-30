@@ -5,7 +5,7 @@
 
   GET  /webhook   Meta subscription handshake (webhook.verify_subscription)
   POST /webhook   webhook.Handler: size limit, HMAC on the raw bytes, then insert as hermes_ingest; 200 only after commit
-  GET  /healthz   liveness and the handler counters (numbers only)
+  GET  /healthz   liveness, the deployed commit and the handler counters (numbers only)
 The worker runs in a thread as hermes_worker. It accepts connections; it opens none (the Graph API is simulated:
 HERMES_GRAPH must be "simulate" until a real client exists, and anything else refuses to start).
 """
@@ -21,6 +21,7 @@ from service.webhook import MAX_BODY_BYTES, Handler, verify_subscription
 from service.worker import Worker, simulated_adapters, worker_name
 
 log = logging.getLogger("hermes.app")
+COMMIT = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "")          # lets a caller wait for THIS build, not the previous one
 
 
 def make_http_handler(webhook: Handler, verify_token: str):
@@ -36,7 +37,8 @@ def make_http_handler(webhook: Handler, verify_token: str):
         def do_GET(self):
             u = urlsplit(self.path)
             if u.path == "/healthz":
-                return self._reply(200, json.dumps({"status": "ok", "webhook": asdict(webhook.counters)}), "application/json")
+                return self._reply(200, json.dumps({"status": "ok", "commit": COMMIT, "webhook": asdict(webhook.counters)}),
+                                   "application/json")
             if u.path == "/webhook":
                 return self._reply(*verify_subscription(dict(parse_qsl(u.query)), verify_token))
             return self._reply(404, "not found")

@@ -1,7 +1,7 @@
 {
  "package_version": "1.8",
  "registry_version": "1.8.0",
- "source_id": "79e99310af503f59baa3b22d2ec29c770c4f93c3610e0d3cbf55818b95a8a73d",
+ "source_id": "cf1ac5019bf898dfb8e38029db4bc4b1e1fbb89877c5e5a696998bbe7fd13df2",
  "file_count": 194,
  "files": {
   ".dockerignore": "51acffa125b3d041889f51bdfe771d46303571b7407c6cc29621dbc9d2c1ce38",
@@ -37,7 +37,7 @@
   "db/tests/concurrency_lease.sh": "cc5eb211a2c0f294324dadd53ca9045ae381d15c6890dc64f3e9d3778c4c662a",
   "db/tests/concurrency_outbox.sh": "e11d2d46ba78dc61c9af41d63d3c1554c7a4d55e4511e319e4ec39ecb94938ec",
   "db/tests/concurrency_reserve.sh": "ad0a01e25af2c363368f6e153c952fd251801a22f4766cfdc66062598cd0bdae",
-  "db/tests/e2e_pilot.py": "9bf63a9f1aaa0fead905c9dfce741fe1443ebcb851a5ac0fea4271ebc89460bf",
+  "db/tests/e2e_pilot.py": "78d7960869ed63ef1466da105b11d14af1e7bb5a021263a90fede733192d64ce",
   "db/tests/rls_isolation_test.sql": "c4846f4ce8dfd192274da3747926d6de705cbd0c6dd4c1fac7a438f79d7dac5d",
   "db/tests/run_isolation.sh": "45109a449b5631b449246d356c1930a6f2c41267615c9239d2dcb18500f25800",
   "db/tests/run_local.sh": "d0a96b00edb08c6d15e07430b001d447017a931406e2c988db50977930052d55",
@@ -138,7 +138,7 @@
   "runtime/agent_runtime_state.schema.json": "dfd84b85a43dfce471730581fd2138a7e37eaa0546b73759e8b793894ae6e3e4",
   "runtime/ops_summary.schema.json": "6796afee16a26ec5090af217971aa3bdb98bef64213ae8c56e4bc999ed71f35b",
   "service/__init__.py": "0ad5bb8f316fff0920ecd272d6d58406277e131eba0b7865eb27021727889232",
-  "service/app.py": "61b12552ef50f76d90caabced4b105609340389595c8cb961bc71543cf236f87",
+  "service/app.py": "27796e0cad72b551c28842884441b999f96e06294a7bc7e256d0e42c17387912",
   "service/crawler.py": "f34ba954f2e27768d27059c268aa52b34da57da6eb3679ad55ee6596737acafd",
   "service/dispatcher.py": "58ca8fd8d247c7a40e216f56865d3a2b37566865f94462bc507cce664b493258",
   "service/jobs.py": "1c72d9d1a28eeeb93c956af57fcd0d1ee6b1b3db0f81eb7223c2f160b358efa3",

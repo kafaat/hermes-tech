@@ -111,13 +111,16 @@ def main():
         url, secret, proc = start_app()
     secret = secret.encode()
     try:
+        want = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "")    # staging: both services deploy on the same push
+
         def healthy():
             try:
                 with urllib.request.urlopen(url + "/healthz", timeout=5) as r:
-                    return r.status == 200
-            except OSError:
+                    return r.status == 200 and (not want or json.load(r).get("commit") == want)
+            except (OSError, ValueError):
                 return False
-        check(bool(wait("service healthy", healthy, 180)), f"service answers /healthz at {url}")
+        check(bool(wait("service healthy", healthy, 300)),
+              f"service answers /healthz at {url}" + (f" on commit {want[:7]}" if want else ""))
         seed()
         run = uuid.uuid4().hex[:10]
         q_ext, c_ext = f"wamid.E2E.{run}.q", f"wamid.E2E.{run}.c"

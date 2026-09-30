@@ -40,13 +40,13 @@
 | مخططات JSON والعقود والفهرس والسياسات | 34 فحصًا ناجحًا من 34 | tools/validate.py · الطبقة 1 |
 | قواعد الاتساق المنطقي والسياسة الإحصائية ومعجم الإخفاقات | 136 فحصًا ناجحًا من 136 | tools/validate.py · الطبقة 2 |
 | الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 245 فحصًا ناجحًا من 245 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
-| الاختبارات الآلية | 183 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
+| الاختبارات الآلية | 189 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
 | حالات SQL على Postgres فعلي | 46 حالة و53 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
-المجموع: 415/415 فحصًا ناجحًا في أداة التحقق، و183 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
+المجموع: 415/415 فحصًا ناجحًا في أداة التحقق، و189 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
 
 ### وسوم المصدر
@@ -164,10 +164,10 @@ hermes-tech/
 ├── policies/             acceptance_policy.json · acceptance_policy.schema.json · complaint_keywords.json · complaint_keywords.schema.json · content_rules.json · content_rules.schema.json · fetch_policy.json
 ├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010   (10 files)
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
-├── db/tests/             concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · rls_isolation_test.sql · run_isolation.sh · run_local.sh
+├── db/tests/             concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
-├── service/              __init__.py · crawler.py · dispatcher.py · jobs.py · outbox_model.py · redact.py · render.py · telemetry.py · webhook.py
-├── tests/                27 modules (inventory in §15.2)
+├── service/              __init__.py · app.py · crawler.py · dispatcher.py · jobs.py · outbox_model.py · pg.py · redact.py · render.py · telemetry.py · webhook.py · worker.py
+├── tests/                28 modules (inventory in §15.2)
 ├── evals/                complaints_seed.jsonl · content_guard_golden.jsonl · model_admission.json
 ├── docs/                 18 documents · adr/ (10 decisions)
 ├── derived/              policy_matrix.md · agent_capabilities.json · alerts.yaml   (generated)
@@ -980,11 +980,12 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_service_render | القوالب: التهريب، روابط javascript: بكل تمويه، مواضع القالب الخطرة | 6 |
 | test_service_telemetry | المراقبة: قائمة سماح للسمات، لا أحداث محتوى، لا بيانات شخصية في القيم المسموحة | 4 |
 | test_service_webhook | معالج webhook: HMAC على البايتات الخام قبل التحليل، 401 بلا تخزين، إعادة التسليم نجاح، القناة المخاطَبة | 9 |
+| test_service_worker | حلقة العامل (P1): الشكوى وسؤال السعر يُصعَّدان، والرد من حقيقة اعتمدها المالك ويجتاز الحارس فقط | 6 |
 | test_spec_consistency | المواصفة: كل قسم مولّد مطابق لمصدره، والإصدار متسق | 2 |
 | test_supply_chain | غياب CODEOWNERS فشل، pull_request_target فشل، والتعليقات لا تُعدّ إجراءات | 4 |
 | test_triage | المرحلة الثانية تضيف ولا تلغي، العتبة، استفسارات المالك | 5 |
 | test_validator_negative | اختبارات طفرات: يُدخل كل عيب وُجد في المراجعات ويتأكد أن المتحقق يرفضه | 13 |
-| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **183** |
+| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **189** |
 <!-- /gen:tests -->
 
 ### 15.3 العيوب التي تمنعها اختبارات الطفرات
@@ -1230,7 +1231,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 ### 21.3 شروط ما قبل التجربة (مولّدة منذ 1.8)
 
 <!-- gen:conditions -->
-قائمة مولّدة من docs/claims.yaml (كل ادعاء قراره fix_before_pilot) وحالته المحسوبة الآن. «في CI فقط» تعني أن الاختبار مكتوب ولم يُشغَّل؛ الشرط الأول مشترك بينها كلها: أول تشغيل ناجح لمهمة database على Postgres فعلي يغطي 52 ادعاءً بجزء إنتاجي ينتظر CI، ومنها كل حالات السلطة والعزل.
+قائمة مولّدة من docs/claims.yaml (كل ادعاء قراره fix_before_pilot) وحالته المحسوبة الآن. «في CI فقط» تعني أن الاختبار مكتوب ولم يُشغَّل؛ الشرط الأول مشترك بينها كلها: أول تشغيل ناجح لمهمة database على Postgres فعلي يغطي 53 ادعاءً بجزء إنتاجي ينتظر CI، ومنها كل حالات السلطة والعزل.
 
 | الادعاء | الشرط | الحالة الآن |
 | --- | --- | --- |
@@ -1242,7 +1243,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | C12.6 | ضوابط حاوية Hermes Agent | إجرائي |
 | A23 | الزاحف الفعلي يستخدم الحارس ويتصل بالعنوان المثبّت | متحقق هنا |
 | A24 | نصوص المالك تُهرَّب في القوالب ولا روابط javascript: | متحقق هنا |
-| P1 | حلقة العامل تربط المسارات المبنية (السحب والربط والفرض والموزّع والمعالج) وتُشغَّل من طرف إلى طرف على staging | غير مبني |
+| P1 | حلقة العامل تربط المسارات المبنية (السحب والربط والفرض والموزّع والمعالج) وتُشغَّل من طرف إلى طرف على staging | متحقق هنا + ينتظر CI |
 | P2 | ملف الحمل pilot ناجح على staging | إجرائي |
 | P3 | سعر واتساب لليمن وترخيص صور FLUX التجاري مؤكدان كتابيًا | إجرائي |
 
@@ -1616,14 +1617,13 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 <!-- gen:claims -->
 | الحالة | العدد |
 | --- | --- |
-| متحقق هنا | 34 |
+| متحقق هنا | 35 |
 | في CI فقط | 42 |
 | بنيوي فقط | 4 |
 | إجرائي | 5 |
-| غير مبني | 1 |
 | **المجموع** | **86** |
 
-منها 52 بجزء إنتاجي ينتظر أول تشغيل في CI. ادعاءات بقرار «مقبول» معلن لا تحجب الإصدار: C9.4، A26، A35؛ منها A35 حد ثقة مسمّى (27.5) لا نقص تنفيذ.
+منها 53 بجزء إنتاجي ينتظر أول تشغيل في CI. ادعاءات بقرار «مقبول» معلن لا تحجب الإصدار: C9.4، A26، A35؛ منها A35 حد ثقة مسمّى (27.5) لا نقص تنفيذ.
 <!-- /gen:claims -->
 
 ### 27.7 ما بقي مفتوحًا

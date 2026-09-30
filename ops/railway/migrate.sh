@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Railway staging job: apply every migration not yet applied, as the plain owner hermes_owner (as in CI),
-# then run the isolation cases (one transaction, rolled back) against the real database.
+# then run the isolation cases (one transaction, rolled back) against the real database, and, when
+# HERMES_APP_URL is set, the end-to-end run of the pilot path against that running service (db/tests/e2e_pilot.py).
 # Staging only: db/local/0000_supabase_shim.sql emulates Supabase auth and is NOT for production.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -24,3 +25,8 @@ out=$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/tests/rls_isolation_test.sql
 got=$(grep -c "NOTICE:  PASS" <<<"$out" || true)
 [ "$got" -eq "$expected" ] || { echo "$out"; echo "isolation: $got/$expected PASS notices"; exit 1; }
 echo "isolation: $got/$expected PASS"
+
+if [ -n "${HERMES_APP_URL:-}" ]; then
+  echo "== e2e against $HERMES_APP_URL"
+  python3 db/tests/e2e_pilot.py
+fi

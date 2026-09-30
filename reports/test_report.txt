@@ -157,6 +157,12 @@ test_rotation_accepts_either_secret_and_oversize_is_refused (test_service_webhoo
 test_signature_is_checked_on_raw_bytes_before_parsing (test_service_webhook.TestWebhook.test_signature_is_checked_on_raw_bytes_before_parsing) ... ok
 test_subscription_handshake (test_service_webhook.TestWebhook.test_subscription_handshake) ... ok
 test_valid_signature_stores_one_event_per_item_with_the_addressed_channel (test_service_webhook.TestWebhook.test_valid_signature_stores_one_event_per_item_with_the_addressed_channel) ... ok
+test_a_complaint_is_escalated_even_when_it_asks_an_answerable_question (test_service_worker.TestWorkerDecision.test_a_complaint_is_escalated_even_when_it_asks_an_answerable_question) ... ok
+test_a_price_question_goes_to_the_owner (test_service_worker.TestWorkerDecision.test_a_price_question_goes_to_the_owner) ... ok
+test_an_approved_fact_that_fails_the_guard_is_not_proposed (test_service_worker.TestWorkerDecision.test_an_approved_fact_that_fails_the_guard_is_not_proposed) ... ok
+test_no_approved_fact_means_no_reply (test_service_worker.TestWorkerDecision.test_no_approved_fact_means_no_reply) ... ok
+test_question_with_an_approved_answer_is_proposed_verbatim (test_service_worker.TestWorkerDecision.test_question_with_an_approved_answer_is_proposed_verbatim) ... ok
+test_the_whatsapp_adapter_sends_through_the_simulated_graph (test_service_worker.TestWorkerDecision.test_the_whatsapp_adapter_sends_through_the_simulated_graph) ... ok
 test_a_hand_edited_count_is_caught (test_spec_consistency.TestSpecConsistency.test_a_hand_edited_count_is_caught) ... ok
 test_every_generated_region_matches_its_source (test_spec_consistency.TestSpecConsistency.test_every_generated_region_matches_its_source) ... ok
 test_baseline_has_no_fail (test_supply_chain.TestSupplyChain.test_baseline_has_no_fail) ... ok
@@ -183,6 +189,6 @@ test_unlisted_security_definer_function (test_validator_negative.TestValidatorNe
 test_weekly_checks_above_package (test_validator_negative.TestValidatorNegative.test_weekly_checks_above_package) ... ok
 
 ----------------------------------------------------------------------
-Ran 183 tests in 22.860s
+Ran 189 tests in 25.069s
 
 OK

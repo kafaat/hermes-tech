@@ -81,7 +81,7 @@ A32     ci_only        ci_pending                        استهلاك المو
 A33     ci_only        ci_pending                        الكتالوج بعد كل الترحيلات يطابق الجرد المنشور: FORCE، والدوال المرفوعة، والمنح، وسياسات العامل
 A34     verified_here  ci_pending                        تغيير أي مسار في بوابة الإصدار يُحكم بمدققات الأساس؛ والبوابة لا تقبل مهمة متخطاة أو ملغاة
 A35     manual         -          accepted: حد ثقة مسمّى؛ فصل دور لكل وكيل مؤجل بشرطه (27.5) سحب المهام حد ثقة مسمّى: دور العامل يسحب مهمة أي عميل، والعزل داخل المهمة لا يحمي من اختراق المنسّق نفسه
-P1      unbuilt        -          fix_before_pilot       حلقة العامل تربط المسارات المبنية (السحب والربط والفرض والموزّع والمعالج) وتُشغَّل من طرف إلى طرف على staging
+P1      verified_here  ci_pending fix_before_pilot       حلقة العامل تربط المسارات المبنية (السحب والربط والفرض والموزّع والمعالج) وتُشغَّل من طرف إلى طرف على staging
 P2      manual         -          fix_before_pilot       ملف الحمل pilot ناجح على staging
 P3      manual         -          fix_before_pilot       سعر واتساب لليمن وترخيص صور FLUX التجاري مؤكدان كتابيًا
-summary: ci_only 42, manual 5, structural 4, unbuilt 1, verified_here 34 · total 86 · with a CI-only production counterpart 52
+summary: ci_only 42, manual 5, structural 4, verified_here 35 · total 86 · with a CI-only production counterpart 53

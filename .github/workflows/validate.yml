@@ -38,6 +38,12 @@ jobs:
       - run: bash db/tests/concurrency_reserve.sh  # two sessions race for the last headroom (R1)
       - run: bash db/tests/concurrency_outbox.sh   # two deliveries of one approved effect: one row, same id
       - run: bash db/tests/concurrency_lease.sh    # lease expiry and recovery inside a running transaction
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements-service.txt   # the Postgres driver, hashed lock
+      # P1 end to end: service.app over HTTP (webhook -> routed task -> worker -> owner approval -> outbox -> dispatch -> receipt)
+      - run: python db/tests/e2e_pilot.py
+        env: { DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres" }
   workflow-guard:
     # A change to ANY gate path (checkers, policies, claims, inventories, tests of the database, CI) is judged
     # by the checkers of the BASE commit, run on the change's data. The guard program itself comes from base.

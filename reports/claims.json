@@ -582,10 +582,10 @@
  },
  {
   "id": "P1",
-  "status": "unbuilt",
+  "status": "verified_here",
   "decision": "fix_before_pilot",
   "claim": "حلقة العامل تربط المسارات المبنية (السحب والربط والفرض والموزّع والمعالج) وتُشغَّل من طرف إلى طرف على staging",
-  "ci_pending": false
+  "ci_pending": true
  },
  {
   "id": "P2",

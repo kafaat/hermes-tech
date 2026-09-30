@@ -6,6 +6,7 @@ unless stated; the scheduler (orchestrator timer) records every run and an alert
   outbox_attention   5 min   operator view  app.v_outbox_attention -> alert when non-empty
 """
 from __future__ import annotations
+import os, sys
 
 JOBS = {
     "inquiry_body_30d": {"every": "daily", "role": "hermes_jobs", "sql": "select app.purge_inquiry_bodies()"},
@@ -19,3 +20,25 @@ def run(job: str, execute):
     """execute(role, sql) -> rows. Returns the rows; raises if the job is unknown."""
     spec = JOBS[job]
     return execute(spec["role"], spec["sql"])
+
+
+def main(argv=None):
+    """python -m service.jobs <job>   (Railway cron: runs once and exits; DATABASE_URL must allow SET ROLE <role>).
+    Only jobs whose role is a plain database role run here; the operator view needs an aal2 session and does not."""
+    import psycopg
+    from psycopg import sql
+    job = (argv or sys.argv[1:] or [""])[0]
+    if job not in JOBS or " " in JOBS[job]["role"]:
+        sys.exit(f"usage: python -m service.jobs <{'|'.join(j for j, s in JOBS.items() if ' ' not in s['role'])}>")
+
+    def execute(role, query):
+        with psycopg.connect(os.environ["DATABASE_URL"]) as conn, conn.cursor() as cur:
+            cur.execute(sql.SQL("set local role {}").format(sql.Identifier(role)))
+            cur.execute(query)
+            return cur.fetchall()
+    rows = run(job, execute)
+    print(f"{job}: {rows}")
+
+
+if __name__ == "__main__":
+    main()

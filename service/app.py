@@ -5,7 +5,7 @@
 
   GET  /webhook   Meta subscription handshake (webhook.verify_subscription)
   POST /webhook   webhook.Handler: size limit, HMAC on the raw bytes, then insert as hermes_ingest; 200 only after commit
-  GET  /healthz   liveness, the deployed commit and the handler counters (numbers only)
+  GET  /healthz   database reachable (as hermes_ingest), the deployed commit and the handler counters (numbers only)
 The worker runs in a thread as hermes_worker. It accepts connections; it opens none (the Graph API is simulated:
 HERMES_GRAPH must be "simulate" until a real client exists, and anything else refuses to start).
 """
@@ -36,7 +36,13 @@ def make_http_handler(webhook: Handler, verify_token: str):
 
         def do_GET(self):
             u = urlsplit(self.path)
-            if u.path == "/healthz":
+            if u.path == "/healthz":                   # Railway calls it at deploy time only: a build that cannot reach
+                try:                                   # the database never goes live
+                    with webhook.ingest.db.tx() as cur:
+                        cur.execute("select 1")
+                except Exception as exc:               # noqa: BLE001
+                    return self._reply(503, json.dumps({"status": "db_unreachable", "error": type(exc).__name__}),
+                                       "application/json")
                 return self._reply(200, json.dumps({"status": "ok", "commit": COMMIT, "webhook": asdict(webhook.counters)}),
                                    "application/json")
             if u.path == "/webhook":

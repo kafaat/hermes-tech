@@ -1,7 +1,7 @@
 {
  "package_version": "1.8",
  "registry_version": "1.8.0",
- "source_id": "247dc3204f19f2ab090a502adb10e927dd7bbe99d8627dcdff59ab04f2074963",
+ "source_id": "3a9434a740d736f0bc8ae9c26812d8a3375039cf4ca8cc0d0b9c71cce8651ed5",
  "file_count": 188,
  "files": {
   ".github/CODEOWNERS": "9e1afe8d5ff4d8b3cd4e96f13746dc6ead9d23b263b0d2cd69b801cd9534dead",
@@ -177,7 +177,7 @@
   "tools/audit_checkpoint.py": "f7f5b6bf78502336eb63f8d2e09fbc314132c789865c2424907c72851d853a16",
   "tools/build_manifest.py": "6de0ef1315192116bc5df94b20a8eca05dcc4c94e6d5b7386d12f60852ce2430",
   "tools/check_claims.py": "402b1712e3d7c982077fc9eb3910e390023c1b566b1a21b5272d80b48a9c2001",
-  "tools/check_spec.py": "8c016495e7600cb05bfb9a5f9bf81cb51f5d220e1817e307f4c936d1422aad2f",
+  "tools/check_spec.py": "b88bf869d00d88f27d528c998d718961443494d5415f4d8224a23c65a76a81df",
   "tools/check_supply_chain.py": "52fd340b87b97bd080ac3577d1627b5c272f3a81092ff4df35e75721c6f2a901",
   "tools/complaints.py": "b9070a08fbd0a3441684076292ab35eedef9aa75d23961ad0b30d36536bf07ef",
   "tools/content_guard.py": "9ea88ffa509244a5c4e72046aa5cacce23147823860e66c174d1b1f970829826",

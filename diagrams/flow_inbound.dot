@@ -1,0 +1,18 @@
+digraph inbound {
+  rankdir=TB; nodesep=0.3; ranksep=0.28;
+  node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11, fillcolor="#EAF1FB", color="#1F4E79", width=3.6];
+  edge [fontname="DejaVu Sans", fontsize=9];
+  a [label="webhook من Cloud API أو نموذج الموقع"];
+  b [label="تحقق التوقيع X-Hub-Signature-256", shape=diamond, width=2.6];
+  x [label="يُخزَّن ولا يُعالَج · RB-08", fillcolor="#FDECEA"];
+  c [label="webhook_events فريد (kind, event_id)\nتكرار التسليم = لا شيء جديد"];
+  d [label="channel_accounts ← customer_id\nset_config('app.customer_id')"];
+  e [label="المرحلة 1: قائمة الكلمات (حتمي)", shape=diamond, width=2.8];
+  f [label="المرحلة 2: agent_triage (nano)\nيضيف تصعيدًا فقط", shape=diamond, width=2.8];
+  g [label="تصعيد حسب القناة\npatron ← المالك · client ← المؤسس", fillcolor="#FFF2CC"];
+  h [label="agent_replies: رد معلّب من kb_facts\nأو مسودة قصيرة"];
+  i [label="content_guard + agent_quality (صامت)"];
+  j [label="outbox ← إرسال بعد موافقة المالك على كل رد\n(لا سياسة إرسال دائمة في المخطط)", fillcolor="#E2EFDA"];
+  a -> b; b -> x [label="غير صالح"]; b -> c [label="صالح"]; c -> d -> e;
+  e -> g [label="شكوى"]; e -> f [label="لا تطابق"]; f -> g [label="≥ العتبة"]; f -> h [label="دون العتبة"]; h -> i -> j;
+}

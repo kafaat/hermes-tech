@@ -1,0 +1,28 @@
+digraph arch {
+  rankdir=TB; newrank=true; nodesep=0.35; ranksep=0.45;
+  node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11, fillcolor="#EAF1FB", color="#1F4E79"];
+  edge [fontname="DejaVu Sans", fontsize=9, color="#555555"];
+  subgraph cluster_users { label="المستخدمون"; style=dashed; color="#999999"; fontname="DejaVu Sans";
+    owner [label="بوابة صاحب المنشأة\nموافقات · تقارير"]; founder [label="لوحة المؤسس + hermes CLI\nMFA إلزامي"]; ha [label="Hermes Agent\nمساعد داخلي للمؤسس فقط", fillcolor="#FDECEA"]; }
+  subgraph cluster_core { label="خادم التشغيل (DigitalOcean)"; style=filled; fillcolor="#F7F9FC"; color="#1F4E79"; fontname="DejaVu Sans";
+    orch [label="المنسّق Hermes\nطبقة الفرض · الطابور · الميزانيات", fillcolor="#D9E1F2"];
+    wf [label="سير العمل الحتمي (~80%)\nقوالب · جدولة · مقارنة صفحات · تقارير"];
+    agents [label="الوكلاء (~20%)\nsite_builder · content · replies · competitor\nsearch · billing · quality · triage"];
+    guard [label="content_guard حتمي\nقبل أي عرض على المالك", fillcolor="#FFF2CC"];
+    outbox [label="app.outbox\nكل أثر خارجي بعد موافقة", fillcolor="#FFF2CC"];
+    tools [label="طبقة الأدوات\nlog + idempotency لكل نداء"]; }
+  subgraph cluster_data { label="البيانات"; style=filled; fillcolor="#F7F9FC"; color="#1F4E79"; fontname="DejaVu Sans";
+    pg [label="Supabase Postgres\nRLS لكل جدول · audit_log متسلسل", shape=cylinder, fillcolor="#E2EFDA"];
+    r2 [label="Cloudflare R2\nالوسائط", shape=cylinder, fillcolor="#E2EFDA"];
+    vault [label="مخزن الأسرار\nvault:// فقط في القاعدة", shape=cylinder, fillcolor="#FDECEA"];
+    git [label="GitHub\nالقوالب والعقود والترحيلات", shape=cylinder, fillcolor="#E2EFDA"]; }
+  subgraph cluster_ext { label="الموردون (approved_models + تأكيدات مكتوبة)"; style=dashed; color="#999999"; fontname="DejaVu Sans";
+    llm [label="OpenAI\ngpt-5.4-mini · nano"]; fal [label="fal.ai\nFLUX · Kling"]; fc [label="Firecrawl"]; meta [label="Meta Graph\nنشر بعد App Review"]; wa [label="WhatsApp Cloud API\nرسمي · webhook موقّع"]; places [label="Google Places\nplace_id فقط"]; }
+  sites [label="المواقع الثابتة\nCloudflare Pages\nتعمل عند تعطل المنسّق", fillcolor="#FFF2CC"];
+  mon [label="المراقبة والإنذارات\nderived/alerts.yaml", fillcolor="#FFF2CC"];
+  owner -> orch [label="قرارات الموافقة"]; founder -> orch [label="أوامر مُدقَّقة"]; founder -> ha [style=dotted];
+  orch -> wf; orch -> agents; wf -> tools; agents -> guard; guard -> tools; tools -> outbox;
+  tools -> pg [label="hermes_worker\napp.customer_id"]; tools -> r2; tools -> vault [label="قراءة بمرجع"]; tools -> git;
+  tools -> llm; tools -> fal; tools -> fc; tools -> places; outbox -> meta; outbox -> wa; wa -> orch [label="webhook → channel_accounts", style=dashed];
+  git -> sites [label="بناء ونشر"]; pg -> mon; orch -> mon;
+}

@@ -1,0 +1,28 @@
+{
+  "version": "2.0.0",
+  "purpose": "The ONE acceptance rule for complaint detection. Consumed by tools/admission.py (second model), tools/run_evals.py --gate standing-send, the claims matrix (C9.4, A19) and specification §9.5. Replaces complaint_keywords.acceptance_test and the complaint floors of evals/model_admission.json (v1.8).",
+  "method": {
+    "bound": "one-sided exact binomial (Clopper-Pearson) upper confidence bound on the miss rate",
+    "zero_miss_closed_form": "1 - alpha_attempt ** (1 / n)",
+    "not": "the upper end of a two-sided 95% interval (that equals a one-sided 97.5% bound)",
+    "family": "path: the confidence applies to the whole acceptance path of one candidate version; each attempt uses alpha_attempt = (1 - path_confidence) / max_attempts_per_version (Bonferroni, valid without assuming the attempts are independent)",
+    "assumptions": "fixed, pre-registered dataset per attempt; messages drawn from the pilot population; labels by two independent annotators; the tuning/development data never enters an acceptance attempt"
+  },
+  "path_confidence": 0.95,
+  "max_attempts_per_version": 2,
+  "max_miss_rate_upper": 0.06,
+  "min_messages": 200,
+  "min_complaints": 60,
+  "min_complaints_per_category": 5,
+  "critical_categories": ["legal", "safety"],
+  "critical_misses_max": 0,
+  "min_precision": 0.9,
+  "max_false_alarms_per_100_non_complaints": 10,
+  "report_by": ["category", "channel", "dialect"],
+  "development_datasets": ["evals/complaints_seed.jsonl"],
+  "notes": {
+    "zero_total_misses": "NOT a criterion since v1.8. A non-critical miss is judged by the bound; a critical miss fails the attempt.",
+    "per_category": "critical_misses_max is a test condition on the sample, not a population guarantee: 0 misses in 5 legal complaints only bounds that category's miss rate below ~45% (one-sided 95%). Per-category bounds are reported, not gated.",
+    "min_complaints": "60 is the smallest n for which 0 misses meets 6% at the per-attempt confidence 97.5% (0/60 -> 5.96%). A single non-critical miss needs n >= 91."
+  }
+}

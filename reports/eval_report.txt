@@ -1,0 +1,14 @@
+complaints seed: 40 messages (20 complaints, 20 non-complaints) · a DEVELOPMENT set: never an acceptance verdict
+  recall 13/20 = 65% · missed 7 · miss-rate bound 59.2% (policy 2.0.0: one-sided 97.5% per attempt = 95% over 2 attempts; threshold 6%; critical misses 1; complaints 20/60 required)
+  precision 100% (threshold 90%) · false alarms 0/100 (threshold 10)
+  per-category miss bound (reported, not gated): legal 91%, pricing 52%, quality 93%, refund 98%, safety 84%
+  verdict: FAIL (seed set; REPORT ONLY in CI; gates only with --gate standing-send) · complaints 20 < 60; miss-rate bound 59.22% > 6% (7/20, one-sided 97.5%); critical misses 1 > 0
+  missed [quality] الأكل وصل بارد والطلب ناقص
+  missed [quality] طلبت من ساعتين وما وصل شي
+  missed [quality] لقيت شعرة في الأكل مقرف
+  missed [quality] الموظف كلمني بأسلوب سيء
+  missed [quality] المعلومات في الموقع غلط رقم التلفون قديم
+  missed [legal] في واحد ينتحل اسم المطعم في فيسبوك
+  missed [quality] الصور اللي نزلتوها مش صورنا
+content guard golden: 10/10 verdicts match
+exit policy: content guard gates CI; complaint acceptance is report-only unless --gate standing-send

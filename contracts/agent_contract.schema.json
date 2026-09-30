@@ -1,0 +1,412 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hermes/contracts/agent_contract.schema.json",
+  "title": "Hermes Agent Contract",
+  "type": "object",
+  "required": [
+    "agent_id",
+    "version",
+    "purpose",
+    "model",
+    "tools",
+    "permissions",
+    "budget",
+    "retry",
+    "escalation",
+    "audit",
+    "runtime"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "agent_id": {
+      "type": "string",
+      "pattern": "^agent_[a-z][a-z0-9_]{2,31}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "purpose": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "model": {
+      "type": "object",
+      "required": [
+        "primary",
+        "fallback",
+        "params"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "primary": {
+          "type": "string"
+        },
+        "fallback": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "params": {
+          "type": "object",
+          "required": [
+            "temperature",
+            "max_output_tokens"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "temperature": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 2
+            },
+            "max_output_tokens": {
+              "type": "integer",
+              "minimum": 64,
+              "maximum": 32768
+            },
+            "top_p": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "seed": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/tool"
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "required": [
+        "allow",
+        "deny",
+        "proposals"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "allow": {
+          "$ref": "#/$defs/actions"
+        },
+        "deny": {
+          "$ref": "#/$defs/actions"
+        },
+        "proposals": {
+          "$ref": "#/$defs/actions"
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "required": [
+        "budget_class",
+        "per_call_usd",
+        "per_task_usd",
+        "class_cap_usd",
+        "hard_stop",
+        "alert_threshold_pct"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "budget_class": {
+          "enum": [
+            "monthly_active",
+            "onboarding",
+            "acquisition"
+          ]
+        },
+        "per_call_usd": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "per_task_usd": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 20
+        },
+        "class_cap_usd": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "hard_stop": {
+          "type": "boolean"
+        },
+        "alert_threshold_pct": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 100
+        }
+      }
+    },
+    "retry": {
+      "type": "object",
+      "required": [
+        "max_attempts",
+        "backoff",
+        "initial_delay_ms",
+        "max_delay_ms",
+        "retryable_errors"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "backoff": {
+          "enum": [
+            "none",
+            "linear",
+            "exponential"
+          ]
+        },
+        "initial_delay_ms": {
+          "type": "integer",
+          "minimum": 100
+        },
+        "max_delay_ms": {
+          "type": "integer",
+          "maximum": 60000
+        },
+        "retryable_errors": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "timeout",
+              "rate_limit",
+              "network",
+              "upstream_5xx",
+              "tool_unavailable",
+              "transient"
+            ]
+          }
+        }
+      }
+    },
+    "escalation": {
+      "type": "object",
+      "required": [
+        "on_repeated_failure",
+        "on_budget_exceeded",
+        "on_unsafe_content",
+        "notification_channel"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "on_repeated_failure": {
+          "enum": [
+            "notify_founder",
+            "human_queue",
+            "abort"
+          ]
+        },
+        "on_budget_exceeded": {
+          "enum": [
+            "notify_founder",
+            "pause_agent",
+            "abort"
+          ]
+        },
+        "on_unsafe_content": {
+          "enum": [
+            "abort",
+            "human_queue",
+            "blocklist"
+          ]
+        },
+        "notification_channel": {
+          "enum": [
+            "founder_slack",
+            "founder_sms",
+            "owner_whatsapp"
+          ]
+        }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "required": [
+        "log_level",
+        "retention_days",
+        "pii_redaction",
+        "fields_logged"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "log_level": {
+          "enum": [
+            "info",
+            "debug",
+            "verbose"
+          ]
+        },
+        "retention_days": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 730
+        },
+        "pii_redaction": {
+          "type": "boolean"
+        },
+        "fields_logged": {
+          "type": "array",
+          "minItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "ts",
+              "task_id",
+              "customer_id",
+              "agent_id",
+              "tool",
+              "model",
+              "tokens_in",
+              "tokens_out",
+              "cost_usd",
+              "duration_ms",
+              "outcome",
+              "error_code",
+              "idempotency_key"
+            ]
+          }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "required": [
+        "max_concurrent_per_customer",
+        "timeout_seconds",
+        "queue_priority",
+        "max_input_tokens",
+        "max_steps",
+        "idempotency_key_fields"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "max_concurrent_per_customer": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 3600
+        },
+        "queue_priority": {
+          "enum": [
+            "low",
+            "normal",
+            "high",
+            "critical"
+          ]
+        },
+        "max_input_tokens": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 64000
+        },
+        "max_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "idempotency_key_fields": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z_]+$"
+          }
+        }
+      }
+    },
+    "feature_flags": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "boolean",
+          "integer"
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "actions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z_]+:[a-z_*]+$"
+      }
+    },
+    "tool": {
+      "type": "object",
+      "required": [
+        "name",
+        "scope",
+        "side_effects"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z_]+\\.[a-z_]+$"
+        },
+        "scope": {
+          "enum": [
+            "read",
+            "write_draft",
+            "write_commit",
+            "write_external"
+          ]
+        },
+        "side_effects": {
+          "enum": [
+            "none",
+            "internal",
+            "customer_visible",
+            "financial"
+          ]
+        },
+        "unit_cost_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "rate_limit": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "per_minute": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "per_hour": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "per_day": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

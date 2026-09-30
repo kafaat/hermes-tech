@@ -1,0 +1,18 @@
+digraph inv {
+  rankdir=TB; nodesep=0.25; ranksep=0.22;
+  node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=10.5, fillcolor="#EAF1FB", color="#1F4E79", width=3.4];
+  edge [fontname="DejaVu Sans", fontsize=9];
+  s [label="invoke(agent, action, tool, task, upper_bound)", fillcolor="#D9E1F2"];
+  c1 [label="1. الوكيل مفعّل؟", shape=diamond]; c2 [label="2. الأداة في العقد؟", shape=diamond];
+  c3 [label="3. الإجراء مقترح؟", shape=diamond]; c4 [label="4. مسموح وغير ممنوع؟", shape=diamond];
+  lock [label="قسم حرج واحد (قفل / صفوف مقفلة في معاملة)", fillcolor="#FFF2CC", width=5];
+  c5 [label="5. المفتاح agent|action|tool|fields\nمنتهٍ؟ قيد التنفيذ؟", shape=diamond];
+  c6 [label="6. الدائرة: مغلقة؟ أو مسبار واحد فقط بعد التبريد", shape=diamond];
+  c7 [label="7. حجز الحد الأعلى للنداء ذريًا:\nنداء · مهمة · وكيل · عميل", shape=diamond];
+  ex [label="8. تنفيذ؛ كل إعادة تحجز من جديد"]; st [label="9. تسوية: التكلفة الفعلية بدل الحجز\nتخزين النتيجة · تحديث الدائرة · تحرير المسبار", fillcolor="#E2EFDA"];
+  q [label="APPROVAL_QUEUED", fillcolor="#FFF2CC"]; same [label="النتيجة المخزنة أو IN_PROGRESS\nدون تنفيذ ثانٍ", fillcolor="#E2EFDA"];
+  deny [label="رفض برمز خطأ + تسجيل", fillcolor="#FDECEA"];
+  s -> c1; c1 -> c2 [label="نعم"]; c2 -> c3 [label="نعم"]; c3 -> q [label="نعم"]; c3 -> c4 [label="لا"];
+  c4 -> lock [label="نعم"]; lock -> c5; c5 -> same [label="نعم"]; c5 -> c6 [label="لا"]; c6 -> c7 [label="نعم"]; c7 -> ex [label="نعم"]; ex -> st;
+  {c1 c2 c4 c6 c7} -> deny [label="لا", style=dashed, color="#C00000"];
+}

@@ -1,0 +1,46 @@
+# Hermes Agent for the founder only (ADR-0002). NOT executed in the build environment.
+# The controls live OUTSIDE the agent, so a prompt injection cannot switch them off:
+#   - ~/.hermes is tmpfs: memory, skills and sessions vanish when the container stops
+#   - root filesystem read-only, config mounted read-only (approvals cannot be disabled)
+#   - the only network path is an egress proxy that allows the model provider alone
+#   - the only data mounted is /inbox (ops_summary.json from tools/export_ops_summary.py), read-only
+#   - the only secret is a dedicated model key with its own provider-side spend cap
+#   - /notes (read-only) holds founder-curated operating notes: continuity without agent-written memory
+#   - no messaging gateway: the founder uses the terminal UI over SSH (docker compose exec hermes hermes)
+#   - no external DNS: names other than the egress service do not resolve (DNS exfiltration)
+#   - errors leave through stdout -> host journald, never through the network (ADR-0002 addendum)
+services:
+  egress:
+    image: ubuntu/squid:latest            # pin by digest on first setup (ADR-0008)
+    volumes:
+      - ./squid.conf:/etc/squid/squid.conf:ro
+      - ./logs:/var/log/squid
+    networks: [internal, outside]
+  hermes:
+    image: hermes-agent-founder:pinned    # built from a pinned Hermes Agent release
+    read_only: true
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /home/hermes/.hermes:size=64m,mode=0700,uid=10001
+      - /tmp:size=64m
+    volumes:
+      - ./config.yaml:/opt/hermes/config.yaml:ro
+      - ./inbox:/inbox:ro
+      - ./notes:/notes:ro
+    environment:
+      HOME: /home/hermes
+      HTTPS_PROXY: http://egress:3128
+      HTTP_PROXY: http://egress:3128
+      NO_PROXY: ""
+      HERMES_MODEL_KEY_FILE: /run/secrets/model_key
+    secrets: [model_key]
+    dns: ["127.0.0.1"]                    # embedded DNS still resolves "egress"; nothing external resolves
+    logging: { driver: journald }         # failures are visible on the host, not sent anywhere
+    networks: [internal]                  # no route to the internet except through egress
+networks:
+  internal: { internal: true }
+  outside: {}
+secrets:
+  model_key: { file: ./model_key.txt }    # dedicated key, provider-side monthly cap

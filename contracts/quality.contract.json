@@ -1,0 +1,120 @@
+{
+  "agent_id": "agent_quality",
+  "version": "1.0.0",
+  "purpose": "فحص مخرجات الوكلاء قبل عرضها على المالك: قواعد حتمية أولًا ثم نموذج صغير لرصد الادعاء غير المسنود؛ لا يعدّل ولا ينشر ولا يحجب في الوضع الصامت.",
+  "model": {
+    "primary": "gpt-5.4-nano",
+    "fallback": null,
+    "params": {
+      "temperature": 0.0,
+      "max_output_tokens": 512,
+      "seed": 7
+    }
+  },
+  "tools": [
+    {
+      "name": "content.read",
+      "scope": "read",
+      "side_effects": "none"
+    },
+    {
+      "name": "guard.check",
+      "scope": "read",
+      "side_effects": "none"
+    },
+    {
+      "name": "kb.search",
+      "scope": "read",
+      "side_effects": "none"
+    },
+    {
+      "name": "flag.raise",
+      "scope": "write_draft",
+      "side_effects": "internal"
+    }
+  ],
+  "permissions": {
+    "allow": [
+      "content:read",
+      "guard:check",
+      "kb:read",
+      "flag:raise"
+    ],
+    "deny": [
+      "content:publish",
+      "content:edit",
+      "reply:send",
+      "billing:*",
+      "payment:*",
+      "customer:delete",
+      "secrets:read"
+    ],
+    "proposals": []
+  },
+  "budget": {
+    "budget_class": "monthly_active",
+    "per_call_usd": 0.005,
+    "per_task_usd": 0.02,
+    "class_cap_usd": 0.1,
+    "hard_stop": true,
+    "alert_threshold_pct": 80
+  },
+  "retry": {
+    "max_attempts": 1,
+    "backoff": "none",
+    "initial_delay_ms": 500,
+    "max_delay_ms": 500,
+    "retryable_errors": [
+      "timeout",
+      "network"
+    ]
+  },
+  "escalation": {
+    "on_repeated_failure": "notify_founder",
+    "on_budget_exceeded": "pause_agent",
+    "on_unsafe_content": "human_queue",
+    "notification_channel": "founder_slack"
+  },
+  "audit": {
+    "log_level": "info",
+    "retention_days": 365,
+    "pii_redaction": true,
+    "fields_logged": [
+      "ts",
+      "task_id",
+      "customer_id",
+      "agent_id",
+      "tool",
+      "model",
+      "tokens_in",
+      "tokens_out",
+      "cost_usd",
+      "duration_ms",
+      "outcome",
+      "error_code",
+      "idempotency_key"
+    ]
+  },
+  "runtime": {
+    "max_concurrent_per_customer": 2,
+    "timeout_seconds": 60,
+    "queue_priority": "high",
+    "max_input_tokens": 16000,
+    "max_steps": 2,
+    "idempotency_key_fields": [
+      "customer_id",
+      "content_id",
+      "content_hash"
+    ]
+  },
+  "feature_flags": {
+    "silent_mode": true,
+    "deterministic_rules_first": true,
+    "block_on_critical": false,
+    "promotion_min_days": 90,
+    "promotion_min_resolved_flags": 200,
+    "promotion_min_precision_pct": 95,
+    "promotion_unflagged_audit_min_samples": 100,
+    "promotion_unflagged_severe_upper95_max_pct": 3
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "registry_version": "1.8.0",
+  "generated_at": "2026-09-30T18:00:00Z",
+  "approved_models": {
+    "gpt-5.4-mini": {
+      "vendor": "openai",
+      "input_usd_per_mtok": 0.75,
+      "output_usd_per_mtok": 4.5,
+      "source": "[ح] developers.openai.com/api/docs/models/gpt-5.4-mini"
+    },
+    "gpt-5.4-nano": {
+      "vendor": "openai",
+      "input_usd_per_mtok": 0.2,
+      "output_usd_per_mtok": 1.25,
+      "source": "[ح] developers.openai.com/api/docs/pricing (Aug 2026)"
+    }
+  },
+  "limits": {
+    "ai_cap_per_active_customer_month_usd": 1.13,
+    "onboarding_cap_per_new_customer_usd": 2.4,
+    "acquisition_pool_month_usd": 30.0,
+    "max_parallel_agents": 4,
+    "circuit_failure_threshold": 3,
+    "circuit_cooldown_seconds": 900
+  },
+  "package_limits": {
+    "posts_per_month": 4,
+    "replies_per_month": 10,
+    "competitor_checks_per_month": 10,
+    "owner_messages_per_month": 4,
+    "edit_minutes_per_month": 15,
+    "site_pages_max": 5
+  },
+  "agents": [
+    {
+      "id": "agent_site_builder",
+      "contract": "site_builder.contract.json",
+      "enabled": true
+    },
+    {
+      "id": "agent_content",
+      "contract": "content.contract.json",
+      "enabled": true
+    },
+    {
+      "id": "agent_replies",
+      "contract": "replies.contract.json",
+      "enabled": true
+    },
+    {
+      "id": "agent_competitor",
+      "contract": "competitor.contract.json",
+      "enabled": true
+    },
+    {
+      "id": "agent_search",
+      "contract": "search.contract.json",
+      "enabled": true
+    },
+    {
+      "id": "agent_billing",
+      "contract": "billing.contract.json",
+      "enabled": false,
+      "reason": "يُفعَّل بعد نجاح اختبار التحصيل الوارد (البوابة 0.1)"
+    },
+    {
+      "id": "agent_quality",
+      "contract": "quality.contract.json",
+      "enabled": true,
+      "reason": "وضع صامت 90 يومًا: يسجّل ولا يحجب حتى تثبت دقته"
+    },
+    {
+      "id": "agent_triage",
+      "contract": "triage.contract.json",
+      "enabled": true,
+      "reason": "يضيف تصعيدًا فقط؛ عتبته تُضبط باختبار القبول"
+    }
+  ]
+}

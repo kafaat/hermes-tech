@@ -1,0 +1,16 @@
+digraph replies {
+  rankdir=TB; nodesep=0.3; ranksep=0.3;
+  node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11, fillcolor="#EAF1FB", color="#1F4E79"];
+  edge [fontname="DejaVu Sans", fontsize=9];
+  in [label="رسالة واردة\nقناة patron أو client"];
+  n [label="تطبيع عربي · تحييد مقاطع الاستثناءات"];
+  m [label="مطابقة الفئات الخمس\n(حدود كلمات + سوابق عربية)", shape=diamond];
+  pr [label="patron: صاحب المنشأة\nlegal/safety نسخة للمؤسس", fillcolor="#FFF2CC"];
+  cl [label="client: المؤسس\ncritical = SMS · high = Slack", fillcolor="#FDECEA"];
+  q [label="استفسار سعر أو خصم؟", shape=diamond];
+  o [label="تحويل للمالك\n(الوكيل ممنوع من الأسعار)", fillcolor="#FFF2CC"];
+  r [label="agent_replies: مسودة من kb_facts المعتمدة\nمقترح reply:send"];
+  s [label="إرسال بعد موافقة أو سياسة معتمدة", fillcolor="#E2EFDA"];
+  in -> n -> m; m -> pr [label="شكوى · patron"]; m -> cl [label="شكوى · client"]; m -> q [label="لا تطابق"];
+  q -> o [label="نعم"]; q -> r [label="لا"]; r -> s;
+}

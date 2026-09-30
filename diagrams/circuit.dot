@@ -1,0 +1,8 @@
+digraph circ {
+  rankdir=LR; node [shape=circle, style=filled, fontname="DejaVu Sans", fontsize=11, width=1.3];
+  edge [fontname="DejaVu Sans", fontsize=9];
+  closed [label="closed", fillcolor="#E2EFDA"]; open [label="open", fillcolor="#FDECEA"]; half [label="half_open", fillcolor="#FFF2CC"];
+  closed -> closed [label="نجاح"]; closed -> open [label="3 إخفاقات متتالية"];
+  open -> half [label="بعد 900 ثانية"]; half -> closed [label="نداء اختبار ناجح"]; half -> open [label="فشل"];
+  open -> closed [label="reset-circuit يدوي", style=dashed];
+}

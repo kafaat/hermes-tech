@@ -1,0 +1,36 @@
+{
+  "customer_id": "cust_0421",
+  "month_id": "2026-09",
+  "agents": {
+    "agent_content": {
+      "calls": 12,
+      "spent_usd": 0.32,
+      "last_call_at": "2026-09-29T09:05:44Z",
+      "last_outcome": "success",
+      "consecutive_failures": 0,
+      "circuit": "closed",
+      "circuit_opened_at": null
+    },
+    "agent_competitor": {
+      "calls": 8,
+      "spent_usd": 0.24,
+      "last_call_at": "2026-09-27T18:00:00Z",
+      "last_outcome": "success",
+      "consecutive_failures": 0,
+      "circuit": "closed",
+      "circuit_opened_at": null
+    },
+    "agent_replies": {
+      "calls": 7,
+      "spent_usd": 0.09,
+      "last_call_at": "2026-09-29T11:12:03Z",
+      "last_outcome": "escalated",
+      "consecutive_failures": 0,
+      "circuit": "closed",
+      "circuit_opened_at": null
+    }
+  },
+  "ai_spent_total_usd": 0.65,
+  "ai_cap_usd": 1.13,
+  "budget_alert_fired": false
+}

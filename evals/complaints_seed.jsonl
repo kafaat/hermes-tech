@@ -1,0 +1,40 @@
+{"channel": "patron", "text": "الفاتورة غلط حسبتوا الوجبة مرتين", "is_complaint": true, "category": "pricing"}
+{"channel": "patron", "text": "الأكل وصل بارد والطلب ناقص", "is_complaint": true, "category": "quality"}
+{"channel": "patron", "text": "طلبت من ساعتين وما وصل شي", "is_complaint": true, "category": "quality"}
+{"channel": "patron", "text": "بشتكيكم لحماية المستهلك", "is_complaint": true, "category": "legal"}
+{"channel": "patron", "text": "لقيت شعرة في الأكل مقرف", "is_complaint": true, "category": "quality"}
+{"channel": "patron", "text": "دفعت مرتين عن نفس الطلب", "is_complaint": true, "category": "pricing"}
+{"channel": "patron", "text": "الموظف كلمني بأسلوب سيء", "is_complaint": true, "category": "quality"}
+{"channel": "patron", "text": "اشتي زلطي ما استلمت الطلب", "is_complaint": true, "category": "pricing"}
+{"channel": "client", "text": "الموقع ما يفتح من الصبح", "is_complaint": true, "category": "quality"}
+{"channel": "client", "text": "حد دخل على الحساب ونشر اعلان غريب", "is_complaint": true, "category": "safety"}
+{"channel": "client", "text": "ليش ما نزل المنشور حق الخميس", "is_complaint": true, "category": "quality"}
+{"channel": "client", "text": "وقفوا الاشتراك ما استفدت شي", "is_complaint": true, "category": "refund"}
+{"channel": "client", "text": "المعلومات في الموقع غلط رقم التلفون قديم", "is_complaint": true, "category": "quality"}
+{"channel": "client", "text": "دفعت الاشتراك والحساب ما اتفتح", "is_complaint": true, "category": "pricing"}
+{"channel": "client", "text": "اشتي ارجع فلوسي", "is_complaint": true, "category": "pricing"}
+{"channel": "client", "text": "في واحد ينتحل اسم المطعم في فيسبوك", "is_complaint": true, "category": "legal"}
+{"channel": "client", "text": "الصور اللي نزلتوها مش صورنا", "is_complaint": true, "category": "quality"}
+{"channel": "client", "text": "محامي المنشأة بيتواصل معكم", "is_complaint": true, "category": "legal"}
+{"channel": "patron", "text": "ما حد يرد على التلفون", "is_complaint": true, "category": "quality"}
+{"channel": "client", "text": "كلمة السر تغيرت وانا ما غيرتها", "is_complaint": true, "category": "safety"}
+{"channel": "patron", "text": "متى تفتحون يوم الجمعة؟", "is_complaint": false, "expected_kind": "none"}
+{"channel": "patron", "text": "في خصم للطلاب؟", "is_complaint": false, "expected_kind": "owner_inquiry"}
+{"channel": "patron", "text": "بكم وجبة المندي؟", "is_complaint": false, "expected_kind": "owner_inquiry"}
+{"channel": "client", "text": "السعر مناسب شكرا", "is_complaint": false, "expected_kind": "none"}
+{"channel": "client", "text": "تمام أرجع لكم بكرة", "is_complaint": false, "expected_kind": "none"}
+{"channel": "client", "text": "ما اشتي تعديل على المنشور", "is_complaint": false, "expected_kind": "none"}
+{"channel": "patron", "text": "هل عندكم توصيل لحدة؟", "is_complaint": false, "expected_kind": "none"}
+{"channel": "client", "text": "اشتي اضيف صورة جديدة للمنيو", "is_complaint": false, "expected_kind": "none"}
+{"channel": "client", "text": "سؤال عن منصب مدير التسويق عندكم", "is_complaint": false, "expected_kind": "none"}
+{"channel": "patron", "text": "الأكل كان ممتاز شكرا لكم", "is_complaint": false, "expected_kind": "none"}
+{"channel": "client", "text": "كيف اغير رقم التلفون في الموقع", "is_complaint": false, "expected_kind": "none"}
+{"channel": "patron", "text": "وين موقعكم بالضبط", "is_complaint": false, "expected_kind": "none"}
+{"channel": "client", "text": "المنشور حلو جدا", "is_complaint": false, "expected_kind": "none"}
+{"channel": "patron", "text": "عندكم حجز للمناسبات؟", "is_complaint": false, "expected_kind": "none"}
+{"channel": "client", "text": "ممكن نغير لون الموقع", "is_complaint": false, "expected_kind": "none"}
+{"channel": "patron", "text": "الله يعطيكم العافية", "is_complaint": false, "expected_kind": "none"}
+{"channel": "client", "text": "متى يجي تقرير المنافسين", "is_complaint": false, "expected_kind": "none"}
+{"channel": "patron", "text": "هل الطلب يوصل قبل الساعة 2", "is_complaint": false, "expected_kind": "none"}
+{"channel": "client", "text": "ارسلت لكم صور المحل الجديدة", "is_complaint": false, "expected_kind": "none"}
+{"channel": "patron", "text": "كم رقم الواتساب حقكم", "is_complaint": false, "expected_kind": "none"}

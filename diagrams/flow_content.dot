@@ -1,0 +1,13 @@
+digraph content {
+  rankdir=TB; nodesep=0.3; ranksep=0.32;
+  node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11, fillcolor="#EAF1FB", color="#1F4E79", width=3.6];
+  edge [fontname="DejaVu Sans", fontsize=9];
+  a [label="جدولة أسبوعية (حتمي)\nweek_id · 4 منشورات شهريًا"];
+  b [label="agent_content: مسودة + صورة\nسقف 0.40$ شهريًا · كل نداء في agent_calls"];
+  c [label="content_items.pending_approval\nمقترح content:publish"];
+  d [label="المالك يقرر في البوابة\n(الانتهاء بعد 7 أيام)", fillcolor="#FFF2CC", shape=diamond, width=2.5];
+  e [label="تنفيذ النشر · مسودة Meta أو نشر يدوي\nحراسة قاعدة البيانات"];
+  f [label="published", fillcolor="#E2EFDA"];
+  g [label="rejected / expired\nإعادة توليد ضمن السقف أو تصعيد", fillcolor="#FDECEA"];
+  a -> b -> c -> d; d -> e [label="approved"]; e -> f; d -> g [label="rejected / expired"];
+}

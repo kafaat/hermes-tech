@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hermes/runtime/agent_call.schema.json",
+  "type": "object",
+  "required": [
+    "ts",
+    "task_id",
+    "customer_id",
+    "agent_id",
+    "tool",
+    "model",
+    "tokens_in",
+    "tokens_out",
+    "cost_usd",
+    "duration_ms",
+    "outcome",
+    "error_code",
+    "idempotency_key"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "ts": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string",
+      "pattern": "^t_[0-9a-z]+$"
+    },
+    "customer_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "agent_id": {
+      "type": "string",
+      "pattern": "^agent_[a-z][a-z0-9_]{2,31}$"
+    },
+    "tool": {
+      "type": "string",
+      "pattern": "^[a-z_]+\\.[a-z_]+$"
+    },
+    "model": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tokens_in": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tokens_out": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "cost_usd": {
+      "type": "number",
+      "minimum": 0
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "outcome": {
+      "enum": [
+        "success",
+        "failure",
+        "escalated",
+        "rejected",
+        "budget_exceeded",
+        "circuit_open"
+      ]
+    },
+    "error_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 16
+    }
+  }
+}

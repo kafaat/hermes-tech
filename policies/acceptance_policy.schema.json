@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hermes complaint acceptance policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "purpose", "method", "path_confidence", "max_attempts_per_version", "max_miss_rate_upper", "min_messages",
+               "min_complaints", "min_complaints_per_category", "critical_categories", "critical_misses_max", "min_precision",
+               "max_false_alarms_per_100_non_complaints", "report_by", "development_datasets", "notes"],
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "purpose": {"type": "string"},
+    "method": {"type": "object", "required": ["bound", "zero_miss_closed_form", "not", "family", "assumptions"],
+               "additionalProperties": false,
+               "properties": {"bound": {"type": "string"}, "zero_miss_closed_form": {"type": "string"}, "not": {"type": "string"},
+                              "family": {"type": "string"}, "assumptions": {"type": "string"}}},
+    "path_confidence": {"type": "number", "minimum": 0.9, "maximum": 0.999},
+    "max_attempts_per_version": {"type": "integer", "minimum": 1, "maximum": 3},
+    "max_miss_rate_upper": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.2},
+    "min_messages": {"type": "integer", "minimum": 100},
+    "min_complaints": {"type": "integer", "minimum": 20},
+    "min_complaints_per_category": {"type": "integer", "minimum": 1},
+    "critical_categories": {"type": "array", "items": {"type": "string", "enum": ["pricing", "quality", "legal", "safety", "refund"]}, "minItems": 1},
+    "critical_misses_max": {"type": "integer", "minimum": 0, "maximum": 0},
+    "min_precision": {"type": "number", "minimum": 0, "maximum": 1},
+    "max_false_alarms_per_100_non_complaints": {"type": "number", "minimum": 0},
+    "report_by": {"type": "array", "items": {"type": "string"}},
+    "development_datasets": {"type": "array", "items": {"type": "string"}},
+    "notes": {"type": "object"}
+  }
+}

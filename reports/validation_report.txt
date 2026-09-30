@@ -1,0 +1,418 @@
+PASS [schema] registry.json matches registry.schema.json
+PASS [schema] site_builder.contract.json exists
+PASS [schema] site_builder.contract.json matches agent_contract.schema.json
+PASS [schema] site_builder.contract.json: agent_id equals registry id
+PASS [schema] content.contract.json exists
+PASS [schema] content.contract.json matches agent_contract.schema.json
+PASS [schema] content.contract.json: agent_id equals registry id
+PASS [schema] replies.contract.json exists
+PASS [schema] replies.contract.json matches agent_contract.schema.json
+PASS [schema] replies.contract.json: agent_id equals registry id
+PASS [schema] competitor.contract.json exists
+PASS [schema] competitor.contract.json matches agent_contract.schema.json
+PASS [schema] competitor.contract.json: agent_id equals registry id
+PASS [schema] search.contract.json exists
+PASS [schema] search.contract.json matches agent_contract.schema.json
+PASS [schema] search.contract.json: agent_id equals registry id
+PASS [schema] billing.contract.json exists
+PASS [schema] billing.contract.json matches agent_contract.schema.json
+PASS [schema] billing.contract.json: agent_id equals registry id
+PASS [schema] quality.contract.json exists
+PASS [schema] quality.contract.json matches agent_contract.schema.json
+PASS [schema] quality.contract.json: agent_id equals registry id
+PASS [schema] triage.contract.json exists
+PASS [schema] triage.contract.json matches agent_contract.schema.json
+PASS [schema] triage.contract.json: agent_id equals registry id
+PASS [schema] no contract file outside the registry
+PASS [schema] agent_runtime_state.example.json matches its schema
+PASS [schema] agent_calls.example.jsonl line 1 matches agent_call.schema.json
+PASS [schema] agent_calls.example.jsonl line 2 matches agent_call.schema.json
+PASS [schema] agent_calls.example.jsonl line 3 matches agent_call.schema.json
+PASS [schema] agent_calls.example.jsonl line 4 matches agent_call.schema.json
+PASS [schema] complaint_keywords.json matches its schema
+PASS [schema] content_rules.json matches its schema
+PASS [semantic] agent_calls example line 1: key scoped by agent and tool
+PASS [semantic] agent_calls example line 1: action 'content:draft' permitted for agent_content
+PASS [semantic] agent_calls example line 1: no key shared by two tools in one task
+PASS [semantic] agent_calls example line 2: key scoped by agent and tool
+PASS [semantic] agent_calls example line 2: action 'content:image_generate' permitted for agent_content
+PASS [semantic] agent_calls example line 2: no key shared by two tools in one task
+PASS [semantic] agent_calls example line 3: key scoped by agent and tool
+PASS [semantic] agent_calls example line 3: action 'reply:draft' permitted for agent_replies
+PASS [semantic] agent_calls example line 3: no key shared by two tools in one task
+PASS [semantic] agent_calls example line 4: key scoped by agent and tool
+PASS [semantic] agent_calls example line 4: action 'public:read' permitted for agent_search
+PASS [semantic] agent_calls example line 4: no key shared by two tools in one task
+PASS [semantic] agent_site_builder: no proposal is also denied (approval path reachable)
+PASS [semantic] agent_site_builder: proposals are not directly allowed (a human executes them)
+PASS [semantic] agent_site_builder: allow and deny do not overlap
+PASS [semantic] agent_site_builder: no tool with financial side effects
+PASS [semantic] agent_site_builder: model 'gpt-5.4-mini' is in registry.approved_models (budgeted and vendor-confirmed)
+PASS [semantic] agent_site_builder: per_call <= per_task <= class_cap (0.3 <= 2.4 <= 2.4)
+PASS [semantic] agent_site_builder: worst-case call cost 0.0849 fits per_call_usd 0.3
+PASS [semantic] agent_site_builder: onboarding cap within registry limit
+PASS [semantic] agent_site_builder: PII redaction on
+PASS [semantic] agent_site_builder: max_delay >= initial_delay
+PASS [semantic] agent_content: no proposal is also denied (approval path reachable)
+PASS [semantic] agent_content: proposals are not directly allowed (a human executes them)
+PASS [semantic] agent_content: allow and deny do not overlap
+PASS [semantic] agent_content: no tool with financial side effects
+PASS [semantic] agent_content: model 'gpt-5.4-mini' is in registry.approved_models (budgeted and vendor-confirmed)
+PASS [semantic] agent_content: per_call <= per_task <= class_cap (0.08 <= 0.4 <= 0.4)
+PASS [semantic] agent_content: worst-case call cost 0.0462 fits per_call_usd 0.08
+PASS [semantic] agent_content: idempotency key is tenant-scoped
+PASS [semantic] agent_content: context <= 16k tokens for monthly agents
+PASS [semantic] agent_content: PII redaction on
+PASS [semantic] agent_content: max_delay >= initial_delay
+PASS [semantic] agent_replies: no proposal is also denied (approval path reachable)
+PASS [semantic] agent_replies: proposals are not directly allowed (a human executes them)
+PASS [semantic] agent_replies: allow and deny do not overlap
+PASS [semantic] agent_replies: no tool with financial side effects
+PASS [semantic] agent_replies: model 'gpt-5.4-mini' is in registry.approved_models (budgeted and vendor-confirmed)
+PASS [semantic] agent_replies: per_call <= per_task <= class_cap (0.02 <= 0.05 <= 0.2)
+PASS [semantic] agent_replies: worst-case call cost 0.0143 fits per_call_usd 0.02
+PASS [semantic] agent_replies: idempotency key is tenant-scoped
+PASS [semantic] agent_replies: context <= 16k tokens for monthly agents
+PASS [semantic] agent_replies: no backoff implies at most one attempt
+PASS [semantic] agent_replies: PII redaction on
+PASS [semantic] agent_replies: max_delay >= initial_delay
+PASS [semantic] agent_competitor: no proposal is also denied (approval path reachable)
+PASS [semantic] agent_competitor: proposals are not directly allowed (a human executes them)
+PASS [semantic] agent_competitor: allow and deny do not overlap
+PASS [semantic] agent_competitor: no tool with financial side effects
+PASS [semantic] agent_competitor: model 'gpt-5.4-mini' is in registry.approved_models (budgeted and vendor-confirmed)
+PASS [semantic] agent_competitor: per_call <= per_task <= class_cap (0.03 <= 0.1 <= 0.35)
+PASS [semantic] agent_competitor: worst-case call cost 0.0166 fits per_call_usd 0.03
+PASS [semantic] agent_competitor: idempotency key is tenant-scoped
+PASS [semantic] agent_competitor: context <= 16k tokens for monthly agents
+PASS [semantic] agent_competitor: PII redaction on
+PASS [semantic] agent_competitor: max_delay >= initial_delay
+PASS [semantic] agent_search: no proposal is also denied (approval path reachable)
+PASS [semantic] agent_search: proposals are not directly allowed (a human executes them)
+PASS [semantic] agent_search: allow and deny do not overlap
+PASS [semantic] agent_search: no tool with financial side effects
+PASS [semantic] agent_search: model 'gpt-5.4-mini' is in registry.approved_models (budgeted and vendor-confirmed)
+PASS [semantic] agent_search: per_call <= per_task <= class_cap (0.02 <= 0.2 <= 30.0)
+PASS [semantic] agent_search: worst-case call cost 0.0166 fits per_call_usd 0.02
+PASS [semantic] agent_search: acquisition key is not per customer
+PASS [semantic] agent_search: acquisition cap within pool
+PASS [semantic] agent_search: PII redaction on
+PASS [semantic] agent_search: max_delay >= initial_delay
+PASS [semantic] agent_billing: no proposal is also denied (approval path reachable)
+PASS [semantic] agent_billing: proposals are not directly allowed (a human executes them)
+PASS [semantic] agent_billing: allow and deny do not overlap
+PASS [semantic] agent_billing: no tool with financial side effects
+PASS [semantic] agent_billing: model 'gpt-5.4-mini' is in registry.approved_models (budgeted and vendor-confirmed)
+PASS [semantic] agent_billing: per_call <= per_task <= class_cap (0.01 <= 0.02 <= 0.05)
+PASS [semantic] agent_billing: worst-case call cost 0.0057 fits per_call_usd 0.01
+PASS [semantic] agent_billing: idempotency key is tenant-scoped
+PASS [semantic] agent_billing: context <= 16k tokens for monthly agents
+PASS [semantic] agent_billing: PII redaction on
+PASS [semantic] agent_billing: max_delay >= initial_delay
+PASS [semantic] agent_quality: no proposal is also denied (approval path reachable)
+PASS [semantic] agent_quality: proposals are not directly allowed (a human executes them)
+PASS [semantic] agent_quality: allow and deny do not overlap
+PASS [semantic] agent_quality: no tool with financial side effects
+PASS [semantic] agent_quality: model 'gpt-5.4-nano' is in registry.approved_models (budgeted and vendor-confirmed)
+PASS [semantic] agent_quality: per_call <= per_task <= class_cap (0.005 <= 0.02 <= 0.1)
+PASS [semantic] agent_quality: worst-case call cost 0.0038 fits per_call_usd 0.005
+PASS [semantic] agent_quality: idempotency key is tenant-scoped
+PASS [semantic] agent_quality: context <= 16k tokens for monthly agents
+PASS [semantic] agent_quality: no backoff implies at most one attempt
+PASS [semantic] agent_quality: PII redaction on
+PASS [semantic] agent_quality: max_delay >= initial_delay
+PASS [semantic] agent_quality: silent-mode auditor has no external or committing effects
+PASS [semantic] agent_quality: silent mode declares measurable promotion criteria
+PASS [semantic] agent_quality: promotion also audits UNFLAGGED output (precision alone cannot see what was missed)
+PASS [semantic] agent_triage: no proposal is also denied (approval path reachable)
+PASS [semantic] agent_triage: proposals are not directly allowed (a human executes them)
+PASS [semantic] agent_triage: allow and deny do not overlap
+PASS [semantic] agent_triage: no tool with financial side effects
+PASS [semantic] agent_triage: model 'gpt-5.4-nano' is in registry.approved_models (budgeted and vendor-confirmed)
+PASS [semantic] agent_triage: per_call <= per_task <= class_cap (0.001 <= 0.001 <= 0.02)
+PASS [semantic] agent_triage: worst-case call cost 0.0005 fits per_call_usd 0.001
+PASS [semantic] agent_triage: idempotency key is tenant-scoped
+PASS [semantic] agent_triage: context <= 16k tokens for monthly agents
+PASS [semantic] agent_triage: no backoff implies at most one attempt
+PASS [semantic] agent_triage: PII redaction on
+PASS [semantic] agent_triage: max_delay >= initial_delay
+PASS [semantic] sum of monthly agent caps 1.12 <= AI cap per active customer 1.13
+PASS [semantic] competitor checks within package limit
+PASS [semantic] agent_billing disabled until gate 0.1
+PASS [semantic] policy defines the five categories
+PASS [semantic] no keyword listed twice across categories
+PASS [semantic] owner inquiry terms are not complaint keywords
+PASS [semantic] patron messages reach the founder only for legal and safety
+PASS [semantic] every category has Yemeni-dialect forms
+PASS [semantic] content rule price_mention: applies to at least one output kind
+PASS [semantic] content rule price_mention: regex patterns compile
+PASS [semantic] content rule price_word: applies to at least one output kind
+PASS [semantic] content rule medical_claim: applies to at least one output kind
+PASS [semantic] content rule guarantee_claim: applies to at least one output kind
+PASS [semantic] content rule phone_number: applies to at least one output kind
+PASS [semantic] content rule phone_number: regex patterns compile
+PASS [semantic] content rule external_link: applies to at least one output kind
+PASS [semantic] content rule external_link: regex patterns compile
+PASS [semantic] content rule disparagement: applies to at least one output kind
+PASS [semantic] price mentions are blocked in agent replies (matches agent_replies price:quote deny)
+PASS [semantic] link allowlist holds domains only
+PASS [semantic] Hermes Agent data door (ops_summary) has no free-text field (ADR-0002)
+PASS [semantic] unknown failure codes are quarantined as UNKNOWN_CODE, never rejected (incident path)
+PASS [semantic] failure vocabulary is generated from docs/error_codes.yaml; every code has a meaning
+PASS [semantic] failure vocabulary covers every error code the platform can raise
+PASS [schema] acceptance_policy.json matches its schema
+PASS [semantic] acceptance policy: zero misses in the critical categories (legal, safety)
+PASS [semantic] minimum complaint count can meet the miss-rate bound at the per-attempt confidence (60 complaints, one-sided 97.5%)
+PASS [semantic] a system at the threshold miss rate passes a zero-miss attempt within the allowed attempts with probability <= 1 - path confidence
+PASS [semantic] model retest policy stays inside the acceptance family (attempts per version)
+PASS [semantic] no second copy of the complaint acceptance rule (admission floors, keyword policy)
+PASS [semantic] the development seed set can never be an acceptance attempt
+PASS [semantic] model admission quality floor matches the quality agent promotion criterion
+PASS [sql] FORCE exceptions after all migrations equal the published inventory
+PASS [sql] customers: RLS enabled
+PASS [sql] customers: RLS forced
+PASS [sql] customers: at least one policy
+PASS [sql] customer_users: RLS enabled
+PASS [sql] customer_users: at least one policy
+PASS [sql] operators: RLS enabled
+PASS [sql] operators: at least one policy
+PASS [sql] subscriptions: RLS enabled
+PASS [sql] subscriptions: RLS forced
+PASS [sql] subscriptions: at least one policy
+PASS [sql] subscriptions: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] invoices: RLS enabled
+PASS [sql] invoices: RLS forced
+PASS [sql] invoices: at least one policy
+PASS [sql] invoices: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] payments: RLS enabled
+PASS [sql] payments: RLS forced
+PASS [sql] payments: at least one policy
+PASS [sql] payments: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] templates: RLS enabled
+PASS [sql] templates: RLS forced
+PASS [sql] templates: at least one policy
+PASS [sql] sites: RLS enabled
+PASS [sql] sites: RLS forced
+PASS [sql] sites: at least one policy
+PASS [sql] sites: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] deployments: RLS enabled
+PASS [sql] deployments: RLS forced
+PASS [sql] deployments: at least one policy
+PASS [sql] deployments: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] media_assets: RLS enabled
+PASS [sql] media_assets: RLS forced
+PASS [sql] media_assets: at least one policy
+PASS [sql] media_assets: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] content_items: RLS enabled
+PASS [sql] content_items: RLS forced
+PASS [sql] content_items: at least one policy
+PASS [sql] content_items: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] kb_facts: RLS enabled
+PASS [sql] kb_facts: RLS forced
+PASS [sql] kb_facts: at least one policy
+PASS [sql] kb_facts: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] approvals: RLS enabled
+PASS [sql] approvals: at least one policy
+PASS [sql] approvals: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] tasks: RLS enabled
+PASS [sql] tasks: at least one policy
+PASS [sql] tasks: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] agent_calls: RLS enabled
+PASS [sql] agent_calls: RLS forced
+PASS [sql] agent_calls: at least one policy
+PASS [sql] agent_calls: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] agent_state: RLS enabled
+PASS [sql] agent_state: RLS forced
+PASS [sql] agent_state: at least one policy
+PASS [sql] agent_state: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] competitors: RLS enabled
+PASS [sql] competitors: RLS forced
+PASS [sql] competitors: at least one policy
+PASS [sql] competitors: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] competitor_snapshots: RLS enabled
+PASS [sql] competitor_snapshots: RLS forced
+PASS [sql] competitor_snapshots: at least one policy
+PASS [sql] competitor_snapshots: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] inquiries: RLS enabled
+PASS [sql] inquiries: RLS forced
+PASS [sql] inquiries: at least one policy
+PASS [sql] inquiries: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] support_tickets: RLS enabled
+PASS [sql] support_tickets: RLS forced
+PASS [sql] support_tickets: at least one policy
+PASS [sql] support_tickets: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] time_entries: RLS enabled
+PASS [sql] time_entries: RLS forced
+PASS [sql] time_entries: at least one policy
+PASS [sql] leads: RLS enabled
+PASS [sql] leads: RLS forced
+PASS [sql] leads: at least one policy
+PASS [sql] secret_refs: RLS enabled
+PASS [sql] secret_refs: RLS forced
+PASS [sql] secret_refs: at least one policy
+PASS [sql] secret_refs: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] incidents: RLS enabled
+PASS [sql] incidents: RLS forced
+PASS [sql] incidents: at least one policy
+PASS [sql] gate_measurements: RLS enabled
+PASS [sql] gate_measurements: RLS forced
+PASS [sql] gate_measurements: at least one policy
+PASS [sql] audit_log: RLS enabled
+PASS [sql] audit_log: at least one policy
+PASS [sql] audit_log: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] channel_accounts: RLS enabled
+PASS [sql] channel_accounts: RLS forced
+PASS [sql] channel_accounts: at least one policy
+PASS [sql] channel_accounts: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] webhook_events: RLS enabled
+PASS [sql] webhook_events: RLS forced
+PASS [sql] webhook_events: at least one policy
+PASS [sql] webhook_events: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] quality_flags: RLS enabled
+PASS [sql] quality_flags: RLS forced
+PASS [sql] quality_flags: at least one policy
+PASS [sql] quality_flags: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] outbox: RLS enabled
+PASS [sql] outbox: RLS forced
+PASS [sql] outbox: at least one policy
+PASS [sql] outbox: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] eval_runs: RLS enabled
+PASS [sql] eval_runs: RLS forced
+PASS [sql] eval_runs: at least one policy
+PASS [sql] restore_drills: RLS enabled
+PASS [sql] restore_drills: RLS forced
+PASS [sql] restore_drills: at least one policy
+PASS [sql] customer_ai_budget: RLS enabled
+PASS [sql] customer_ai_budget: RLS forced
+PASS [sql] customer_ai_budget: at least one policy
+PASS [sql] customer_ai_budget: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] task_budget: RLS enabled
+PASS [sql] task_budget: RLS forced
+PASS [sql] task_budget: at least one policy
+PASS [sql] task_budget: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] acquisition_budget: RLS enabled
+PASS [sql] acquisition_budget: RLS forced
+PASS [sql] acquisition_budget: at least one policy
+PASS [sql] idempotency_keys: RLS enabled
+PASS [sql] idempotency_keys: RLS forced
+PASS [sql] idempotency_keys: at least one policy
+PASS [sql] idempotency_keys: worker access bound to a live lease (no NULL-tenant match without one)
+PASS [sql] reservation_exceed_events: RLS enabled
+PASS [sql] reservation_exceed_events: RLS forced
+PASS [sql] reservation_exceed_events: at least one policy
+PASS [sql] agent_pauses: RLS enabled
+PASS [sql] agent_pauses: RLS forced
+PASS [sql] agent_pauses: at least one policy
+PASS [sql] task_leases: RLS enabled
+PASS [sql] task_leases: at least one policy
+PASS [sql] task_leases: no direct worker grant (changed only through functions)
+PASS [sql] outbox_topics: RLS enabled
+PASS [sql] outbox_topics: at least one policy
+PASS [sql] retention_runs: RLS enabled
+PASS [sql] retention_runs: RLS forced
+PASS [sql] retention_runs: at least one policy
+PASS [sql] every final worker policy is bound to a lease, except reference data
+PASS [sql] worker holds column grants only where the authority layer needs them (final grants, after revokes)
+PASS [sql] no application role can write a resolution or a consumption directly
+PASS [sql] retention job can clear an inquiry body but never read one
+PASS [sql] webhook ingest cannot choose a tenant (routing from channel_accounts only)
+PASS [sql] audit_log blocks update/delete
+PASS [sql] audit_log privileges revoked
+PASS [sql] no delete grants to application roles
+PASS [sql] migrations create no bypassrls role
+PASS [sql] approval guard runs as invoker inside the tenant scope
+PASS [sql] webhook_events are idempotent per provider event id
+PASS [sql] unsigned webhook events are never processed
+PASS [sql] queue claim uses FOR UPDATE SKIP LOCKED
+PASS [sql] outbox refuses external effects without an approval
+PASS [sql] policy helper calls wrapped as (select fn()) for per-statement evaluation
+PASS [sql] app.audit_chain: security definer function listed in docs/security_definer_inventory.md
+PASS [sql] app.audit_chain: security definer function pins search_path
+PASS [sql] app.audit_effect: security definer function listed in docs/security_definer_inventory.md
+PASS [sql] app.audit_effect: security definer function pins search_path
+PASS [sql] app.audit_head: security definer function listed in docs/security_definer_inventory.md
+PASS [sql] app.audit_head: security definer function pins search_path
+PASS [sql] app.audit_verify: security definer function listed in docs/security_definer_inventory.md
+PASS [sql] app.audit_verify: security definer function pins search_path
+PASS [sql] app.bind_task: security definer function listed in docs/security_definer_inventory.md
+PASS [sql] app.bind_task: security definer function pins search_path
+PASS [sql] app.claim_task: security definer function listed in docs/security_definer_inventory.md
+PASS [sql] app.claim_task: security definer function pins search_path
+PASS [sql] app.complete_task: security definer function listed in docs/security_definer_inventory.md
+PASS [sql] app.complete_task: security definer function pins search_path
+PASS [sql] app.current_user_customer_ids: security definer function listed in docs/security_definer_inventory.md
+PASS [sql] app.current_user_customer_ids: security definer function pins search_path
+PASS [sql] app.extend_task_lease: security definer function listed in docs/security_definer_inventory.md
+PASS [sql] app.extend_task_lease: security definer function pins search_path
+PASS [sql] app.is_operator: security definer function listed in docs/security_definer_inventory.md
+PASS [sql] app.is_operator: security definer function pins search_path
+PASS [sql] app.jwt_aal: security definer function listed in docs/security_definer_inventory.md
+PASS [sql] app.jwt_aal: security definer function pins search_path
+PASS [sql] app.outbox_before_write: security definer function listed in docs/security_definer_inventory.md
+PASS [sql] app.outbox_before_write: security definer function pins search_path
+PASS [sql] app.requeue_task: security definer function listed in docs/security_definer_inventory.md
+PASS [sql] app.requeue_task: security definer function pins search_path
+PASS [sql] app.worker_context: security definer function listed in docs/security_definer_inventory.md
+PASS [sql] app.worker_context: security definer function pins search_path
+PASS [sql] app.worker_customer_id: security definer function listed in docs/security_definer_inventory.md
+PASS [sql] app.worker_customer_id: security definer function pins search_path
+PASS [sql] EXECUTE on app functions revoked from PUBLIC
+PASS [sql] future app functions start without PUBLIC EXECUTE
+PASS [sql] guard helper executable by the roles whose writes fire the guard triggers
+PASS [sql] lead names require a non-Google source (Maps caching terms)
+PASS [sql] restore drills recorded and surfaced
+PASS [sql] secret rotation age surfaced (90 days)
+PASS [sql] app.reserve_budget present (v1.5)
+PASS [sql] app.settle_budget present (v1.5)
+PASS [sql] app.claim_idempotency present (v1.5)
+PASS [sql] app.complete_idempotency present (v1.5)
+PASS [sql] app.release_idempotency present (v1.5)
+PASS [sql] app.claim_probe present (v1.5)
+PASS [sql] app.record_outcome present (v1.5)
+PASS [sql] reserve_budget refuses a paused agent before taking any lock (v1.6)
+PASS [sql] reserve_budget locks every budget row it checks (FOR UPDATE)
+PASS [sql] reserve_budget lock order: customer -> agent -> task (deadlock-free)
+PASS [sql] reserve_budget reserves before reporting OK
+PASS [sql] idempotency claim is one conflict-safe statement; only failed keys are re-claimed
+PASS [sql] idempotency keys must start with agent|action|tool (format check)
+PASS [sql] a dead key holder is taken over only after its lease
+PASS [sql] probe lease exists and is shorter than the cooldown
+PASS [sql] terminal failures stay rejected until an audited operator release
+PASS [sql] IN_PROGRESS duplicates are re-queued with a delay, not dropped
+PASS [sql] global lock order written in docs/lock_order.md
+PASS [sql] reserve_budget follows the documented order (acquisition before customer)
+PASS [sql] tables managed by definer functions drop FORCE explicitly, with the reason written
+PASS [sql] worker tenant comes only from a live task lease, never from a GUC the worker chooses
+PASS [sql] operator authority requires an aal2 session (MFA per session, not enrolment)
+PASS [sql] the worker can only propose: no decision, decider or consumption columns
+PASS [sql] a business's approval is decided by one of its owners, as the session user
+PASS [sql] outbox checks target and payload hash, consumes once, and freezes the payload
+PASS [sql] outbox topics are a closed list
+PASS [sql] published content immutable; prod deploys guarded on insert and update; rollback restores an approved artifact
+PASS [sql] knowledge approval is owner-only and survives no edit
+PASS [sql] deployments -> sites: composite (id, customer_id) ownership key
+PASS [sql] payments -> invoices: composite (id, customer_id) ownership key
+PASS [sql] invoices -> subscriptions: composite (id, customer_id) ownership key
+PASS [sql] quality_flags -> content_items: composite (id, customer_id) ownership key
+PASS [sql] channel_accounts -> secret_refs: composite (id, customer_id) ownership key
+PASS [sql] competitor_snapshots -> competitors: composite (id, customer_id) ownership key
+PASS [sql] task leases with fencing, recovery and dead letter
+PASS [sql] audit chain hashed with a UTC timestamp and ordered by chain_seq
+PASS [sql] trigger content_publish_guard present
+PASS [sql] trigger prod_deploy_guard present
+PASS [sql] trigger subscription_activate_guard present
+PASS [sql] trigger competitor_limit_guard present
+PASS [sql] lease checks use the wall clock (clock_timestamp), not the transaction start
+PASS [sql] completion needs a live lease on a running task and a terminal status
+PASS [sql] recovery rotates the expired holder's token; lease length bounded
+PASS [sql] an expired unconfirmed send is not re-claimed unless the provider de-duplicates
+PASS [sql] outbox state machine: human check cleared only by an aal2 operator; outcomes final
+PASS [sql] a redelivered request returns the existing outbox row
+PASS [sql] approval consumption guarded by ownership, not by a session setting
+PASS [sql] effects audited by the database inside their own transaction (approvals, outbox, content, prod deploys)
+PASS [sql] audit rows written by a session carry that session's own identity and role
+PASS [sql] webhook events are routed from channel_accounts at ingest, never from the caller
+PASS [sql] inquiry bodies purged after 30 days, each run recorded and surfaced
+
+summary: schema 34 passed / 0 failed, semantic 136 passed / 0 failed, sql 245 passed / 0 failed
+TOTAL 415/415 checks passed

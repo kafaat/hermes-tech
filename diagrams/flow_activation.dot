@@ -1,0 +1,18 @@
+digraph act {
+  rankdir=TB; nodesep=0.3; ranksep=0.32;
+  node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11, fillcolor="#EAF1FB", color="#1F4E79", width=3.6];
+  edge [fontname="DejaVu Sans", fontsize=9];
+  a [label="عرض وعقد · فاتورة invoices.issued"];
+  b [label="دفع عبر قناة مرخّصة\npayments.pending (receipt_ref فريد)"];
+  c [label="agent_billing: قراءة الإيصال ومطابقته\ninvoice.mark_matched (مسودة)"];
+  d [label="تحقق بشري: payments.matched\nverified_by + verified_at", fillcolor="#FFF2CC"];
+  e [label="مقترح subscription:activate → approvals"];
+  f [label="تفعيل الاشتراك\nحراسة: لا تفعيل دون دفع matched", fillcolor="#FFF2CC"];
+  g [label="مهمة تهيئة · سقف 2.40$\nagent_site_builder يبني من القالب"];
+  h [label="نشر معاينة staging\n+ smoke test آلي"];
+  i [label="مقترح site:deploy_prod\nموافقة المالك على الهوية والأسعار", fillcolor="#FFF2CC"];
+  j [label="تنفيذ بشري: approvals execute\nحراسة: موافقة approved مطابقة للإجراء"];
+  k [label="الموقع مباشر · sites.live\nالهدف: 5 أيام عمل من اكتمال البيانات", fillcolor="#E2EFDA"];
+  a -> b -> c -> d -> e -> f -> g -> h -> i -> j -> k;
+  d -> x [label="عدم تطابق"]; x [label="رفض + تذكرة للمؤسس", fillcolor="#FDECEA"];
+}

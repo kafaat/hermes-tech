@@ -1,0 +1,18 @@
+digraph ten {
+  rankdir=LR; nodesep=0.3; ranksep=0.6;
+  node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11, fillcolor="#EAF1FB", color="#1F4E79"];
+  edge [fontname="DejaVu Sans", fontsize=9];
+  own [label="authenticated · صاحب منشأة\nauth.uid() ∈ customer_users"];
+  op [label="authenticated · مشغّل\napp.is_operator()"];
+  wk [label="hermes_worker\nset_config('app.customer_id', …)"];
+  sr [label="service_role\nترحيلات وطوارئ فقط", fillcolor="#FDECEA"];
+  t [label="جداول العملاء (FORCE RLS)\ncustomer_id NOT NULL", shape=cylinder, fillcolor="#E2EFDA"];
+  a [label="approvals\nUPDATE القرار فقط", shape=cylinder, fillcolor="#E2EFDA"];
+  l [label="leads\nسياق الاكتساب بلا عميل", shape=cylinder, fillcolor="#E2EFDA"];
+  au [label="audit_log\nإدراج فقط · سلسلة تجزئة", shape=cylinder, fillcolor="#FFF2CC"];
+  own -> t [label="SELECT لمنشآته"]; own -> a [label="قرار pending"];
+  op -> t [label="ALL"]; op -> l [label="ALL"];
+  wk -> t [label="عميل واحد لكل معاملة"]; wk -> l [label="حين لا عميل"];
+  wk -> au [label="INSERT"]; op -> au [label="SELECT/INSERT"];
+  sr -> t [label="يتجاوز RLS", style=dashed, color="#C00000"];
+}

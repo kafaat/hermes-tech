@@ -1,0 +1,8 @@
+WARN validate.yml: action not pinned to a commit SHA: actions/checkout@v4
+WARN validate.yml: action not pinned to a commit SHA: actions/setup-python@v5
+WARN validate.yml: action not pinned to a commit SHA: actions/checkout@v4
+WARN validate.yml: action not pinned to a commit SHA: actions/checkout@v4
+WARN validate.yml: action not pinned to a commit SHA: actions/checkout@v4
+WARN requirements-ci.txt: dependencies without --hash
+WARN CODEOWNERS still has the @OWNER_HANDLE placeholder
+supply chain: 0 fail · 7 warn

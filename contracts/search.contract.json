@@ -1,0 +1,117 @@
+{
+  "agent_id": "agent_search",
+  "version": "1.0.0",
+  "purpose": "بناء قائمة منشآت محتملة موثقة من مصادر مسموحة؛ لا جمع بيانات شخصية ولا تواصل.",
+  "model": {
+    "primary": "gpt-5.4-mini",
+    "fallback": null,
+    "params": {
+      "temperature": 0.2,
+      "max_output_tokens": 1024
+    }
+  },
+  "tools": [
+    {
+      "name": "places.search",
+      "scope": "read",
+      "side_effects": "none",
+      "rate_limit": {
+        "per_day": 100
+      }
+    },
+    {
+      "name": "web.search",
+      "scope": "read",
+      "side_effects": "none"
+    },
+    {
+      "name": "lead.upsert",
+      "scope": "write_draft",
+      "side_effects": "internal"
+    },
+    {
+      "name": "lead.dedupe",
+      "scope": "read",
+      "side_effects": "none"
+    }
+  ],
+  "permissions": {
+    "allow": [
+      "public:read",
+      "lead:draft",
+      "lead:verify"
+    ],
+    "deny": [
+      "customer:read_private",
+      "billing:*",
+      "payment:*",
+      "pii:read"
+    ],
+    "proposals": [
+      "message:send",
+      "lead:export"
+    ]
+  },
+  "budget": {
+    "budget_class": "acquisition",
+    "per_call_usd": 0.02,
+    "per_task_usd": 0.2,
+    "class_cap_usd": 30.0,
+    "hard_stop": true,
+    "alert_threshold_pct": 80
+  },
+  "retry": {
+    "max_attempts": 2,
+    "backoff": "linear",
+    "initial_delay_ms": 2000,
+    "max_delay_ms": 15000,
+    "retryable_errors": [
+      "timeout",
+      "rate_limit",
+      "network"
+    ]
+  },
+  "escalation": {
+    "on_repeated_failure": "notify_founder",
+    "on_budget_exceeded": "pause_agent",
+    "on_unsafe_content": "abort",
+    "notification_channel": "founder_slack"
+  },
+  "audit": {
+    "log_level": "info",
+    "retention_days": 730,
+    "pii_redaction": true,
+    "fields_logged": [
+      "ts",
+      "task_id",
+      "agent_id",
+      "tool",
+      "model",
+      "tokens_in",
+      "tokens_out",
+      "cost_usd",
+      "duration_ms",
+      "outcome",
+      "error_code",
+      "idempotency_key"
+    ]
+  },
+  "runtime": {
+    "max_concurrent_per_customer": 2,
+    "timeout_seconds": 180,
+    "queue_priority": "normal",
+    "max_input_tokens": 16000,
+    "max_steps": 6,
+    "idempotency_key_fields": [
+      "city",
+      "sector",
+      "query_hash",
+      "day_id"
+    ]
+  },
+  "feature_flags": {
+    "store_place_id_only": true,
+    "block_pii_extraction": true,
+    "require_source_attribution": true
+  }
+}

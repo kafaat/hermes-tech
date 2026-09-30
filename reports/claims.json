@@ -1,0 +1,604 @@
+[
+ {
+  "id": "C4.1",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "لا نشر لمحتوى دون موافقة approved",
+  "ci_pending": true
+ },
+ {
+  "id": "C4.2",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "لا نشر للإنتاج دون موافقة approved",
+  "ci_pending": true
+ },
+ {
+  "id": "C4.3",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "لا تفعيل اشتراك دون دفعة matched",
+  "ci_pending": true
+ },
+ {
+  "id": "C4.4",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "لا أكثر من منافسَين نشطين",
+  "ci_pending": true
+ },
+ {
+  "id": "C4.5",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "سجل التدقيق لا يُعدَّل ولا يُحذف",
+  "ci_pending": true
+ },
+ {
+  "id": "C4.6",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "دفعة matched تتطلب محققًا ووقتًا",
+  "ci_pending": true
+ },
+ {
+  "id": "C4.7",
+  "status": "ci_only",
+  "decision": "fix_before_pilot",
+  "claim": "نص الاستفسار يُحذف بعد 30 يومًا",
+  "ci_pending": true
+ },
+ {
+  "id": "C5.1",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "العامل لا يقرأ صفوف عميل آخر",
+  "ci_pending": true
+ },
+ {
+  "id": "C5.2",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "العامل لا يكتب لعميل آخر",
+  "ci_pending": true
+ },
+ {
+  "id": "C5.3",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "العامل بلا عميل لا يرى صفوف العملاء",
+  "ci_pending": true
+ },
+ {
+  "id": "C5.4",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "المالك لا يرى إلا منشآته",
+  "ci_pending": true
+ },
+ {
+  "id": "C5.5",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "دوال الهوية المرفوعة مغلقة أمام العامل",
+  "ci_pending": true
+ },
+ {
+  "id": "C5.6",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "دالة الهوية لا تعيد إلا منشآت المستدعي",
+  "ci_pending": true
+ },
+ {
+  "id": "C5.7",
+  "status": "structural",
+  "decision": "",
+  "claim": "كل جدول عليه أمن صف، وجداول العملاء مُجبرة",
+  "ci_pending": false
+ },
+ {
+  "id": "C5.8",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "التلاعب بسجل التدقيق يُكتشف",
+  "ci_pending": true
+ },
+ {
+  "id": "C6.1",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "مجموع سقوف الوكلاء ≤ سقف العميل",
+  "ci_pending": false
+ },
+ {
+  "id": "C6.2",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "أسوأ تكلفة نداء ≤ سقف النداء",
+  "ci_pending": false
+ },
+ {
+  "id": "C6.3",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "لا نموذج بديل دون قبول بالقياس",
+  "ci_pending": false
+ },
+ {
+  "id": "C6.4",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "لا أداة بأثر مالي في أي عقد",
+  "ci_pending": false
+ },
+ {
+  "id": "C7.1",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "لا تجاوز للسقف تحت التزامن",
+  "ci_pending": true
+ },
+ {
+  "id": "C7.2",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "الطلب المكرر يُنفَّذ مرة واحدة",
+  "ci_pending": true
+ },
+ {
+  "id": "C7.3",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "المفتاح بنطاق الوكيل والإجراء والأداة",
+  "ci_pending": true
+ },
+ {
+  "id": "C7.4",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "مسبار واحد في الدائرة نصف المفتوحة",
+  "ci_pending": true
+ },
+ {
+  "id": "C7.5",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "سقف المهمة يُفرض",
+  "ci_pending": true
+ },
+ {
+  "id": "C7.6",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "حامل ميت لمفتاح أو مسبار لا يجمّد النظام",
+  "ci_pending": true
+ },
+ {
+  "id": "C7.7",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "الإخفاق النهائي لا يُعاد إلا بقرار مسجل",
+  "ci_pending": true
+ },
+ {
+  "id": "C7.8",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "تجاوز الحجز مرتين يوقف الوكيل",
+  "ci_pending": true
+ },
+ {
+  "id": "C7.9",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "خطأ مزوّد غير معروف لا يُعاد",
+  "ci_pending": false
+ },
+ {
+  "id": "C8.1",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "الصندوق الصادر يرفض أثرًا خارجيًا دون موافقة",
+  "ci_pending": true
+ },
+ {
+  "id": "C8.2",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "حدث webhook غير موقّع لا يُعالَج، والمكرر يُرفض",
+  "ci_pending": true
+ },
+ {
+  "id": "C8.3",
+  "status": "verified_here",
+  "decision": "fix_before_pilot",
+  "claim": "معالج webhook يتحقق من توقيع HMAC",
+  "ci_pending": false
+ },
+ {
+  "id": "C8.4",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "سحب المهام لا يعبر إلى عميل آخر",
+  "ci_pending": true
+ },
+ {
+  "id": "C8.5",
+  "status": "verified_here",
+  "decision": "fix_before_pilot",
+  "claim": "الإرسال الغامض لا يُعاد تلقائيًا للعميل",
+  "ci_pending": true
+ },
+ {
+  "id": "C9.1",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "الرسالة المطابقة لشكوى لا يُولَّد لها رد",
+  "ci_pending": false
+ },
+ {
+  "id": "C9.2",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "المرحلة الثانية لا تكون أخف من الأولى",
+  "ci_pending": false
+ },
+ {
+  "id": "C9.3",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "شكاوى الزبائن القانونية والأمنية تُنسخ للمؤسس",
+  "ci_pending": false
+ },
+ {
+  "id": "C9.4",
+  "status": "verified_here",
+  "decision": "accepted: شرط لسياسة الإرسال الدائمة لا للتجربة (22.2)",
+  "claim": "قبول رصد الشكاوى بسياسة واحدة ذات إصدار: حد أعلى أحادي ≤ 6% على مسار القبول كله وصفر فقد في القانونية والسلامة",
+  "ci_pending": false
+ },
+ {
+  "id": "C12.1",
+  "status": "structural",
+  "decision": "",
+  "claim": "لا قيمة سرية في جداول التطبيق",
+  "ci_pending": false
+ },
+ {
+  "id": "C12.2",
+  "status": "structural",
+  "decision": "",
+  "claim": "دوران الأسرار كل 90 يومًا مقاس بإنذار",
+  "ci_pending": false
+ },
+ {
+  "id": "C12.3",
+  "status": "structural",
+  "decision": "fix_before_pilot",
+  "claim": "اختبار استعادة شهري",
+  "ci_pending": false
+ },
+ {
+  "id": "C12.4",
+  "status": "verified_here",
+  "decision": "fix_before_pilot",
+  "claim": "حجب البيانات الشخصية في السجلات",
+  "ci_pending": false
+ },
+ {
+  "id": "C12.5",
+  "status": "verified_here",
+  "decision": "fix_before_release",
+  "claim": "المراقبة لا تصدّر نصوص الرسائل",
+  "ci_pending": false
+ },
+ {
+  "id": "C12.6",
+  "status": "manual",
+  "decision": "fix_before_pilot",
+  "claim": "ضوابط حاوية Hermes Agent",
+  "ci_pending": false
+ },
+ {
+  "id": "C12.7",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "باب البيانات بلا نص حر",
+  "ci_pending": false
+ },
+ {
+  "id": "C12.8",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "الرمز غير المعروف يُحجر ولا يُرفض",
+  "ci_pending": false
+ },
+ {
+  "id": "C12.9",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "لا وسم إصدار مع تحذير سلسلة توريد",
+  "ci_pending": true
+ },
+ {
+  "id": "C12.10",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "ثغرة معروفة في التبعيات تُفشل CI",
+  "ci_pending": true
+ },
+ {
+  "id": "A1",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "العامل يقترح فقط: لا يكتب قرارًا ولا مقررًا ولا استهلاكًا",
+  "ci_pending": true
+ },
+ {
+  "id": "A2",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "موافقة المنشأة يقررها أحد مالكيها بجلسته؛ المؤسس لا يوافق عنها",
+  "ci_pending": true
+ },
+ {
+  "id": "A3",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "موافقة المنصة (الاكتساب) لمشغّل بجلسة aal2",
+  "ci_pending": true
+ },
+ {
+  "id": "A4",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "الصندوق الصادر يطابق الهدف وبصمة الحمولة ويستهلك الموافقة مرة ويجمّد الحمولة",
+  "ci_pending": true
+ },
+ {
+  "id": "A5",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "المحتوى المنشور مربوط بموافقته المستهلكة ولا يتغير",
+  "ci_pending": true
+ },
+ {
+  "id": "A6",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "نشر الإنتاج يغطي الأثر المعتمد بعينه؛ الرجوع يعيد أثرًا معتمدًا بمشغّل aal2",
+  "ci_pending": true
+ },
+ {
+  "id": "A7",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "اعتماد الحقيقة المعرفية للمالك وحده ويسقط بأي تعديل",
+  "ci_pending": true
+ },
+ {
+  "id": "A8",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "عميل العامل من عقد إيجار حي فقط، لا من متغير يختاره",
+  "ci_pending": true
+ },
+ {
+  "id": "A9",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "العامل بلا عقد لا يصل إلى صفوف الاكتساب",
+  "ci_pending": true
+ },
+ {
+  "id": "A10",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "لا ربط بين صف عميل وأب يخص عميلًا آخر",
+  "ci_pending": true
+ },
+ {
+  "id": "A11",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "صلاحية المشغّل تتطلب جلسة aal2 لا تسجيل MFA فقط",
+  "ci_pending": true
+ },
+ {
+  "id": "A12",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "عقد إيجار للمهمة مع نبضة وتسييج واسترداد ورسالة ميتة",
+  "ci_pending": true
+ },
+ {
+  "id": "A13",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "مقترح الرد يُحسم داخل نافذة خدمة واتساب",
+  "ci_pending": true
+ },
+ {
+  "id": "A14",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "حكم سلسلة التدقيق لا يتغير بالمنطقة الزمنية للجلسة",
+  "ci_pending": true
+ },
+ {
+  "id": "A15",
+  "status": "ci_only",
+  "decision": "fix_before_release",
+  "claim": "الأثر يُسجَّل في التدقيق داخل معاملته بهوية فاعله الحقيقية",
+  "ci_pending": true
+ },
+ {
+  "id": "A15b",
+  "status": "verified_here",
+  "decision": "fix_before_release",
+  "claim": "رأس سلسلة التدقيق يُصدَّر يوميًا خارج القاعدة ويُكشف أي إعادة بناء للسلسلة",
+  "ci_pending": false
+ },
+ {
+  "id": "A16",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "ميزانية كل شهر مستقلة",
+  "ci_pending": false
+ },
+ {
+  "id": "A17",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "الحجز بالحد المحسوب لا بتقدير الطالب",
+  "ci_pending": false
+ },
+ {
+  "id": "A18",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "تكلفة نداء فوق سقف العقد توقف الوكيل فورًا",
+  "ci_pending": false
+ },
+ {
+  "id": "A19",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "ثقة 95% على مسار القبول كله (بونفيروني على المحاولات)، والطريقة مسماة: حد أعلى أحادي دقيق",
+  "ci_pending": false
+ },
+ {
+  "id": "A20",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "نجاح CI لا يعني عبور معيار القبول؛ حارس المحتوى يوقف CI",
+  "ci_pending": false
+ },
+ {
+  "id": "A21",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "ترقية وكيل الجودة تتطلب تدقيق المخرجات غير المعلَّمة",
+  "ci_pending": false
+ },
+ {
+  "id": "A22",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "أي جلب من الخادم يمر بحارس SSRF بعنوان مثبّت",
+  "ci_pending": false
+ },
+ {
+  "id": "A23",
+  "status": "verified_here",
+  "decision": "fix_before_pilot",
+  "claim": "الزاحف الفعلي يستخدم الحارس ويتصل بالعنوان المثبّت",
+  "ci_pending": false
+ },
+ {
+  "id": "A24",
+  "status": "verified_here",
+  "decision": "fix_before_pilot",
+  "claim": "نصوص المالك تُهرَّب في القوالب ولا روابط javascript:",
+  "ci_pending": false
+ },
+ {
+  "id": "A25",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "الإصدار مربوط ببيان بصمات: لا ملف ولا تقرير من إصدار آخر",
+  "ci_pending": true
+ },
+ {
+  "id": "A26",
+  "status": "manual",
+  "decision": "accepted: قاعدة إجرائية معلنة؛ لا ضبط تقني للصق",
+  "claim": "لا بيانات عملاء في جلسات Hermes Agent (لصق المؤسس)",
+  "ci_pending": false
+ },
+ {
+  "id": "A27",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "انتهاء عقد الإيجار ينهي صلاحية العامل داخل معاملة جارية (ساعة الحائط لا بداية المعاملة)",
+  "ci_pending": true
+ },
+ {
+  "id": "A28",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "الحامل المنتهي أو المستردّ لا يُنهي ولا ينبض ولا يعيد المهمة؛ العامل لا يعدّل صف المهمة مباشرة",
+  "ci_pending": true
+ },
+ {
+  "id": "A29",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "الطلب المكرر لأثر معتمد يعود إلى صفه في الصندوق الصادر ولا يحتاج موافقة جديدة",
+  "ci_pending": true
+ },
+ {
+  "id": "A30",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "حدث webhook يوجَّه من هوية القناة المخاطَبة لا من المستدعي؛ العامل يكتب processed_at فقط",
+  "ci_pending": true
+ },
+ {
+  "id": "A31",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "سطر التدقيق الذي تكتبه جلسة يحمل هويتها ودورها؛ العامل بلا عقد لا يكتب",
+  "ci_pending": true
+ },
+ {
+  "id": "A32",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "استهلاك الموافقة من محفّز الصندوق الصادر وحده (الملكية لا متغير جلسة)",
+  "ci_pending": true
+ },
+ {
+  "id": "A33",
+  "status": "ci_only",
+  "decision": "",
+  "claim": "الكتالوج بعد كل الترحيلات يطابق الجرد المنشور: FORCE، والدوال المرفوعة، والمنح، وسياسات العامل",
+  "ci_pending": true
+ },
+ {
+  "id": "A34",
+  "status": "verified_here",
+  "decision": "",
+  "claim": "تغيير أي مسار في بوابة الإصدار يُحكم بمدققات الأساس؛ والبوابة لا تقبل مهمة متخطاة أو ملغاة",
+  "ci_pending": true
+ },
+ {
+  "id": "A35",
+  "status": "manual",
+  "decision": "accepted: حد ثقة مسمّى؛ فصل دور لكل وكيل مؤجل بشرطه (27.5)",
+  "claim": "سحب المهام حد ثقة مسمّى: دور العامل يسحب مهمة أي عميل، والعزل داخل المهمة لا يحمي من اختراق المنسّق نفسه",
+  "ci_pending": false
+ },
+ {
+  "id": "P1",
+  "status": "unbuilt",
+  "decision": "fix_before_pilot",
+  "claim": "حلقة العامل تربط المسارات المبنية (السحب والربط والفرض والموزّع والمعالج) وتُشغَّل من طرف إلى طرف على staging",
+  "ci_pending": false
+ },
+ {
+  "id": "P2",
+  "status": "manual",
+  "decision": "fix_before_pilot",
+  "claim": "ملف الحمل pilot ناجح على staging",
+  "ci_pending": false
+ },
+ {
+  "id": "P3",
+  "status": "manual",
+  "decision": "fix_before_pilot",
+  "claim": "سعر واتساب لليمن وترخيص صور FLUX التجاري مؤكدان كتابيًا",
+  "ci_pending": false
+ }
+]

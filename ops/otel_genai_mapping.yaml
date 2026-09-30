@@ -1,0 +1,21 @@
+# agent_calls row -> OpenTelemetry span (GenAI semantic conventions, gen_ai.*)
+# Content capture is OFF by default: prompts and completions are never exported.
+version: 1.0.0
+span_name: "chat {model}"            # tool-only calls: "execute_tool {tool}"
+attributes:
+  gen_ai.operation.name: "chat"       # "execute_tool" when model is null
+  gen_ai.provider.name: "openai"      # from registry.approved_models[model].vendor
+  gen_ai.request.model: model
+  gen_ai.usage.input_tokens: tokens_in
+  gen_ai.usage.output_tokens: tokens_out
+  gen_ai.tool.name: tool
+  error.type: error_code              # only when outcome != success
+  hermes.agent_id: agent_id
+  hermes.task_id: task_id
+  hermes.customer_ref: customer_id    # internal id; never names, phones or message text
+  hermes.cost_usd: cost_usd
+  hermes.outcome: outcome
+  hermes.idempotency_key: idempotency_key
+content_capture:
+  gen_ai.input.messages: false
+  gen_ai.output.messages: false

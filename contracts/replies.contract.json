@@ -1,0 +1,106 @@
+{
+  "agent_id": "agent_replies",
+  "version": "1.0.0",
+  "purpose": "اقتراح ردود قصيرة من قاعدة معارف معتمدة؛ لا يرسل، ولا يعالج شكاوى، ولا يذكر أسعارًا غير معتمدة.",
+  "model": {
+    "primary": "gpt-5.4-mini",
+    "fallback": null,
+    "params": {
+      "temperature": 0.3,
+      "max_output_tokens": 512
+    }
+  },
+  "tools": [
+    {
+      "name": "kb.search",
+      "scope": "read",
+      "side_effects": "none"
+    },
+    {
+      "name": "reply.draft",
+      "scope": "write_draft",
+      "side_effects": "internal"
+    },
+    {
+      "name": "queue.classify",
+      "scope": "read",
+      "side_effects": "none"
+    }
+  ],
+  "permissions": {
+    "allow": [
+      "kb:read",
+      "reply:draft"
+    ],
+    "deny": [
+      "billing:*",
+      "payment:*",
+      "customer:delete",
+      "meta:publish",
+      "price:quote"
+    ],
+    "proposals": [
+      "reply:send"
+    ]
+  },
+  "budget": {
+    "budget_class": "monthly_active",
+    "per_call_usd": 0.02,
+    "per_task_usd": 0.05,
+    "class_cap_usd": 0.2,
+    "hard_stop": true,
+    "alert_threshold_pct": 80
+  },
+  "retry": {
+    "max_attempts": 1,
+    "backoff": "none",
+    "initial_delay_ms": 500,
+    "max_delay_ms": 500,
+    "retryable_errors": [
+      "timeout",
+      "network"
+    ]
+  },
+  "escalation": {
+    "on_repeated_failure": "human_queue",
+    "on_budget_exceeded": "pause_agent",
+    "on_unsafe_content": "human_queue",
+    "notification_channel": "founder_slack"
+  },
+  "audit": {
+    "log_level": "verbose",
+    "retention_days": 365,
+    "pii_redaction": true,
+    "fields_logged": [
+      "ts",
+      "task_id",
+      "customer_id",
+      "agent_id",
+      "tool",
+      "model",
+      "tokens_in",
+      "tokens_out",
+      "cost_usd",
+      "duration_ms",
+      "outcome",
+      "error_code",
+      "idempotency_key"
+    ]
+  },
+  "runtime": {
+    "max_concurrent_per_customer": 4,
+    "timeout_seconds": 60,
+    "queue_priority": "high",
+    "max_input_tokens": 16000,
+    "max_steps": 3,
+    "idempotency_key_fields": [
+      "customer_id",
+      "message_id"
+    ]
+  },
+  "feature_flags": {
+    "auto_escalate_complaints": true,
+    "block_price_quotes": true,
+    "replies_per_month": 10
+  }
+}

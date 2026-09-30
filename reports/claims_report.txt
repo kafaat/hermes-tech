@@ -1,0 +1,87 @@
+C4.1    ci_only        ci_pending                        لا نشر لمحتوى دون موافقة approved
+C4.2    ci_only        ci_pending                        لا نشر للإنتاج دون موافقة approved
+C4.3    ci_only        ci_pending                        لا تفعيل اشتراك دون دفعة matched
+C4.4    ci_only        ci_pending                        لا أكثر من منافسَين نشطين
+C4.5    ci_only        ci_pending                        سجل التدقيق لا يُعدَّل ولا يُحذف
+C4.6    ci_only        ci_pending                        دفعة matched تتطلب محققًا ووقتًا
+C4.7    ci_only        ci_pending fix_before_pilot       نص الاستفسار يُحذف بعد 30 يومًا
+C5.1    ci_only        ci_pending                        العامل لا يقرأ صفوف عميل آخر
+C5.2    ci_only        ci_pending                        العامل لا يكتب لعميل آخر
+C5.3    ci_only        ci_pending                        العامل بلا عميل لا يرى صفوف العملاء
+C5.4    ci_only        ci_pending                        المالك لا يرى إلا منشآته
+C5.5    ci_only        ci_pending                        دوال الهوية المرفوعة مغلقة أمام العامل
+C5.6    ci_only        ci_pending                        دالة الهوية لا تعيد إلا منشآت المستدعي
+C5.7    structural     -                                 كل جدول عليه أمن صف، وجداول العملاء مُجبرة
+C5.8    ci_only        ci_pending                        التلاعب بسجل التدقيق يُكتشف
+C6.1    verified_here  -                                 مجموع سقوف الوكلاء ≤ سقف العميل
+C6.2    verified_here  -                                 أسوأ تكلفة نداء ≤ سقف النداء
+C6.3    verified_here  -                                 لا نموذج بديل دون قبول بالقياس
+C6.4    verified_here  -                                 لا أداة بأثر مالي في أي عقد
+C7.1    verified_here  ci_pending                        لا تجاوز للسقف تحت التزامن
+C7.2    verified_here  ci_pending                        الطلب المكرر يُنفَّذ مرة واحدة
+C7.3    verified_here  ci_pending                        المفتاح بنطاق الوكيل والإجراء والأداة
+C7.4    verified_here  ci_pending                        مسبار واحد في الدائرة نصف المفتوحة
+C7.5    verified_here  ci_pending                        سقف المهمة يُفرض
+C7.6    verified_here  ci_pending                        حامل ميت لمفتاح أو مسبار لا يجمّد النظام
+C7.7    verified_here  ci_pending                        الإخفاق النهائي لا يُعاد إلا بقرار مسجل
+C7.8    verified_here  ci_pending                        تجاوز الحجز مرتين يوقف الوكيل
+C7.9    verified_here  -                                 خطأ مزوّد غير معروف لا يُعاد
+C8.1    ci_only        ci_pending                        الصندوق الصادر يرفض أثرًا خارجيًا دون موافقة
+C8.2    ci_only        ci_pending                        حدث webhook غير موقّع لا يُعالَج، والمكرر يُرفض
+C8.3    verified_here  -          fix_before_pilot       معالج webhook يتحقق من توقيع HMAC
+C8.4    ci_only        ci_pending                        سحب المهام لا يعبر إلى عميل آخر
+C8.5    verified_here  ci_pending fix_before_pilot       الإرسال الغامض لا يُعاد تلقائيًا للعميل
+C9.1    verified_here  -                                 الرسالة المطابقة لشكوى لا يُولَّد لها رد
+C9.2    verified_here  -                                 المرحلة الثانية لا تكون أخف من الأولى
+C9.3    verified_here  -                                 شكاوى الزبائن القانونية والأمنية تُنسخ للمؤسس
+C9.4    verified_here  -          accepted: شرط لسياسة الإرسال الدائمة لا للتجربة (22.2) قبول رصد الشكاوى بسياسة واحدة ذات إصدار: حد أعلى أحادي ≤ 6% على مسار القبول كله وصفر فقد في القانونية والسلامة
+C12.1   structural     -                                 لا قيمة سرية في جداول التطبيق
+C12.2   structural     -                                 دوران الأسرار كل 90 يومًا مقاس بإنذار
+C12.3   structural     -          fix_before_pilot       اختبار استعادة شهري
+C12.4   verified_here  -          fix_before_pilot       حجب البيانات الشخصية في السجلات
+C12.5   verified_here  -          fix_before_release     المراقبة لا تصدّر نصوص الرسائل
+C12.6   manual         -          fix_before_pilot       ضوابط حاوية Hermes Agent
+C12.7   verified_here  -                                 باب البيانات بلا نص حر
+C12.8   verified_here  -                                 الرمز غير المعروف يُحجر ولا يُرفض
+C12.9   ci_only        ci_pending                        لا وسم إصدار مع تحذير سلسلة توريد
+C12.10  ci_only        ci_pending                        ثغرة معروفة في التبعيات تُفشل CI
+A1      ci_only        ci_pending                        العامل يقترح فقط: لا يكتب قرارًا ولا مقررًا ولا استهلاكًا
+A2      ci_only        ci_pending                        موافقة المنشأة يقررها أحد مالكيها بجلسته؛ المؤسس لا يوافق عنها
+A3      ci_only        ci_pending                        موافقة المنصة (الاكتساب) لمشغّل بجلسة aal2
+A4      ci_only        ci_pending                        الصندوق الصادر يطابق الهدف وبصمة الحمولة ويستهلك الموافقة مرة ويجمّد الحمولة
+A5      ci_only        ci_pending                        المحتوى المنشور مربوط بموافقته المستهلكة ولا يتغير
+A6      ci_only        ci_pending                        نشر الإنتاج يغطي الأثر المعتمد بعينه؛ الرجوع يعيد أثرًا معتمدًا بمشغّل aal2
+A7      ci_only        ci_pending                        اعتماد الحقيقة المعرفية للمالك وحده ويسقط بأي تعديل
+A8      ci_only        ci_pending                        عميل العامل من عقد إيجار حي فقط، لا من متغير يختاره
+A9      ci_only        ci_pending                        العامل بلا عقد لا يصل إلى صفوف الاكتساب
+A10     ci_only        ci_pending                        لا ربط بين صف عميل وأب يخص عميلًا آخر
+A11     ci_only        ci_pending                        صلاحية المشغّل تتطلب جلسة aal2 لا تسجيل MFA فقط
+A12     ci_only        ci_pending                        عقد إيجار للمهمة مع نبضة وتسييج واسترداد ورسالة ميتة
+A13     ci_only        ci_pending                        مقترح الرد يُحسم داخل نافذة خدمة واتساب
+A14     ci_only        ci_pending                        حكم سلسلة التدقيق لا يتغير بالمنطقة الزمنية للجلسة
+A15     ci_only        ci_pending fix_before_release     الأثر يُسجَّل في التدقيق داخل معاملته بهوية فاعله الحقيقية
+A15b    verified_here  -          fix_before_release     رأس سلسلة التدقيق يُصدَّر يوميًا خارج القاعدة ويُكشف أي إعادة بناء للسلسلة
+A16     verified_here  -                                 ميزانية كل شهر مستقلة
+A17     verified_here  -                                 الحجز بالحد المحسوب لا بتقدير الطالب
+A18     verified_here  -                                 تكلفة نداء فوق سقف العقد توقف الوكيل فورًا
+A19     verified_here  -                                 ثقة 95% على مسار القبول كله (بونفيروني على المحاولات)، والطريقة مسماة: حد أعلى أحادي دقيق
+A20     verified_here  -                                 نجاح CI لا يعني عبور معيار القبول؛ حارس المحتوى يوقف CI
+A21     verified_here  -                                 ترقية وكيل الجودة تتطلب تدقيق المخرجات غير المعلَّمة
+A22     verified_here  -                                 أي جلب من الخادم يمر بحارس SSRF بعنوان مثبّت
+A23     verified_here  -          fix_before_pilot       الزاحف الفعلي يستخدم الحارس ويتصل بالعنوان المثبّت
+A24     verified_here  -          fix_before_pilot       نصوص المالك تُهرَّب في القوالب ولا روابط javascript:
+A25     ci_only        ci_pending                        الإصدار مربوط ببيان بصمات: لا ملف ولا تقرير من إصدار آخر
+A26     manual         -          accepted: قاعدة إجرائية معلنة؛ لا ضبط تقني للصق لا بيانات عملاء في جلسات Hermes Agent (لصق المؤسس)
+A27     ci_only        ci_pending                        انتهاء عقد الإيجار ينهي صلاحية العامل داخل معاملة جارية (ساعة الحائط لا بداية المعاملة)
+A28     ci_only        ci_pending                        الحامل المنتهي أو المستردّ لا يُنهي ولا ينبض ولا يعيد المهمة؛ العامل لا يعدّل صف المهمة مباشرة
+A29     ci_only        ci_pending                        الطلب المكرر لأثر معتمد يعود إلى صفه في الصندوق الصادر ولا يحتاج موافقة جديدة
+A30     ci_only        ci_pending                        حدث webhook يوجَّه من هوية القناة المخاطَبة لا من المستدعي؛ العامل يكتب processed_at فقط
+A31     ci_only        ci_pending                        سطر التدقيق الذي تكتبه جلسة يحمل هويتها ودورها؛ العامل بلا عقد لا يكتب
+A32     ci_only        ci_pending                        استهلاك الموافقة من محفّز الصندوق الصادر وحده (الملكية لا متغير جلسة)
+A33     ci_only        ci_pending                        الكتالوج بعد كل الترحيلات يطابق الجرد المنشور: FORCE، والدوال المرفوعة، والمنح، وسياسات العامل
+A34     verified_here  ci_pending                        تغيير أي مسار في بوابة الإصدار يُحكم بمدققات الأساس؛ والبوابة لا تقبل مهمة متخطاة أو ملغاة
+A35     manual         -          accepted: حد ثقة مسمّى؛ فصل دور لكل وكيل مؤجل بشرطه (27.5) سحب المهام حد ثقة مسمّى: دور العامل يسحب مهمة أي عميل، والعزل داخل المهمة لا يحمي من اختراق المنسّق نفسه
+P1      unbuilt        -          fix_before_pilot       حلقة العامل تربط المسارات المبنية (السحب والربط والفرض والموزّع والمعالج) وتُشغَّل من طرف إلى طرف على staging
+P2      manual         -          fix_before_pilot       ملف الحمل pilot ناجح على staging
+P3      manual         -          fix_before_pilot       سعر واتساب لليمن وترخيص صور FLUX التجاري مؤكدان كتابيًا
+summary: ci_only 42, manual 5, structural 4, unbuilt 1, verified_here 34 · total 86 · with a CI-only production counterpart 52

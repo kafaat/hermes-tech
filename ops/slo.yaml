@@ -1,0 +1,75 @@
+# Hermes service level objectives (internal targets, not customer SLAs).
+# Source of truth for derived/alerts.yaml. Thresholds: target / warn / critical.
+version: 1.0.0
+slos:
+  - id: site_build_p50_seconds
+    target: 90
+    warn: 120
+    critical: 300
+    direction: lower_is_better
+  - id: site_build_p95_seconds
+    target: 240
+    warn: 360
+    critical: 600
+    direction: lower_is_better
+  - id: agent_reply_p95_seconds
+    target: 4
+    warn: 8
+    critical: 15
+    direction: lower_is_better
+  - id: build_failure_rate
+    target: 0.02
+    warn: 0.05
+    critical: 0.10
+    direction: lower_is_better
+  - id: queue_depth_p95
+    target: 50
+    warn: 200
+    critical: 500
+    direction: lower_is_better
+  - id: db_utilisation
+    target: 0.60
+    warn: 0.70
+    critical: 0.85
+    direction: lower_is_better
+  - id: variable_cost_per_customer_usd
+    target: 2.50
+    warn: 3.50
+    critical: 5.00
+    direction: lower_is_better
+  - id: container_restarts_24h
+    target: 0
+    warn: 3
+    critical: 10
+    direction: lower_is_better
+  - id: secrets_rotation_overdue
+    target: 0
+    warn: 0
+    critical: 3
+    direction: lower_is_better
+  - id: days_since_restore_drill
+    target: 30
+    warn: 35
+    critical: 60
+    direction: lower_is_better
+  - id: hermes_agent_egress_denied_24h
+    target: 0
+    warn: 0
+    critical: 5
+    direction: lower_is_better
+  - id: inbound_to_triage_p95_seconds
+    target: 60
+    warn: 120
+    critical: 300
+    direction: lower_is_better
+  - id: queue_drain_minutes_after_peak
+    target: 10
+    warn: 20
+    critical: 45
+    direction: lower_is_better
+severity_map:
+  warn: P2
+  critical: P1
+channels:
+  P1: [founder_sms, founder_slack]
+  P2: [founder_slack]

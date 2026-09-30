@@ -1,0 +1,170 @@
+{
+  "generated_from": "1.8.0",
+  "agents": [
+    {
+      "agent_id": "agent_site_builder",
+      "version": "1.0.0",
+      "enabled": true,
+      "purpose": "بناء موقع ثابت لعميل واحد من قالب قطاعي معتمد ونشره للمعاينة فقط؛ لا يقرر المحتوى ولا ينشر للإنتاج.",
+      "tools": [
+        "template.render",
+        "git.commit",
+        "cf_pages.deploy_preview",
+        "site.smoke_test"
+      ],
+      "allow": [
+        "site:read",
+        "site:build",
+        "site:deploy_staging",
+        "git:commit"
+      ],
+      "proposals": [
+        "site:deploy_prod"
+      ],
+      "budget_class": "onboarding",
+      "queue_priority": "normal"
+    },
+    {
+      "agent_id": "agent_content",
+      "version": "1.0.0",
+      "enabled": true,
+      "purpose": "توليد مسودات المنشورات والصور الاجتماعية؛ لا ينشر على أي منصة دون موافقة.",
+      "tools": [
+        "llm.generate",
+        "flux.generate",
+        "assets.save",
+        "meta.create_draft"
+      ],
+      "allow": [
+        "content:draft",
+        "content:image_generate",
+        "assets:write_draft"
+      ],
+      "proposals": [
+        "content:publish"
+      ],
+      "budget_class": "monthly_active",
+      "queue_priority": "normal"
+    },
+    {
+      "agent_id": "agent_replies",
+      "version": "1.0.0",
+      "enabled": true,
+      "purpose": "اقتراح ردود قصيرة من قاعدة معارف معتمدة؛ لا يرسل، ولا يعالج شكاوى، ولا يذكر أسعارًا غير معتمدة.",
+      "tools": [
+        "kb.search",
+        "reply.draft",
+        "queue.classify"
+      ],
+      "allow": [
+        "kb:read",
+        "reply:draft"
+      ],
+      "proposals": [
+        "reply:send"
+      ],
+      "budget_class": "monthly_active",
+      "queue_priority": "high"
+    },
+    {
+      "agent_id": "agent_competitor",
+      "version": "1.0.0",
+      "enabled": true,
+      "purpose": "قراءة صفحات عامة لمنافسين محددين وتلخيص الفرق المحسوب آليًا؛ لا دخول حسابات ولا تجاوز حماية.",
+      "tools": [
+        "firecrawl.scrape",
+        "diff.compute",
+        "report.append"
+      ],
+      "allow": [
+        "public:read",
+        "report:draft"
+      ],
+      "proposals": [],
+      "budget_class": "monthly_active",
+      "queue_priority": "low"
+    },
+    {
+      "agent_id": "agent_search",
+      "version": "1.0.0",
+      "enabled": true,
+      "purpose": "بناء قائمة منشآت محتملة موثقة من مصادر مسموحة؛ لا جمع بيانات شخصية ولا تواصل.",
+      "tools": [
+        "places.search",
+        "web.search",
+        "lead.upsert",
+        "lead.dedupe"
+      ],
+      "allow": [
+        "public:read",
+        "lead:draft",
+        "lead:verify"
+      ],
+      "proposals": [
+        "message:send",
+        "lead:export"
+      ],
+      "budget_class": "acquisition",
+      "queue_priority": "normal"
+    },
+    {
+      "agent_id": "agent_billing",
+      "version": "1.0.0",
+      "enabled": false,
+      "purpose": "تصنيف إيصالات الدفع ومطابقتها بالفواتير؛ لا يحرّك أموالًا ولا يمنح استردادًا ولا يفعّل اشتراكًا.",
+      "tools": [
+        "receipt.read",
+        "contract.match",
+        "payment.verify",
+        "invoice.mark_matched"
+      ],
+      "allow": [
+        "receipt:read",
+        "contract:read",
+        "invoice:mark_draft"
+      ],
+      "proposals": [
+        "invoice:mark_paid",
+        "subscription:activate"
+      ],
+      "budget_class": "monthly_active",
+      "queue_priority": "critical"
+    },
+    {
+      "agent_id": "agent_quality",
+      "version": "1.0.0",
+      "enabled": true,
+      "purpose": "فحص مخرجات الوكلاء قبل عرضها على المالك: قواعد حتمية أولًا ثم نموذج صغير لرصد الادعاء غير المسنود؛ لا يعدّل ولا ينشر ولا يحجب في الوضع الصامت.",
+      "tools": [
+        "content.read",
+        "guard.check",
+        "kb.search",
+        "flag.raise"
+      ],
+      "allow": [
+        "content:read",
+        "guard:check",
+        "kb:read",
+        "flag:raise"
+      ],
+      "proposals": [],
+      "budget_class": "monthly_active",
+      "queue_priority": "high"
+    },
+    {
+      "agent_id": "agent_triage",
+      "version": "1.0.0",
+      "enabled": true,
+      "purpose": "مرحلة ثانية لرصد الشكاوى التي تفوت قائمة الكلمات: تصنيف ثنائي بنموذج صغير؛ يضيف تصعيدًا ولا يلغي تطابقًا ولا يكتب ردًا.",
+      "tools": [
+        "queue.classify"
+      ],
+      "allow": [
+        "queue:classify"
+      ],
+      "proposals": [],
+      "budget_class": "monthly_active",
+      "queue_priority": "high"
+    }
+  ]
+}

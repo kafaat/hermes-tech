@@ -1,0 +1,117 @@
+{
+  "agent_id": "agent_site_builder",
+  "version": "1.0.0",
+  "purpose": "بناء موقع ثابت لعميل واحد من قالب قطاعي معتمد ونشره للمعاينة فقط؛ لا يقرر المحتوى ولا ينشر للإنتاج.",
+  "model": {
+    "primary": "gpt-5.4-mini",
+    "fallback": null,
+    "params": {
+      "temperature": 0.2,
+      "max_output_tokens": 8192,
+      "seed": 42
+    }
+  },
+  "tools": [
+    {
+      "name": "template.render",
+      "scope": "read",
+      "side_effects": "none"
+    },
+    {
+      "name": "git.commit",
+      "scope": "write_commit",
+      "side_effects": "internal"
+    },
+    {
+      "name": "cf_pages.deploy_preview",
+      "scope": "write_external",
+      "side_effects": "customer_visible",
+      "rate_limit": {
+        "per_hour": 10
+      }
+    },
+    {
+      "name": "site.smoke_test",
+      "scope": "read",
+      "side_effects": "none"
+    }
+  ],
+  "permissions": {
+    "allow": [
+      "site:read",
+      "site:build",
+      "site:deploy_staging",
+      "git:commit"
+    ],
+    "deny": [
+      "billing:*",
+      "payment:*",
+      "customer:delete",
+      "secrets:read"
+    ],
+    "proposals": [
+      "site:deploy_prod"
+    ]
+  },
+  "budget": {
+    "budget_class": "onboarding",
+    "per_call_usd": 0.3,
+    "per_task_usd": 2.4,
+    "class_cap_usd": 2.4,
+    "hard_stop": true,
+    "alert_threshold_pct": 80
+  },
+  "retry": {
+    "max_attempts": 3,
+    "backoff": "exponential",
+    "initial_delay_ms": 2000,
+    "max_delay_ms": 30000,
+    "retryable_errors": [
+      "timeout",
+      "rate_limit",
+      "network",
+      "upstream_5xx"
+    ]
+  },
+  "escalation": {
+    "on_repeated_failure": "human_queue",
+    "on_budget_exceeded": "pause_agent",
+    "on_unsafe_content": "abort",
+    "notification_channel": "founder_slack"
+  },
+  "audit": {
+    "log_level": "info",
+    "retention_days": 365,
+    "pii_redaction": true,
+    "fields_logged": [
+      "ts",
+      "task_id",
+      "customer_id",
+      "agent_id",
+      "tool",
+      "model",
+      "tokens_in",
+      "tokens_out",
+      "cost_usd",
+      "duration_ms",
+      "outcome",
+      "error_code",
+      "idempotency_key"
+    ]
+  },
+  "runtime": {
+    "max_concurrent_per_customer": 1,
+    "timeout_seconds": 600,
+    "queue_priority": "normal",
+    "max_input_tokens": 64000,
+    "max_steps": 8,
+    "idempotency_key_fields": [
+      "customer_id",
+      "template_version",
+      "content_hash"
+    ]
+  },
+  "feature_flags": {
+    "preview_only": true
+  }
+}

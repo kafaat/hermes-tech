@@ -1,0 +1,124 @@
+{
+  "version": "1.0.0",
+  "locale": "ar-YE",
+  "convert_arabic_indic_digits": true,
+  "allow_link_domains": [
+    "facebook.com",
+    "instagram.com",
+    "wa.me",
+    "maps.google.com",
+    "goo.gl"
+  ],
+  "rules": [
+    {
+      "id": "price_mention",
+      "kind": "regex",
+      "patterns": [
+        "\\d[\\d,.]*\\s*(?:ريال|ر ي|دولار|الف|مليون|درهم)",
+        "\\$\\s*\\d"
+      ],
+      "severity_by_kind": {
+        "reply": "block",
+        "post": "review",
+        "site": "review"
+      },
+      "reason": "الوكيل لا يذكر سعرًا؛ في المنشور والموقع يطابقه المالك مع أسعاره المعتمدة."
+    },
+    {
+      "id": "price_word",
+      "kind": "keyword",
+      "patterns": [
+        "السعر",
+        "الاسعار",
+        "سعره",
+        "سعرها",
+        "التكلفه"
+      ],
+      "severity_by_kind": {
+        "reply": "block",
+        "post": "review",
+        "site": "review"
+      },
+      "reason": "كلمة سعر في رد الوكيل ممنوعة؛ في المنشور والموقع تُراجع مقابل الأسعار المعتمدة."
+    },
+    {
+      "id": "medical_claim",
+      "kind": "keyword",
+      "patterns": [
+        "يعالج",
+        "يشفي",
+        "علاج نهائي",
+        "شفاء تام",
+        "بدون اعراض جانبيه",
+        "يخسس",
+        "ينحف",
+        "مضاد للسرطان"
+      ],
+      "severity_by_kind": {
+        "reply": "block",
+        "post": "block",
+        "site": "block"
+      },
+      "reason": "ادعاء صحي غير مسموح دون مستند."
+    },
+    {
+      "id": "guarantee_claim",
+      "kind": "keyword",
+      "patterns": [
+        "مضمون 100",
+        "ضمان مدي الحياه",
+        "نتيجه مضمونه",
+        "الافضل في اليمن",
+        "الاول في اليمن",
+        "رقم 1 في"
+      ],
+      "severity_by_kind": {
+        "reply": "block",
+        "post": "review",
+        "site": "review"
+      },
+      "reason": "وعد بنتيجة أو تفوّق مطلق يحتاج إثباتًا من المالك."
+    },
+    {
+      "id": "phone_number",
+      "kind": "regex",
+      "patterns": [
+        "(?:\\+?967\\s?)?7[01378]\\d{7}(?!\\d)",
+        "(?<!\\d)\\d{9,}(?!\\d)"
+      ],
+      "severity_by_kind": {
+        "reply": "review"
+      },
+      "reason": "رقم هاتف في رد قد يكشف بيانات زبون آخر؛ رقم المنشأة المعتمد يُضاف من kb_facts."
+    },
+    {
+      "id": "external_link",
+      "kind": "regex",
+      "patterns": [
+        "https?://[^\\s]+"
+      ],
+      "severity_by_kind": {
+        "reply": "review",
+        "post": "review",
+        "site": "review"
+      },
+      "reason": "رابط خارج النطاقات المسموحة قد يكون تصيدًا أو أثر حقن تعليمات."
+    },
+    {
+      "id": "disparagement",
+      "kind": "keyword",
+      "patterns": [
+        "نصابين",
+        "غشاشين",
+        "محتالين",
+        "حراميه"
+      ],
+      "severity_by_kind": {
+        "post": "block",
+        "reply": "block",
+        "site": "block"
+      },
+      "reason": "إساءة لطرف ثالث تعرّض المالك للمساءلة."
+    }
+  ]
+}

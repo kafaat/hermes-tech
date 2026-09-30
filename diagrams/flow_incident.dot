@@ -1,0 +1,10 @@
+digraph inc {
+  rankdir=TB; nodesep=0.25; ranksep=0.25;
+  node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11, fillcolor="#EAF1FB", color="#1F4E79", width=3.4];
+  edge [fontname="DejaVu Sans", fontsize=9];
+  a [label="1. الإبلاغ · incident open"]; b [label="2. التصنيف P0–P3"];
+  c [label="3. الاحتواء · agent disable", fillcolor="#FDECEA"]; d [label="4. التخفيف · rollback / freeze", fillcolor="#FDECEA"];
+  e [label="5. التشخيص · سبب جذري بجملة"]; f [label="6. الإصلاح · فرع + CI"];
+  g [label="7. canary 5 ← 25 ← 100"]; h [label="8. إعادة التفعيل"]; i [label="9. الإغلاق + إجراء وقائي مؤرخ", fillcolor="#E2EFDA"];
+  a -> b -> c -> d -> e -> f -> g -> h -> i; h -> c [label="عاد الفشل", style=dashed, color="#C00000"];
+}

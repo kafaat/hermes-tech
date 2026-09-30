@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hermes/runtime/ops_summary.schema.json",
+  "title": "The only data allowed into Hermes Agent: aggregates, no free text",
+  "type": "object",
+  "required": [
+    "month_id",
+    "generated_at",
+    "totals",
+    "agents",
+    "alerts",
+    "failures",
+    "unknown_codes"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "month_id": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}$"
+    },
+    "generated_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "totals": {
+      "type": "object",
+      "required": [
+        "active_customers",
+        "new_customers",
+        "ai_cost_usd",
+        "human_minutes",
+        "open_incidents",
+        "queue_depth_p95"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "active_customers": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "new_customers": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "ai_cost_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "human_minutes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "open_incidents": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "queue_depth_p95": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "agent_id",
+          "calls",
+          "success_rate",
+          "cost_usd"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "pattern": "^agent_[a-z][a-z0-9_]{2,31}$"
+          },
+          "calls": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "success_rate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "cost_usd": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "alerts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rule_id",
+          "severity",
+          "count"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$"
+          },
+          "severity": {
+            "enum": [
+              "P0",
+              "P1",
+              "P2",
+              "P3"
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "failures": {
+      "type": "array",
+      "maxItems": 50,
+      "description": "Controlled vocabulary only: which customer (pseudonymous ref), which agent, which code. The why is read in the database, never through the agent.",
+      "items": {
+        "type": "object",
+        "required": [
+          "customer_ref",
+          "agent_id",
+          "error_code",
+          "count"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "customer_ref": {
+            "type": "string",
+            "pattern": "^cust_[0-9a-z]{4,}$"
+          },
+          "agent_id": {
+            "type": "string",
+            "pattern": "^agent_[a-z][a-z0-9_]{2,31}$"
+          },
+          "error_code": {
+            "enum": [
+              "ACTIVATION_WITHOUT_MATCHED_PAYMENT",
+              "AGENT_DISABLED",
+              "AGENT_PAUSED",
+              "APPROVAL_ACTION_MISMATCH",
+              "APPROVAL_ALREADY_CONSUMED",
+              "APPROVAL_CONSUMED_FINAL",
+              "APPROVAL_DOES_NOT_COVER_THIS_CONTENT",
+              "APPROVAL_DOES_NOT_COVER_THIS_DEPLOY",
+              "APPROVAL_EXPIRED",
+              "APPROVAL_IMMUTABLE",
+              "APPROVAL_NOT_APPROVED",
+              "APPROVAL_NOT_FOUND",
+              "APPROVAL_PAYLOAD_MISMATCH",
+              "APPROVAL_TARGET_MISMATCH",
+              "APPROVAL_TENANT_MISMATCH",
+              "AUDIT_LOG_IS_APPEND_ONLY",
+              "BUDGET_EXCEEDED_AGENT",
+              "BUDGET_EXCEEDED_CALL",
+              "BUDGET_EXCEEDED_CUSTOMER",
+              "BUDGET_EXCEEDED_TASK",
+              "CIRCUIT_OPEN",
+              "COMPETITOR_LIMIT_REACHED",
+              "COMPLAINT_MATCH",
+              "CONSUME_VIA_OUTBOX_ONLY",
+              "CREDENTIALS_IN_URL",
+              "CUSTOMER_APPROVAL_OWNER_ONLY",
+              "DECIDER_MUST_BE_SESSION_USER",
+              "DECISION_FINAL",
+              "DEPLOYMENT_IMMUTABLE",
+              "EXECUTION_FAILED",
+              "KB_APPROVAL_OWNER_ONLY",
+              "LEASE_INVALID",
+              "LEASE_SECONDS_OUT_OF_RANGE",
+              "LEASE_TAKEOVER",
+              "LOGIN_PAGE",
+              "MALFORMED_RESPONSE",
+              "MODEL_PROVIDER_ERROR",
+              "NETWORK",
+              "NON_PUBLIC_ADDRESS",
+              "NO_HOST",
+              "OPERATOR_AAL2_ONLY",
+              "OPERATOR_ONLY",
+              "OUTBOX_AMBIGUOUS_NEEDS_HUMAN",
+              "OUTBOX_BAD_CLAIM",
+              "OUTBOX_BAD_TRANSITION",
+              "OUTBOX_FINAL",
+              "OUTBOX_IMMUTABLE",
+              "OUTBOX_LEASE_HELD",
+              "OUTBOX_LEASE_TOO_LONG",
+              "OUTBOX_MUST_START_PENDING",
+              "OUTBOX_NEEDS_HUMAN",
+              "OUTBOX_NOT_CLAIMED",
+              "OUTBOX_NOT_WAITING_FOR_HUMAN",
+              "OUTBOX_OUTCOME_UNKNOWN",
+              "OUTBOX_TOPIC_UNKNOWN",
+              "PERMISSION_DENIED",
+              "PLATFORM_APPROVAL_OPERATOR_AAL2_ONLY",
+              "PORT_NOT_ALLOWED",
+              "PROBE_LEASE_EXPIRED",
+              "PROBE_LEASE_MUST_BE_BELOW_COOLDOWN",
+              "PROPOSAL_MUST_BE_PENDING",
+              "PROVIDER_REF_REQUIRED",
+              "PUBLISHED_CONTENT_IMMUTABLE",
+              "RATE_LIMIT",
+              "REASON_REQUIRED",
+              "RESERVATION_EXCEEDED",
+              "RESOLUTION_REQUIRED",
+              "ROBOTS_DISALLOW",
+              "ROLLBACK_MUST_RESTORE_A_DEPLOYED_APPROVED_ARTIFACT",
+              "ROLLBACK_OPERATOR_AAL2_ONLY",
+              "SCHEME_NOT_ALLOWED",
+              "TASK_STATUS_NOT_TERMINAL",
+              "TIMEOUT",
+              "TOOL_NOT_IN_CONTRACT",
+              "TOOL_UNAVAILABLE",
+              "TOO_LARGE",
+              "TOO_MANY_REDIRECTS",
+              "TRANSIENT",
+              "UNKNOWN_CODE",
+              "UNRESOLVED",
+              "UPSTREAM_5XX",
+              "WEBHOOK_SIGNATURE_INVALID"
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "unknown_codes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Failures whose raw code is outside the vocabulary: exported as UNKNOWN_CODE (quarantine, not rejection); raw code stays in the database."
+    }
+  }
+}

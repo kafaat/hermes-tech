@@ -1,0 +1,102 @@
+# Every "must / must not" claim in the specification, mapped to what enforces it.
+# Status is COMPUTED by tools/check_claims.py from the refs, never written here:
+#   verified_here : a behavioural python test ran here, or a validator check of a config invariant
+#   ci_only       : a behavioural test exists but runs only in CI on real Postgres/Docker (not executed yet)
+#   structural    : only the validator's static check (the SQL or file is there; behaviour not exercised)
+#   manual        : only a written procedure
+#   gap           : nothing enforces it
+# component "service" = code of the running service. v1.8 built the pre-pilot paths in service/ (webhook handler,
+# outbox dispatcher, crawler, renderer, log redaction, telemetry filter) and the retention job in 0010; a service
+# claim is UNBUILT only while no behavioural test (py: here, sql:/ci: in CI) exists for it. The worker loop that
+# wires these together, and staging end-to-end runs, are pilot conditions of their own (P1-P3).
+# ref kinds: py:<test function>  sql:<case number>  val:<validator message fragment>  ci:<script>  doc:<file>
+version: 1.0.0
+claims:
+  - {id: C4.1, section: "4.2", claim: "لا نشر لمحتوى دون موافقة approved", component: database, refs: ["sql:5", "sql:32"]}
+  - {id: C4.2, section: "4.2", claim: "لا نشر للإنتاج دون موافقة approved", component: database, refs: ["sql:20", "val:trigger prod_deploy_guard present"]}
+  - {id: C4.3, section: "4.2", claim: "لا تفعيل اشتراك دون دفعة matched", component: database, refs: ["sql:21"]}
+  - {id: C4.4, section: "4.2", claim: "لا أكثر من منافسَين نشطين", component: database, refs: ["sql:22"]}
+  - {id: C4.5, section: "4.2", claim: "سجل التدقيق لا يُعدَّل ولا يُحذف", component: database, refs: ["sql:6", "val:audit_log blocks update/delete"]}
+  - {id: C4.6, section: "4.2", claim: "دفعة matched تتطلب محققًا ووقتًا", component: database, refs: ["sql:21"]}
+  - {id: C4.7, section: "4.4", claim: "نص الاستفسار يُحذف بعد 30 يومًا", component: service, refs: ["sql:45", "val:inquiry bodies purged after 30 days"], decision: "fix_before_pilot"}
+  - {id: C5.1, section: "5.5", claim: "العامل لا يقرأ صفوف عميل آخر", component: database, refs: ["sql:1"]}
+  - {id: C5.2, section: "5.5", claim: "العامل لا يكتب لعميل آخر", component: database, refs: ["sql:2"]}
+  - {id: C5.3, section: "5.5", claim: "العامل بلا عميل لا يرى صفوف العملاء", component: database, refs: ["sql:3"]}
+  - {id: C5.4, section: "5.5", claim: "المالك لا يرى إلا منشآته", component: database, refs: ["sql:4"]}
+  - {id: C5.5, section: "5.3", claim: "دوال الهوية المرفوعة مغلقة أمام العامل", component: database, refs: ["sql:10", "val:EXECUTE on app functions revoked from PUBLIC"]}
+  - {id: C5.6, section: "5.3", claim: "دالة الهوية لا تعيد إلا منشآت المستدعي", component: database, refs: ["sql:11"]}
+  - {id: C5.7, section: "5.2", claim: "كل جدول عليه أمن صف، وجداول العملاء مُجبرة", component: database, refs: ["val:RLS forced"]}
+  - {id: C5.8, section: "5.4", claim: "التلاعب بسجل التدقيق يُكتشف", component: database, refs: ["sql:23"]}
+  - {id: C6.1, section: "6.2", claim: "مجموع سقوف الوكلاء ≤ سقف العميل", component: reference, refs: ["val:sum of monthly agent caps"]}
+  - {id: C6.2, section: "6.2", claim: "أسوأ تكلفة نداء ≤ سقف النداء", component: reference, refs: ["val:worst-case call cost"]}
+  - {id: C6.3, section: "ADR-0009", claim: "لا نموذج بديل دون قبول بالقياس", component: reference, refs: ["py:test_fallback_without_admission_record", "py:test_two_consecutive_failures_reject_the_version"]}
+  - {id: C6.4, section: "6.2", claim: "لا أداة بأثر مالي في أي عقد", component: reference, refs: ["val:no tool with financial side effects"]}
+  - {id: C7.1, section: "7.2أ", claim: "لا تجاوز للسقف تحت التزامن", component: reference, refs: ["py:test_R1_concurrent_calls_never_exceed_agent_cap", "py:test_many_threads_never_overshoot_agent_or_customer_caps", "sql:13", "ci:db/tests/concurrency_reserve.sh"]}
+  - {id: C7.2, section: "7.2", claim: "الطلب المكرر يُنفَّذ مرة واحدة", component: reference, refs: ["py:test_R2_concurrent_duplicate_executes_once", "sql:14"]}
+  - {id: C7.3, section: "7.2", claim: "المفتاح بنطاق الوكيل والإجراء والأداة", component: reference, refs: ["py:test_R3_text_and_image_in_one_task_do_not_share_a_key", "sql:16", "val:key scoped by agent and tool"]}
+  - {id: C7.4, section: "7.1", claim: "مسبار واحد في الدائرة نصف المفتوحة", component: reference, refs: ["py:test_R5_half_open_admits_a_single_probe", "sql:15"]}
+  - {id: C7.5, section: "7.2أ", claim: "سقف المهمة يُفرض", component: reference, refs: ["py:test_R6_per_task_cap_is_enforced", "sql:24"]}
+  - {id: C7.6, section: "25", claim: "حامل ميت لمفتاح أو مسبار لا يجمّد النظام", component: reference, refs: ["py:test_N1_dead_probe_holder_does_not_freeze_the_circuit", "py:test_N2_dead_key_holder_is_taken_over_after_its_lease", "sql:17", "sql:18"]}
+  - {id: C7.7, section: "25", claim: "الإخفاق النهائي لا يُعاد إلا بقرار مسجل", component: reference, refs: ["py:test_N3_terminal_failure_is_not_reclaimed_until_released", "sql:17"]}
+  - {id: C7.8, section: "25", claim: "تجاوز الحجز مرتين يوقف الوكيل", component: reference, refs: ["py:test_N5_second_reservation_exceeded_pauses_the_agent", "sql:19"]}
+  - {id: C7.9, section: "25", claim: "خطأ مزوّد غير معروف لا يُعاد", component: reference, refs: ["py:test_N7_unknown_provider_error_is_not_retried"]}
+  - {id: C8.1, section: "4.2", claim: "الصندوق الصادر يرفض أثرًا خارجيًا دون موافقة", component: database, refs: ["sql:7", "sql:31", "val:outbox refuses external effects without an approval"]}
+  - {id: C8.2, section: "8.3", claim: "حدث webhook غير موقّع لا يُعالَج، والمكرر يُرفض", component: database, refs: ["sql:8"]}
+  - {id: C8.3, section: "8.3", claim: "معالج webhook يتحقق من توقيع HMAC", component: service, refs: ["py:test_bad_missing_or_malformed_signature_is_401_and_nothing_is_stored", "py:test_signature_is_checked_on_raw_bytes_before_parsing"], decision: "fix_before_pilot"}
+  - {id: C8.4, section: "4.2", claim: "سحب المهام لا يعبر إلى عميل آخر", component: database, refs: ["sql:9"]}
+  - {id: C8.5, section: "25", claim: "الإرسال الغامض لا يُعاد تلقائيًا للعميل", component: service, refs: ["py:test_timeout_after_writing_is_ambiguous_and_never_retried_automatically", "py:test_crash_mid_send_leaves_an_expired_claim_that_is_never_reclaimed", "sql:41", "doc:docs/delivery_protocol.md"], decision: "fix_before_pilot"}
+  - {id: C9.1, section: "9", claim: "الرسالة المطابقة لشكوى لا يُولَّد لها رد", component: reference, refs: ["py:test_patron_pricing_goes_to_owner_not_founder", "py:test_client_safety_is_sms"]}
+  - {id: C9.2, section: "9.6", claim: "المرحلة الثانية لا تكون أخف من الأولى", component: reference, refs: ["py:test_stage2_decision_equals_stage1_for_every_category_and_channel", "py:test_R4_stage2_uses_policy_severity_and_sla"]}
+  - {id: C9.3, section: "9.3", claim: "شكاوى الزبائن القانونية والأمنية تُنسخ للمؤسس", component: reference, refs: ["py:test_patron_legal_copies_founder"]}
+  - {id: C9.4, section: "9.5", claim: "قبول رصد الشكاوى بسياسة واحدة ذات إصدار: حد أعلى أحادي ≤ 6% على مسار القبول كله وصفر فقد في القانونية والسلامة", component: reference, refs: ["py:test_review_example_one_non_critical_miss_in_100", "val:no second copy of the complaint acceptance rule", "doc:docs/acceptance_data_plan.md"], decision: "accepted: شرط لسياسة الإرسال الدائمة لا للتجربة (22.2)"}
+  - {id: C12.1, section: "12.1", claim: "لا قيمة سرية في جداول التطبيق", component: database, refs: ["val:secret_refs: RLS forced"]}
+  - {id: C12.2, section: "12.1", claim: "دوران الأسرار كل 90 يومًا مقاس بإنذار", component: database, refs: ["val:secret rotation age surfaced"]}
+  - {id: C12.3, section: "12.5", claim: "اختبار استعادة شهري", component: process, refs: ["doc:ops/restore_drill.md", "val:restore drills recorded and surfaced"], decision: "fix_before_pilot"}
+  - {id: C12.4, section: "12.4", claim: "حجب البيانات الشخصية في السجلات", component: service, refs: ["py:test_phones_emails_urls_and_long_numbers_in_messages", "py:test_content_fields_are_removed_whatever_they_contain"], decision: "fix_before_pilot"}
+  - {id: C12.5, section: "11", claim: "المراقبة لا تصدّر نصوص الرسائل", component: service, refs: ["py:test_only_mapped_attributes_leave_and_content_events_are_dropped", "py:test_exporter_wrapper_sanitizes_every_batch", "doc:ops/otel_genai_mapping.yaml"], decision: "fix_before_release"}
+  - {id: C12.6, section: "ADR-0002", claim: "ضوابط حاوية Hermes Agent", component: process, refs: ["doc:ops/hermes_agent/check_container.sh"], decision: "fix_before_pilot"}
+  - {id: C12.7, section: "ADR-0002", claim: "باب البيانات بلا نص حر", component: reference, refs: ["py:test_extra_fields_are_dropped", "val:has no free-text field"]}
+  - {id: C12.8, section: "25", claim: "الرمز غير المعروف يُحجر ولا يُرفض", component: reference, refs: ["py:test_unknown_code_is_quarantined_not_leaked"]}
+  - {id: C12.9, section: "ADR-0008", claim: "لا وسم إصدار مع تحذير سلسلة توريد", component: process, refs: ["ci:tools/check_supply_chain.py"]}
+  - {id: C12.10, section: "ADR-0008", claim: "ثغرة معروفة في التبعيات تُفشل CI", component: process, refs: ["ci:requirements-ci.txt"]}
+  # ---- v1.7: the authority layer (independent review P1 01–05, 09) and its follow-ups
+  - {id: A1, section: "26", claim: "العامل يقترح فقط: لا يكتب قرارًا ولا مقررًا ولا استهلاكًا", component: database, refs: ["sql:29", "val:the worker can only propose"]}
+  - {id: A2, section: "26", claim: "موافقة المنشأة يقررها أحد مالكيها بجلسته؛ المؤسس لا يوافق عنها", component: database, refs: ["sql:30", "val:decided by one of its owners"]}
+  - {id: A3, section: "26", claim: "موافقة المنصة (الاكتساب) لمشغّل بجلسة aal2", component: database, refs: ["sql:30"]}
+  - {id: A4, section: "26", claim: "الصندوق الصادر يطابق الهدف وبصمة الحمولة ويستهلك الموافقة مرة ويجمّد الحمولة", component: database, refs: ["sql:31", "val:outbox checks target and payload hash"]}
+  - {id: A5, section: "26", claim: "المحتوى المنشور مربوط بموافقته المستهلكة ولا يتغير", component: database, refs: ["sql:32"]}
+  - {id: A6, section: "26", claim: "نشر الإنتاج يغطي الأثر المعتمد بعينه؛ الرجوع يعيد أثرًا معتمدًا بمشغّل aal2", component: database, refs: ["sql:33"]}
+  - {id: A7, section: "26", claim: "اعتماد الحقيقة المعرفية للمالك وحده ويسقط بأي تعديل", component: database, refs: ["sql:34", "val:knowledge approval is owner-only"]}
+  - {id: A8, section: "26", claim: "عميل العامل من عقد إيجار حي فقط، لا من متغير يختاره", component: database, refs: ["sql:9", "sql:25", "sql:26", "val:worker tenant comes only from a live task lease"]}
+  - {id: A9, section: "26", claim: "العامل بلا عقد لا يصل إلى صفوف الاكتساب", component: database, refs: ["sql:27"]}
+  - {id: A10, section: "26", claim: "لا ربط بين صف عميل وأب يخص عميلًا آخر", component: database, refs: ["sql:36", "val:composite (id, customer_id) ownership key"]}
+  - {id: A11, section: "26", claim: "صلاحية المشغّل تتطلب جلسة aal2 لا تسجيل MFA فقط", component: database, refs: ["sql:30", "val:operator authority requires an aal2 session"]}
+  - {id: A12, section: "26", claim: "عقد إيجار للمهمة مع نبضة وتسييج واسترداد ورسالة ميتة", component: database, refs: ["sql:28", "val:task leases with fencing"]}
+  - {id: A13, section: "26", claim: "مقترح الرد يُحسم داخل نافذة خدمة واتساب", component: database, refs: ["sql:37"]}
+  - {id: A14, section: "26", claim: "حكم سلسلة التدقيق لا يتغير بالمنطقة الزمنية للجلسة", component: database, refs: ["sql:35", "val:audit chain hashed with a UTC timestamp"]}
+  - {id: A15, section: "27", claim: "الأثر يُسجَّل في التدقيق داخل معاملته بهوية فاعله الحقيقية", component: database, refs: ["sql:43", "val:effects audited by the database inside their own transaction"], decision: "fix_before_release"}
+  - {id: A15b, section: "27", claim: "رأس سلسلة التدقيق يُصدَّر يوميًا خارج القاعدة ويُكشف أي إعادة بناء للسلسلة", component: service, refs: ["py:test_rebuilt_chain_is_detected", "py:test_removed_rows_and_forged_lines_are_detected", "doc:docs/audit_checkpoints.md"], decision: "fix_before_release"}
+  - {id: A16, section: "26", claim: "ميزانية كل شهر مستقلة", component: reference, refs: ["py:test_M1_new_month_starts_from_zero"]}
+  - {id: A17, section: "26", claim: "الحجز بالحد المحسوب لا بتقدير الطالب", component: reference, refs: ["py:test_M3_computed_bound_overrides_a_low_estimate"]}
+  - {id: A18, section: "26", claim: "تكلفة نداء فوق سقف العقد توقف الوكيل فورًا", component: reference, refs: ["py:test_M2_actual_cost_above_per_call_pauses_the_agent_at_once"]}
+  - {id: A19, section: "9.5", claim: "ثقة 95% على مسار القبول كله (بونفيروني على المحاولات)، والطريقة مسماة: حد أعلى أحادي دقيق", component: reference, refs: ["py:test_path_level_error_is_within_five_percent_at_the_threshold", "py:test_named_method_and_per_attempt_confidence", "py:test_any_critical_miss_fails", "val:a system at the threshold miss rate"]}
+  - {id: A20, section: "26", claim: "نجاح CI لا يعني عبور معيار القبول؛ حارس المحتوى يوقف CI", component: reference, refs: ["py:test_ci_mode_reports_complaint_failure_without_passing_it_off", "py:test_content_guard_mismatch_always_fails_ci"]}
+  - {id: A21, section: "26", claim: "ترقية وكيل الجودة تتطلب تدقيق المخرجات غير المعلَّمة", component: reference, refs: ["val:promotion also audits UNFLAGGED output"]}
+  - {id: A22, section: "26", claim: "أي جلب من الخادم يمر بحارس SSRF بعنوان مثبّت", component: reference, refs: ["py:test_metadata_loopback_private_and_mapped_addresses_are_refused", "py:test_redirects_are_revalidated_and_bounded", "py:test_ipv6_forms_carrying_ipv4_are_judged_by_that_ipv4"]}
+  - {id: A23, section: "26", claim: "الزاحف الفعلي يستخدم الحارس ويتصل بالعنوان المثبّت", component: service, refs: ["py:test_connects_to_the_pinned_address_with_the_hostname_for_tls", "py:test_dns_rebinding_between_check_and_connect_is_impossible", "py:test_only_the_crawler_opens_network_connections"], decision: "fix_before_pilot"}
+  - {id: A24, section: "26", claim: "نصوص المالك تُهرَّب في القوالب ولا روابط javascript:", component: service, refs: ["py:test_owner_text_is_escaped_in_text_and_quoted_attributes", "py:test_executable_urls_are_refused_in_every_disguise", "py:test_dangerous_template_positions_are_refused"], decision: "fix_before_pilot"}
+  - {id: A25, section: "26", claim: "الإصدار مربوط ببيان بصمات: لا ملف ولا تقرير من إصدار آخر", component: process, refs: ["ci:tools/build_manifest.py"]}
+  - {id: A26, section: "26", claim: "لا بيانات عملاء في جلسات Hermes Agent (لصق المؤسس)", component: process, refs: ["doc:docs/adr/0002-hermes-agent-internal-only.md"], decision: "accepted: قاعدة إجرائية معلنة؛ لا ضبط تقني للصق"}
+  # ---- v1.8: closure of the review of 1.7 (docs/review_response_v17.md, specification §27)
+  - {id: A27, section: "27", claim: "انتهاء عقد الإيجار ينهي صلاحية العامل داخل معاملة جارية (ساعة الحائط لا بداية المعاملة)", component: database, refs: ["sql:38", "ci:db/tests/concurrency_lease.sh", "val:lease checks use the wall clock"]}
+  - {id: A28, section: "27", claim: "الحامل المنتهي أو المستردّ لا يُنهي ولا ينبض ولا يعيد المهمة؛ العامل لا يعدّل صف المهمة مباشرة", component: database, refs: ["sql:39", "val:completion needs a live lease"]}
+  - {id: A29, section: "27", claim: "الطلب المكرر لأثر معتمد يعود إلى صفه في الصندوق الصادر ولا يحتاج موافقة جديدة", component: database, refs: ["sql:40", "ci:db/tests/concurrency_outbox.sh", "val:a redelivered request returns the existing outbox row"]}
+  - {id: A30, section: "27", claim: "حدث webhook يوجَّه من هوية القناة المخاطَبة لا من المستدعي؛ العامل يكتب processed_at فقط", component: database, refs: ["sql:42", "val:webhook ingest cannot choose a tenant"]}
+  - {id: A31, section: "27", claim: "سطر التدقيق الذي تكتبه جلسة يحمل هويتها ودورها؛ العامل بلا عقد لا يكتب", component: database, refs: ["sql:43", "val:audit rows written by a session carry"]}
+  - {id: A32, section: "27", claim: "استهلاك الموافقة من محفّز الصندوق الصادر وحده (الملكية لا متغير جلسة)", component: database, refs: ["sql:44", "val:approval consumption guarded by ownership"]}
+  - {id: A33, section: "27", claim: "الكتالوج بعد كل الترحيلات يطابق الجرد المنشور: FORCE، والدوال المرفوعة، والمنح، وسياسات العامل", component: database, refs: ["sql:46", "val:FORCE exceptions after all migrations equal the published inventory", "val:every final worker policy is bound to a lease"]}
+  - {id: A34, section: "27", claim: "تغيير أي مسار في بوابة الإصدار يُحكم بمدققات الأساس؛ والبوابة لا تقبل مهمة متخطاة أو ملغاة", component: process, refs: ["py:test_weakened_checker_outside_github_is_caught_by_the_base_checker", "py:test_gate_job_accepts_only_success_of_every_job", "ci:tools/gate_guard.py"]}
+  - {id: A35, section: "27", claim: "سحب المهام حد ثقة مسمّى: دور العامل يسحب مهمة أي عميل، والعزل داخل المهمة لا يحمي من اختراق المنسّق نفسه", component: process, refs: ["doc:docs/review_response_v17.md"], decision: "accepted: حد ثقة مسمّى؛ فصل دور لكل وكيل مؤجل بشرطه (27.5)"}
+  - {id: P1, section: "27", claim: "حلقة العامل تربط المسارات المبنية (السحب والربط والفرض والموزّع والمعالج) وتُشغَّل من طرف إلى طرف على staging", component: service, refs: [], decision: "fix_before_pilot"}
+  - {id: P2, section: "21.3", claim: "ملف الحمل pilot ناجح على staging", component: process, refs: ["doc:docs/load_targets.md"], decision: "fix_before_pilot"}
+  - {id: P3, section: "21.3", claim: "سعر واتساب لليمن وترخيص صور FLUX التجاري مؤكدان كتابيًا", component: process, refs: ["doc:docs/licensing_matrix.md", "doc:docs/whatsapp_cost_scenarios.md"], decision: "fix_before_pilot"}

@@ -1,0 +1,5 @@
+# CI tooling only (the package itself needs the standard library alone).
+# Pin with --hash on first repository setup (ADR-0008); check_supply_chain.py warns until then.
+jsonschema==4.23.0
+pyyaml==6.0.2
+pip-audit==2.7.3

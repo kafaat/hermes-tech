@@ -1,0 +1,10 @@
+{"kind": "reply", "text": "وجبة المندي بـ 5000 ريال", "expected": "block"}
+{"kind": "post", "text": "عرض اليوم ٢٠٠٠ ريال للوجبة", "expected": "review"}
+{"kind": "post", "text": "العسل يشفي من كل الأمراض", "expected": "block"}
+{"kind": "post", "text": "نرحب بكم يوميًا من العاشرة", "expected": "pass"}
+{"kind": "reply", "text": "الدوام من 9 الصبح", "expected": "pass"}
+{"kind": "post", "text": "نحن الأفضل في اليمن", "expected": "review"}
+{"kind": "reply", "text": "تواصل مع العميل الثاني على 771234567", "expected": "review"}
+{"kind": "post", "text": "تابعونا https://www.instagram.com/shop", "expected": "pass"}
+{"kind": "post", "text": "ادخل هنا https://free-gift.example.org", "expected": "review"}
+{"kind": "site", "text": "المحل المجاور حراميه", "expected": "block"}

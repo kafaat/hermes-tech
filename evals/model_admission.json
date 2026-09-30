@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "floors": {
+    "quality_precision_min": 0.95,
+    "draft_first_acceptance_drop_max_pp": 5,
+    "draft_first_acceptance_min": 0.7,
+    "draft_min_rated_samples": 100,
+    "latency_p95_seconds_max": 8
+  },
+  "method": "نفس مجموعات evals/ واختبار القبول، مع 100 مسودة عربية يقيّمها المالك دون معرفة النموذج (تقييم أعمى)؛ القبول الأول = مسودة وافق عليها المالك دون تعديل. الحالة (مقبول/مرشح/مرفوض) تُحسب من المحاولات بـ tools/admission.py ولا تُكتب يدويًا.",
+  "retest_policy": {
+    "max_consecutive_failures_per_version": 2,
+    "min_new_share_of_dataset": 0.25,
+    "cooldown_days": 14,
+    "min_new_messages": 100,
+    "min_new_complaints": 25,
+    "min_new_complaints_per_category": 3
+  },
+  "candidates": [],
+  "complaint_criterion": "policies/acceptance_policy.json (tools/acceptance.py): one rule for admission, run_evals and the claims matrix"
+}

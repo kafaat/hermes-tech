@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hermes/runtime/agent_runtime_state.schema.json",
+  "type": "object",
+  "required": [
+    "customer_id",
+    "month_id",
+    "agents",
+    "ai_spent_total_usd",
+    "ai_cap_usd",
+    "budget_alert_fired"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "customer_id": {
+      "type": "string",
+      "pattern": "^cust_[0-9a-z]{4,}$"
+    },
+    "month_id": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}$"
+    },
+    "agents": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "calls",
+          "spent_usd",
+          "last_call_at",
+          "last_outcome",
+          "consecutive_failures",
+          "circuit",
+          "circuit_opened_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "calls": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "spent_usd": {
+            "type": "number",
+            "minimum": 0
+          },
+          "last_call_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_outcome": {
+            "enum": [
+              "success",
+              "failure",
+              "escalated",
+              "rejected",
+              "budget_exceeded",
+              "circuit_open",
+              null
+            ]
+          },
+          "consecutive_failures": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "circuit": {
+            "enum": [
+              "closed",
+              "open",
+              "half_open"
+            ]
+          },
+          "circuit_opened_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "ai_spent_total_usd": {
+      "type": "number",
+      "minimum": 0
+    },
+    "ai_cap_usd": {
+      "type": "number",
+      "minimum": 0
+    },
+    "budget_alert_fired": {
+      "type": "boolean"
+    }
+  }
+}

@@ -1,0 +1,87 @@
+test_R1_concurrent_calls_never_exceed_agent_cap (tests.test_regressions_v15.TestRegressions.test_R1_concurrent_calls_never_exceed_agent_cap) ... FAIL
+test_R2_concurrent_duplicate_executes_once (tests.test_regressions_v15.TestRegressions.test_R2_concurrent_duplicate_executes_once) ... FAIL
+test_R3_text_and_image_in_one_task_do_not_share_a_key (tests.test_regressions_v15.TestRegressions.test_R3_text_and_image_in_one_task_do_not_share_a_key) ... FAIL
+test_R4_stage2_uses_policy_severity_and_sla (tests.test_regressions_v15.TestRegressions.test_R4_stage2_uses_policy_severity_and_sla) ... FAIL
+test_R4b_unknown_category_is_conservative (tests.test_regressions_v15.TestRegressions.test_R4b_unknown_category_is_conservative) ... ERROR
+test_R5_half_open_admits_a_single_probe (tests.test_regressions_v15.TestRegressions.test_R5_half_open_admits_a_single_probe) ... FAIL
+test_R6_per_task_cap_is_enforced (tests.test_regressions_v15.TestRegressions.test_R6_per_task_cap_is_enforced) ... FAIL
+
+======================================================================
+ERROR: test_R4b_unknown_category_is_conservative (tests.test_regressions_v15.TestRegressions.test_R4b_unknown_category_is_conservative)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/claude/hermes-tech/tests/test_regressions_v15.py", line 95, in test_R4b_unknown_category_is_conservative
+    pol = Matcher().p["triage_unknown_category"]
+          ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'triage_unknown_category'
+
+======================================================================
+FAIL: test_R1_concurrent_calls_never_exceed_agent_cap (tests.test_regressions_v15.TestRegressions.test_R1_concurrent_calls_never_exceed_agent_cap)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/claude/hermes-tech/tests/test_regressions_v15.py", line 65, in test_R1_concurrent_calls_never_exceed_agent_cap
+    self.assertLessEqual(round(ag.spent, 6), 0.40, f"spent {ag.spent:.2f}")
+AssertionError: 0.43 not less than or equal to 0.4 : spent 0.43
+
+======================================================================
+FAIL: test_R2_concurrent_duplicate_executes_once (tests.test_regressions_v15.TestRegressions.test_R2_concurrent_duplicate_executes_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/claude/hermes-tech/tests/test_regressions_v15.py", line 73, in test_R2_concurrent_duplicate_executes_once
+    self.assertEqual(rv.count, 1, "duplicate executed twice")
+AssertionError: 2 != 1 : duplicate executed twice
+
+======================================================================
+FAIL: test_R3_text_and_image_in_one_task_do_not_share_a_key (tests.test_regressions_v15.TestRegressions.test_R3_text_and_image_in_one_task_do_not_share_a_key)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/claude/hermes-tech/tests/test_regressions_v15.py", line 80, in test_R3_text_and_image_in_one_task_do_not_share_a_key
+    self.assertEqual((t["result"], i["result"]), ("TEXT", "IMAGE"))
+AssertionError: Tuples differ: ('TEXT', 'TEXT') != ('TEXT', 'IMAGE')
+
+First differing element 1:
+'TEXT'
+'IMAGE'
+
+- ('TEXT', 'TEXT')
+?           ^ --
+
++ ('TEXT', 'IMAGE')
+?           ^^^^
+
+
+======================================================================
+FAIL: test_R4_stage2_uses_policy_severity_and_sla (tests.test_regressions_v15.TestRegressions.test_R4_stage2_uses_policy_severity_and_sla)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/claude/hermes-tech/tests/test_regressions_v15.py", line 87, in test_R4_stage2_uses_policy_severity_and_sla
+    self.assertEqual((d["severity"], d["sla_minutes"]), ("critical", 15))
+AssertionError: Tuples differ: ('high', 60) != ('critical', 15)
+
+First differing element 0:
+'high'
+'critical'
+
+- ('high', 60)
++ ('critical', 15)
+
+======================================================================
+FAIL: test_R5_half_open_admits_a_single_probe (tests.test_regressions_v15.TestRegressions.test_R5_half_open_admits_a_single_probe)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/claude/hermes-tech/tests/test_regressions_v15.py", line 106, in test_R5_half_open_admits_a_single_probe
+    self.assertEqual(rv.count, 1, "more than one probe in half_open")
+AssertionError: 2 != 1 : more than one probe in half_open
+
+======================================================================
+FAIL: test_R6_per_task_cap_is_enforced (tests.test_regressions_v15.TestRegressions.test_R6_per_task_cap_is_enforced)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/claude/hermes-tech/tests/test_regressions_v15.py", line 112, in test_R6_per_task_cap_is_enforced
+    with self.assertRaises(Denied) as e:
+AssertionError: Denied not raised
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.020s
+
+FAILED (failures=6, errors=1)

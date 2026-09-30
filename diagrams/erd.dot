@@ -1,0 +1,26 @@
+digraph erd {
+  rankdir=LR; nodesep=0.25; ranksep=0.5; splines=true;
+  node [shape=plaintext, fontname="DejaVu Sans", fontsize=10];
+  edge [fontname="DejaVu Sans", fontsize=9, color="#555555", arrowhead=crow, arrowtail=none, dir=both];
+  customers [label=<<table border="0" cellborder="1" cellspacing="0" bgcolor="#D9E1F2"><tr><td><b>customers</b></td></tr><tr><td align="left">id · public_ref · sector · city<br/>currency_zone · status</td></tr></table>>];
+  cu [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#EAF1FB"><b>customer_users</b></td></tr><tr><td align="left">auth_user_id · role</td></tr></table>>];
+  subs [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#EAF1FB"><b>subscriptions</b></td></tr><tr><td align="left">period · price_usd · status<br/>renewal_of</td></tr></table>>];
+  inv [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#EAF1FB"><b>invoices</b></td></tr><tr><td align="left">amount · currency · fx_rate</td></tr></table>>];
+  pay [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#EAF1FB"><b>payments</b></td></tr><tr><td align="left">channel · receipt_ref (unique)<br/>verified_by (human)</td></tr></table>>];
+  sites [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#EAF1FB"><b>sites</b></td></tr><tr><td align="left">template · pinned_version</td></tr></table>>];
+  dep [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#EAF1FB"><b>deployments</b></td></tr><tr><td align="left">env · approval_id · rollback_of</td></tr></table>>];
+  tpl [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#F2F2F2"><b>templates</b></td></tr><tr><td align="left">code · version · schema range</td></tr></table>>];
+  cont [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#EAF1FB"><b>content_items</b></td></tr><tr><td align="left">week_id · status · approval_id</td></tr></table>>];
+  media [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#EAF1FB"><b>media_assets</b></td></tr><tr><td align="left">r2_key · source · license</td></tr></table>>];
+  appr [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#FFF2CC"><b>approvals</b></td></tr><tr><td align="left">proposal_action · decision<br/>expires_at · executed_by</td></tr></table>>];
+  tasks [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#EAF1FB"><b>tasks</b></td></tr><tr><td align="left">agent_id · idempotency_key</td></tr></table>>];
+  calls [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#EAF1FB"><b>agent_calls</b></td></tr><tr><td align="left">tokens · cost_usd · outcome</td></tr></table>>];
+  state [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#EAF1FB"><b>agent_state</b></td></tr><tr><td align="left">month · spent · circuit</td></tr></table>>];
+  comp [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#EAF1FB"><b>competitors → snapshots</b></td></tr><tr><td align="left">≤ 2 نشطين · hash · diff</td></tr></table>>];
+  inq [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#EAF1FB"><b>inquiries</b></td></tr><tr><td align="left">source · matched_category</td></tr></table>>];
+  kb [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#EAF1FB"><b>kb_facts</b></td></tr><tr><td align="left">approved_by_owner</td></tr></table>>];
+  sec [label=<<table border="0" cellborder="1" cellspacing="0"><tr><td bgcolor="#FDECEA"><b>secret_refs</b></td></tr><tr><td align="left">vault_ref · scopes</td></tr></table>>];
+  customers -> cu; customers -> subs; subs -> inv; inv -> pay; customers -> sites; sites -> dep; tpl -> sites;
+  customers -> cont; customers -> media; appr -> dep [label=" prod"]; appr -> cont [label=" نشر"];
+  customers -> appr; customers -> tasks; tasks -> calls; customers -> state; customers -> comp; customers -> inq; customers -> kb; customers -> sec;
+}

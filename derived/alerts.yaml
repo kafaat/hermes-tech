@@ -1,0 +1,359 @@
+# generated — do not edit
+rules:
+- id: site_build_p50_seconds_warn
+  metric: site_build_p50_seconds
+  op: '>'
+  threshold: 120
+  severity: P2
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md
+- id: site_build_p50_seconds_critical
+  metric: site_build_p50_seconds
+  op: '>'
+  threshold: 300
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md
+- id: site_build_p95_seconds_warn
+  metric: site_build_p95_seconds
+  op: '>'
+  threshold: 360
+  severity: P2
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md
+- id: site_build_p95_seconds_critical
+  metric: site_build_p95_seconds
+  op: '>'
+  threshold: 600
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md
+- id: agent_reply_p95_seconds_warn
+  metric: agent_reply_p95_seconds
+  op: '>'
+  threshold: 8
+  severity: P2
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md
+- id: agent_reply_p95_seconds_critical
+  metric: agent_reply_p95_seconds
+  op: '>'
+  threshold: 15
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md
+- id: build_failure_rate_warn
+  metric: build_failure_rate
+  op: '>'
+  threshold: 0.05
+  severity: P2
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md
+- id: build_failure_rate_critical
+  metric: build_failure_rate
+  op: '>'
+  threshold: 0.1
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md
+- id: queue_depth_p95_warn
+  metric: queue_depth_p95
+  op: '>'
+  threshold: 200
+  severity: P2
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md
+- id: queue_depth_p95_critical
+  metric: queue_depth_p95
+  op: '>'
+  threshold: 500
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md
+- id: db_utilisation_warn
+  metric: db_utilisation
+  op: '>'
+  threshold: 0.7
+  severity: P2
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md
+- id: db_utilisation_critical
+  metric: db_utilisation
+  op: '>'
+  threshold: 0.85
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md
+- id: variable_cost_per_customer_usd_warn
+  metric: variable_cost_per_customer_usd
+  op: '>'
+  threshold: 3.5
+  severity: P2
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md
+- id: variable_cost_per_customer_usd_critical
+  metric: variable_cost_per_customer_usd
+  op: '>'
+  threshold: 5.0
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md
+- id: container_restarts_24h_warn
+  metric: container_restarts_24h
+  op: '>'
+  threshold: 3
+  severity: P2
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md
+- id: container_restarts_24h_critical
+  metric: container_restarts_24h
+  op: '>'
+  threshold: 10
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md
+- id: secrets_rotation_overdue_warn
+  metric: secrets_rotation_overdue
+  op: '>'
+  threshold: 0
+  severity: P2
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md
+- id: secrets_rotation_overdue_critical
+  metric: secrets_rotation_overdue
+  op: '>'
+  threshold: 3
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md
+- id: days_since_restore_drill_warn
+  metric: days_since_restore_drill
+  op: '>'
+  threshold: 35
+  severity: P2
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md
+- id: days_since_restore_drill_critical
+  metric: days_since_restore_drill
+  op: '>'
+  threshold: 60
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md
+- id: hermes_agent_egress_denied_24h_warn
+  metric: hermes_agent_egress_denied_24h
+  op: '>'
+  threshold: 0
+  severity: P2
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md
+- id: hermes_agent_egress_denied_24h_critical
+  metric: hermes_agent_egress_denied_24h
+  op: '>'
+  threshold: 5
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md
+- id: inbound_to_triage_p95_seconds_warn
+  metric: inbound_to_triage_p95_seconds
+  op: '>'
+  threshold: 120
+  severity: P2
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md
+- id: inbound_to_triage_p95_seconds_critical
+  metric: inbound_to_triage_p95_seconds
+  op: '>'
+  threshold: 300
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md
+- id: queue_drain_minutes_after_peak_warn
+  metric: queue_drain_minutes_after_peak
+  op: '>'
+  threshold: 20
+  severity: P2
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md
+- id: queue_drain_minutes_after_peak_critical
+  metric: queue_drain_minutes_after_peak
+  op: '>'
+  threshold: 45
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md
+- id: agent_site_builder_budget_alert
+  metric: agent_site_builder.spent_ratio
+  op: '>='
+  threshold: 0.8
+  severity: P3
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md#rb-03
+- id: agent_site_builder_circuit_open
+  metric: agent_site_builder.circuit_open
+  op: ==
+  threshold: 1
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md#rb-01
+- id: agent_content_budget_alert
+  metric: agent_content.spent_ratio
+  op: '>='
+  threshold: 0.8
+  severity: P3
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md#rb-03
+- id: agent_content_circuit_open
+  metric: agent_content.circuit_open
+  op: ==
+  threshold: 1
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md#rb-01
+- id: agent_replies_budget_alert
+  metric: agent_replies.spent_ratio
+  op: '>='
+  threshold: 0.8
+  severity: P3
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md#rb-03
+- id: agent_replies_circuit_open
+  metric: agent_replies.circuit_open
+  op: ==
+  threshold: 1
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md#rb-01
+- id: agent_competitor_budget_alert
+  metric: agent_competitor.spent_ratio
+  op: '>='
+  threshold: 0.8
+  severity: P3
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md#rb-03
+- id: agent_competitor_circuit_open
+  metric: agent_competitor.circuit_open
+  op: ==
+  threshold: 1
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md#rb-01
+- id: agent_search_budget_alert
+  metric: agent_search.spent_ratio
+  op: '>='
+  threshold: 0.8
+  severity: P3
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md#rb-03
+- id: agent_search_circuit_open
+  metric: agent_search.circuit_open
+  op: ==
+  threshold: 1
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md#rb-01
+- id: agent_billing_budget_alert
+  metric: agent_billing.spent_ratio
+  op: '>='
+  threshold: 0.9
+  severity: P3
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md#rb-03
+- id: agent_billing_circuit_open
+  metric: agent_billing.circuit_open
+  op: ==
+  threshold: 1
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md#rb-01
+- id: agent_quality_budget_alert
+  metric: agent_quality.spent_ratio
+  op: '>='
+  threshold: 0.8
+  severity: P3
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md#rb-03
+- id: agent_quality_circuit_open
+  metric: agent_quality.circuit_open
+  op: ==
+  threshold: 1
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md#rb-01
+- id: agent_triage_budget_alert
+  metric: agent_triage.spent_ratio
+  op: '>='
+  threshold: 0.8
+  severity: P3
+  channels:
+  - founder_slack
+  runbook: ops/runbook.md#rb-03
+- id: agent_triage_circuit_open
+  metric: agent_triage.circuit_open
+  op: ==
+  threshold: 1
+  severity: P1
+  channels:
+  - founder_sms
+  - founder_slack
+  runbook: ops/runbook.md#rb-01

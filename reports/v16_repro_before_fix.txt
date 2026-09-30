@@ -1,0 +1,48 @@
+test_N1_dead_probe_holder_does_not_freeze_the_circuit (tests.test_regressions_v16.TestRegressionsV16.test_N1_dead_probe_holder_does_not_freeze_the_circuit) ... ERROR
+test_N2_dead_key_holder_is_taken_over_after_its_lease (tests.test_regressions_v16.TestRegressionsV16.test_N2_dead_key_holder_is_taken_over_after_its_lease) ... FAIL
+test_N3_terminal_failure_is_not_reclaimed_until_released (tests.test_regressions_v16.TestRegressionsV16.test_N3_terminal_failure_is_not_reclaimed_until_released) ... ERROR
+test_N4_transient_failure_stays_reclaimable (tests.test_regressions_v16.TestRegressionsV16.test_N4_transient_failure_stays_reclaimable) ... ok
+test_N5_second_reservation_exceeded_pauses_the_agent (tests.test_regressions_v16.TestRegressionsV16.test_N5_second_reservation_exceeded_pauses_the_agent) ... FAIL
+test_N6_overshoot_is_charged (tests.test_regressions_v16.TestRegressionsV16.test_N6_overshoot_is_charged) ... ok
+test_N7_unknown_provider_error_is_not_retried (tests.test_regressions_v16.TestRegressionsV16.test_N7_unknown_provider_error_is_not_retried) ... ok
+
+======================================================================
+ERROR: test_N1_dead_probe_holder_does_not_freeze_the_circuit (tests.test_regressions_v16.TestRegressionsV16.test_N1_dead_probe_holder_does_not_freeze_the_circuit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/v15pkg/tests/test_regressions_v16.py", line 44, in test_N1_dead_probe_holder_does_not_freeze_the_circuit
+    r = self.o.invoke("agent_replies", "reply:draft", "reply.draft", dict(TASK, message_id="m2"), lambda: ("x", 0.01), 0.01)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/v15pkg/tools/enforce.py", line 175, in invoke
+    raise Denied("CIRCUIT_OPEN", agent_id)
+enforce.Denied: CIRCUIT_OPEN agent_replies
+
+======================================================================
+ERROR: test_N3_terminal_failure_is_not_reclaimed_until_released (tests.test_regressions_v16.TestRegressionsV16.test_N3_terminal_failure_is_not_reclaimed_until_released)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/v15pkg/tests/test_regressions_v16.py", line 64, in test_N3_terminal_failure_is_not_reclaimed_until_released
+    self.assertEqual((r["status"], r["error"], ran), ("FAILED", "content_rejected", []))
+                                   ~^^^^^^^^^
+KeyError: 'error'
+
+======================================================================
+FAIL: test_N2_dead_key_holder_is_taken_over_after_its_lease (tests.test_regressions_v16.TestRegressionsV16.test_N2_dead_key_holder_is_taken_over_after_its_lease)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/v15pkg/tests/test_regressions_v16.py", line 53, in test_N2_dead_key_holder_is_taken_over_after_its_lease
+    self.assertIn("retry_after", r)
+AssertionError: 'retry_after' not found in {'status': 'IN_PROGRESS', 'lease_until': 100020.0}
+
+======================================================================
+FAIL: test_N5_second_reservation_exceeded_pauses_the_agent (tests.test_regressions_v16.TestRegressionsV16.test_N5_second_reservation_exceeded_pauses_the_agent)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/v15pkg/tests/test_regressions_v16.py", line 80, in test_N5_second_reservation_exceeded_pauses_the_agent
+    with self.assertRaises(Denied) as e:
+AssertionError: Denied not raised
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.004s
+
+FAILED (failures=2, errors=2)

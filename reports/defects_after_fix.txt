@@ -1,0 +1,17 @@
+test_R1_concurrent_calls_never_exceed_agent_cap (tests.test_regressions_v15.TestRegressions.test_R1_concurrent_calls_never_exceed_agent_cap) ... ok
+test_R2_concurrent_duplicate_executes_once (tests.test_regressions_v15.TestRegressions.test_R2_concurrent_duplicate_executes_once) ... ok
+test_R3_text_and_image_in_one_task_do_not_share_a_key (tests.test_regressions_v15.TestRegressions.test_R3_text_and_image_in_one_task_do_not_share_a_key) ... ok
+test_R4_stage2_uses_policy_severity_and_sla (tests.test_regressions_v15.TestRegressions.test_R4_stage2_uses_policy_severity_and_sla) ... ok
+test_R4b_unknown_category_is_conservative (tests.test_regressions_v15.TestRegressions.test_R4b_unknown_category_is_conservative) ... ok
+test_R5_half_open_admits_a_single_probe (tests.test_regressions_v15.TestRegressions.test_R5_half_open_admits_a_single_probe) ... ok
+test_R6_per_task_cap_is_enforced (tests.test_regressions_v15.TestRegressions.test_R6_per_task_cap_is_enforced) ... ok
+test_actual_above_reservation_is_flagged (tests.test_concurrency_properties.TestConcurrencyProperties.test_actual_above_reservation_is_flagged) ... ok
+test_crash_releases_key_and_reservation (tests.test_concurrency_properties.TestConcurrencyProperties.test_crash_releases_key_and_reservation) ... ok
+test_many_threads_never_overshoot_agent_or_customer_caps (tests.test_concurrency_properties.TestConcurrencyProperties.test_many_threads_never_overshoot_agent_or_customer_caps) ... ok
+test_stage2_decision_equals_stage1_for_every_category_and_channel (tests.test_concurrency_properties.TestConcurrencyProperties.test_stage2_decision_equals_stage1_for_every_category_and_channel) ... ok
+test_upper_bound_covers_any_call_within_max_output (tests.test_concurrency_properties.TestConcurrencyProperties.test_upper_bound_covers_any_call_within_max_output) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 1.565s
+
+OK

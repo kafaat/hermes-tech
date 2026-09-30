@@ -1,0 +1,14 @@
+digraph rel {
+  rankdir=TB; nodesep=0.3; ranksep=0.3;
+  node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11, fillcolor="#EAF1FB", color="#1F4E79", width=3.4];
+  edge [fontname="DejaVu Sans", fontsize=9];
+  m1 [label="ترحيل موسِّع (expand)\nالمخطط يدعم الإصدارين", fillcolor="#FFF2CC"];
+  a [label="commit القالب template@x.y.z"]; b [label="CI: validate + derive --check + tests"];
+  c [label="اختبار انحدار على مواقع مرجعية"]; d [label="staging · عميل تجريبي"];
+  e [label="canary 5% ← 25% ← 100%\nمراقبة ضمن ops/slo.yaml"];
+  f [label="انحدار خلال 24 ساعة؟", shape=diamond];
+  g [label="رجوع تلقائي للمجموعة\nالإصدار المعطوب يبقى في التاريخ", fillcolor="#FDECEA"];
+  h [label="ترقية الإصدار المثبّت تدريجيًا\n(رقعة تلقائية · ثانوي بموافقة · رئيسي بإشعار 30 يومًا)"];
+  m2 [label="ترحيل مقلِّص (contract)\nبعد انتقال آخر عميل", fillcolor="#FFF2CC"];
+  m1 -> a -> b -> c -> d -> e -> f; f -> g [label="نعم"]; f -> h [label="لا"]; h -> m2;
+}

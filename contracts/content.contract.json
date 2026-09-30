@@ -1,0 +1,117 @@
+{
+  "agent_id": "agent_content",
+  "version": "1.0.0",
+  "purpose": "توليد مسودات المنشورات والصور الاجتماعية؛ لا ينشر على أي منصة دون موافقة.",
+  "model": {
+    "primary": "gpt-5.4-mini",
+    "fallback": null,
+    "params": {
+      "temperature": 0.7,
+      "max_output_tokens": 2048
+    }
+  },
+  "tools": [
+    {
+      "name": "llm.generate",
+      "scope": "read",
+      "side_effects": "none"
+    },
+    {
+      "name": "flux.generate",
+      "scope": "write_draft",
+      "side_effects": "internal",
+      "unit_cost_usd": 0.025,
+      "rate_limit": {
+        "per_hour": 100
+      }
+    },
+    {
+      "name": "assets.save",
+      "scope": "write_draft",
+      "side_effects": "internal"
+    },
+    {
+      "name": "meta.create_draft",
+      "scope": "write_draft",
+      "side_effects": "internal"
+    }
+  ],
+  "permissions": {
+    "allow": [
+      "content:draft",
+      "content:image_generate",
+      "assets:write_draft"
+    ],
+    "deny": [
+      "billing:*",
+      "payment:*",
+      "site:deploy_prod",
+      "customer:read_private"
+    ],
+    "proposals": [
+      "content:publish"
+    ]
+  },
+  "budget": {
+    "budget_class": "monthly_active",
+    "per_call_usd": 0.08,
+    "per_task_usd": 0.4,
+    "class_cap_usd": 0.4,
+    "hard_stop": true,
+    "alert_threshold_pct": 80
+  },
+  "retry": {
+    "max_attempts": 2,
+    "backoff": "linear",
+    "initial_delay_ms": 1000,
+    "max_delay_ms": 10000,
+    "retryable_errors": [
+      "timeout",
+      "rate_limit",
+      "network"
+    ]
+  },
+  "escalation": {
+    "on_repeated_failure": "notify_founder",
+    "on_budget_exceeded": "pause_agent",
+    "on_unsafe_content": "human_queue",
+    "notification_channel": "founder_slack"
+  },
+  "audit": {
+    "log_level": "info",
+    "retention_days": 365,
+    "pii_redaction": true,
+    "fields_logged": [
+      "ts",
+      "task_id",
+      "customer_id",
+      "agent_id",
+      "tool",
+      "model",
+      "tokens_in",
+      "tokens_out",
+      "cost_usd",
+      "duration_ms",
+      "outcome",
+      "error_code",
+      "idempotency_key"
+    ]
+  },
+  "runtime": {
+    "max_concurrent_per_customer": 2,
+    "timeout_seconds": 300,
+    "queue_priority": "normal",
+    "max_input_tokens": 16000,
+    "max_steps": 6,
+    "idempotency_key_fields": [
+      "customer_id",
+      "week_id",
+      "topic_hash"
+    ]
+  },
+  "feature_flags": {
+    "require_owner_approval": true,
+    "block_direct_publish": true,
+    "posts_per_month": 4
+  }
+}

@@ -1,0 +1,38 @@
+test_M1_new_month_starts_from_zero (tests.test_regressions_v17.TestRegressionsV17.test_M1_new_month_starts_from_zero) ... ERROR
+test_M2_actual_cost_above_per_call_pauses_the_agent_at_once (tests.test_regressions_v17.TestRegressionsV17.test_M2_actual_cost_above_per_call_pauses_the_agent_at_once) ... FAIL
+test_M3_computed_bound_overrides_a_low_estimate (tests.test_regressions_v17.TestRegressionsV17.test_M3_computed_bound_overrides_a_low_estimate) ... ERROR
+
+======================================================================
+ERROR: test_M1_new_month_starts_from_zero (tests.test_regressions_v17.TestRegressionsV17.test_M1_new_month_starts_from_zero)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/v16pkg/tests/test_regressions_v17.py", line 29, in test_M1_new_month_starts_from_zero
+    r = o.invoke("agent_content", "content:draft", "llm.generate", dict(TASK, topic_hash="h2"), lambda: ("x", 0.03), 0.03)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/v16pkg/tools/enforce.py", line 231, in invoke
+    ts = self._reserve(c, task, st, ag, estimated_cost, tool, key)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/v16pkg/tools/enforce.py", line 154, in _reserve
+    raise Denied("BUDGET_EXCEEDED_AGENT", f"{aid} {ag.spent + ag.reserved:.4f}+{amount}")
+enforce.Denied: BUDGET_EXCEEDED_AGENT agent_content 0.3900+0.03
+
+======================================================================
+ERROR: test_M3_computed_bound_overrides_a_low_estimate (tests.test_regressions_v17.TestRegressionsV17.test_M3_computed_bound_overrides_a_low_estimate)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/v16pkg/tests/test_regressions_v17.py", line 46, in test_M3_computed_bound_overrides_a_low_estimate
+    o.invoke("agent_content", "content:draft", "llm.generate", TASK, lambda: ("x", 0.001), 0.001, input_tokens=8000)
+TypeError: Orchestrator.invoke() got an unexpected keyword argument 'input_tokens'
+
+======================================================================
+FAIL: test_M2_actual_cost_above_per_call_pauses_the_agent_at_once (tests.test_regressions_v17.TestRegressionsV17.test_M2_actual_cost_above_per_call_pauses_the_agent_at_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/v16pkg/tests/test_regressions_v17.py", line 36, in test_M2_actual_cost_above_per_call_pauses_the_agent_at_once
+    self.assertEqual(o.paused.get("agent_content"), "PER_CALL_BREACH")
+AssertionError: None != 'PER_CALL_BREACH'
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.003s
+
+FAILED (failures=1, errors=2)

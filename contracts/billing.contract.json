@@ -1,0 +1,113 @@
+{
+  "agent_id": "agent_billing",
+  "version": "1.0.0",
+  "purpose": "تصنيف إيصالات الدفع ومطابقتها بالفواتير؛ لا يحرّك أموالًا ولا يمنح استردادًا ولا يفعّل اشتراكًا.",
+  "model": {
+    "primary": "gpt-5.4-mini",
+    "fallback": null,
+    "params": {
+      "temperature": 0.0,
+      "max_output_tokens": 256
+    }
+  },
+  "tools": [
+    {
+      "name": "receipt.read",
+      "scope": "read",
+      "side_effects": "none"
+    },
+    {
+      "name": "contract.match",
+      "scope": "read",
+      "side_effects": "none"
+    },
+    {
+      "name": "payment.verify",
+      "scope": "read",
+      "side_effects": "none"
+    },
+    {
+      "name": "invoice.mark_matched",
+      "scope": "write_draft",
+      "side_effects": "internal"
+    }
+  ],
+  "permissions": {
+    "allow": [
+      "receipt:read",
+      "contract:read",
+      "invoice:mark_draft"
+    ],
+    "deny": [
+      "payment:transfer",
+      "payment:refund",
+      "payment:discount",
+      "customer:delete",
+      "secrets:read"
+    ],
+    "proposals": [
+      "invoice:mark_paid",
+      "subscription:activate"
+    ]
+  },
+  "budget": {
+    "budget_class": "monthly_active",
+    "per_call_usd": 0.01,
+    "per_task_usd": 0.02,
+    "class_cap_usd": 0.05,
+    "hard_stop": true,
+    "alert_threshold_pct": 90
+  },
+  "retry": {
+    "max_attempts": 3,
+    "backoff": "exponential",
+    "initial_delay_ms": 1000,
+    "max_delay_ms": 30000,
+    "retryable_errors": [
+      "timeout",
+      "network",
+      "upstream_5xx"
+    ]
+  },
+  "escalation": {
+    "on_repeated_failure": "notify_founder",
+    "on_budget_exceeded": "abort",
+    "on_unsafe_content": "abort",
+    "notification_channel": "founder_slack"
+  },
+  "audit": {
+    "log_level": "verbose",
+    "retention_days": 730,
+    "pii_redaction": true,
+    "fields_logged": [
+      "ts",
+      "task_id",
+      "customer_id",
+      "agent_id",
+      "tool",
+      "model",
+      "tokens_in",
+      "tokens_out",
+      "cost_usd",
+      "duration_ms",
+      "outcome",
+      "error_code",
+      "idempotency_key"
+    ]
+  },
+  "runtime": {
+    "max_concurrent_per_customer": 1,
+    "timeout_seconds": 30,
+    "queue_priority": "critical",
+    "max_input_tokens": 6000,
+    "max_steps": 3,
+    "idempotency_key_fields": [
+      "receipt_id",
+      "invoice_id"
+    ]
+  },
+  "feature_flags": {
+    "require_human_on_mismatch": true,
+    "block_auto_activate": true
+  }
+}

@@ -15,6 +15,7 @@ check each step. Seeding is idempotent and uses a fixed staging tenant; every ru
   5. the owner approves                   -> outbox consumes the approval once, the reply is sent, task succeeded
   6. the delivery receipt webhook         -> routed, processed, task succeeded
   7. audit: enqueue by the leased agent and the owner's decision, in the chain
+  8. GET /deps (external monitor): numbers only, and after this run nothing but a never-run purge may fail
 """
 from __future__ import annotations
 import hashlib, hmac, json, os, socket, subprocess, sys, time, urllib.error, urllib.request, uuid
@@ -179,6 +180,15 @@ def main():
                         (f"%E2E.{run}%",))[0][0]
         check(unprocessed == 0, "every event of this run processed")
         check(not q("select 1 from app.audit_verify()"), "audit chain intact")
+        try:
+            with urllib.request.urlopen(url + "/deps", timeout=10) as r:
+                code, deps = r.status, json.load(r)
+        except urllib.error.HTTPError as e:
+            code, deps = e.code, json.load(e)
+        signals = {"retention_age_seconds", "overdue_bodies", "outbox_attention", "webhook_backlog", "webhook_unrouted"}
+        check(set(deps) == {"status", "failing"} | signals and all(deps[k] is None or isinstance(deps[k], int) for k in signals)
+              and (code == 200) == (deps["failing"] == []), f"/deps answers with numbers only ({code} {deps.get('failing')})")
+        check(not set(deps.get("failing", ["?"])) - {"retention_stale"}, "/deps: no backlog after the run (a fresh database never purged)")
     finally:
         if proc:
             proc.terminate(); proc.wait(10)

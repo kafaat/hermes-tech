@@ -2,6 +2,7 @@ import sys, unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from service.telemetry import sanitize_span, SanitizingExporter, MAPPING
+from service.health import SIGNALS, assess
 
 
 class Sink:
@@ -40,6 +41,29 @@ class TestTelemetry(unittest.TestCase):
         (s,), = sink.batches
         self.assertEqual(s["attributes"], {"error.type": "TimeoutError"})
         self.assertNotIn("exception_message", s)
+
+
+class TestDepsAssessment(unittest.TestCase):
+    """GET /deps: what an external uptime monitor sees (numbers from app.health_signals(), SQL case 47)."""
+    OK = {"retention_age_seconds": 3600, "overdue_bodies": 0, "outbox_attention": 0, "webhook_backlog": 0, "webhook_unrouted": 3}
+
+    def test_healthy_signals_are_200_and_carry_numbers_only(self):
+        status, body = assess(self.OK)
+        self.assertEqual((status, body["status"], body["failing"]), (200, "ok", []))
+        self.assertEqual(set(body), {"status", "failing", *SIGNALS})
+        self.assertTrue(all(isinstance(body[k], int) for k in SIGNALS))
+
+    def test_a_missed_or_never_run_purge_fails_after_26_hours(self):
+        self.assertEqual(assess({**self.OK, "retention_age_seconds": 26 * 3600})[0], 200)
+        for age in (26 * 3600 + 1, None):
+            status, body = assess({**self.OK, "retention_age_seconds": age})
+            self.assertEqual((status, body["failing"]), (503, ["retention_stale"]))
+
+    def test_each_backlog_fails_by_name_and_unrouted_events_never_do(self):
+        for key in ("overdue_bodies", "outbox_attention", "webhook_backlog"):
+            status, body = assess({**self.OK, key: 1})
+            self.assertEqual((status, body["status"], body["failing"]), (503, "degraded", [key]))
+        self.assertEqual(assess({**self.OK, "webhook_unrouted": 500})[0], 200)
 
 
 if __name__ == "__main__":

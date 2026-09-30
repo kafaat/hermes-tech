@@ -40,7 +40,7 @@ bash db/tests/run_local.sh             # أول بوابة قبل التجربة
 ### الخدمة والمسار الكامل (P1، القسم 28 من المواصفة)
 ```bash
 pip install --require-hashes -r requirements-service.txt      # مشغّل Postgres بقفل ببصمات
-DATABASE_URL=... python db/tests/e2e_pilot.py                 # يشغّل service.app ويقود المسار كاملًا عبر HTTP (26 فحصًا)
+DATABASE_URL=... python db/tests/e2e_pilot.py                 # يشغّل service.app ويقود المسار كاملًا عبر HTTP (28 فحصًا)
 DATABASE_URL=... HERMES_WEBHOOK_SECRETS=... HERMES_GRAPH=simulate python -m service.app   # نقطة webhook + العامل
 ```
 قبلها تُطبَّق الترحيلات (db/tests/run_isolation.sh أو ops/railway/migrate.sh). واجهة Graph محاكاة؛ الخدمة ترفض أي وضع آخر.

@@ -4,6 +4,7 @@ unless stated; the scheduler (orchestrator timer) records every run and an alert
   inquiry_body_30d   daily   hermes_jobs    select app.purge_inquiry_bodies()   (claim C4.7; SQL case 45)
   audit_checkpoint   daily   service_role   tools/audit_checkpoint.py append     (claim A15b)
   outbox_attention   5 min   operator view  app.v_outbox_attention -> alert when non-empty
+Between runs, GET /deps on hermes-app (app.health_signals(), 0011) reports a missed purge and every backlog.
 """
 from __future__ import annotations
 import os, sys

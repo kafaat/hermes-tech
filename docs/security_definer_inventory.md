@@ -40,7 +40,12 @@
 
 دوال 0010 بصلاحيات المستدعي عمدًا (تسري عليها حدود مستأجر المستدعي وصلاحيات أعمدته): `app.enqueue_outbox`، و`app.claim_outbox_dispatch`، و`app.finish_outbox_dispatch`، و`app.reconcile_outbox_sent`، و`app.resolve_outbox` (مشغّل aal2)، و`app.purge_inquiry_bodies` (دور hermes_jobs)، ومحفّزا `webhook_route` و`webhook_enqueue` (دور hermes_ingest)، و`app.approvals_before_write` (يتحقق أن الاستهلاك ينفّذه مالك الجدول، أي محفّز الصندوق الصادر وحده).
 
-## جرد استثناءات FORCE (مصدر واحد؛ يطابقه المتحقق مع الحالة النهائية للترحيلات، والحالة 46 مع الكتالوج)
+## أُضيفت بعد 1.8 (الترحيل 0011)
+
+| الدالة | تقرأ | لماذا بصلاحيات المالك | من ينفّذها | الحماية | الاختبار |
+|---|---|---|---|---|---|
+| `app.health_signals()` | أعمدة الأوقات والأعلام في `retention_runs` و`inquiries` و`outbox` و`webhook_events` | المراقب الخارجي يحتاج أعدادًا عبر كل العملاء ولا يجوز أن يقرأ صفًا | hermes_monitor فقط | مالكها `hermes_monitor_reader` لا مالك الترحيلات: بلا دخول، بلا كتابة، منح أعمدة وسياسات ضيقة، ولا CREATE على المخطط؛ تعيد صفًا واحدًا من الأعداد | 47 |
+ (مصدر واحد؛ يطابقه المتحقق مع الحالة النهائية للترحيلات، والحالة 46 مع الكتالوج)
 
 FORCE-EXCEPTIONS: approvals, audit_log, customer_users, operators, outbox_topics, task_leases, tasks
 

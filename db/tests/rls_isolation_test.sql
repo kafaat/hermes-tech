@@ -909,7 +909,7 @@ do $$ declare got text; bad text; begin
   if bad is not null then raise exception 'FAIL app functions executable by PUBLIC: %', bad; end if;
   select string_agg(p.proname, ',' order by p.proname collate "C") into got from pg_proc p
    where p.pronamespace = 'app'::regnamespace and p.prosecdef;
-  if got is distinct from 'audit_chain,audit_effect,audit_head,audit_verify,bind_task,claim_task,complete_task,current_user_customer_ids,extend_task_lease,is_operator,jwt_aal,outbox_before_write,requeue_task,worker_context,worker_customer_id' then raise exception 'FAIL definer functions differ from the inventory: %', got; end if;
+  if got is distinct from 'audit_chain,audit_effect,audit_head,audit_verify,bind_task,claim_task,complete_task,current_user_customer_ids,extend_task_lease,health_signals,is_operator,jwt_aal,outbox_before_write,requeue_task,worker_context,worker_customer_id' then raise exception 'FAIL definer functions differ from the inventory: %', got; end if;
   select string_agg(p.proname, ',') into bad from pg_proc p where p.pronamespace = 'app'::regnamespace and p.prosecdef
      and not exists (select 1 from unnest(coalesce(p.proconfig, '{}'::text[])) c where c like 'search_path=%');
   if bad is not null then raise exception 'FAIL definer functions without a pinned search_path: %', bad; end if;
@@ -917,7 +917,8 @@ do $$ declare got text; bad text; begin
 
   select string_agg(format('%s:%s:%s', r.rolname, c.relname, p.pr), ',') into bad
     from pg_class c
-    cross join (values ('hermes_worker'), ('authenticated'), ('hermes_ingest'), ('hermes_jobs')) r(rolname)
+    cross join (values ('hermes_worker'), ('authenticated'), ('hermes_ingest'), ('hermes_jobs'), ('hermes_monitor'),
+                      ('hermes_monitor_reader')) r(rolname)
     cross join (values ('DELETE'), ('TRUNCATE')) p(pr)
    where c.relnamespace = 'app'::regnamespace and c.relkind = 'r' and has_table_privilege(r.rolname, c.oid, p.pr);
   if bad is not null then raise exception 'FAIL delete/truncate held by an application role: %', bad; end if;
@@ -935,11 +936,11 @@ do $$ declare got text; bad text; begin
     raise exception 'FAIL a broad privilege survived the column-level narrowing';
   end if;
   select string_agg(rolname, ',') into bad from pg_roles
-   where rolname in ('hermes_worker', 'hermes_ingest', 'hermes_jobs', 'authenticated') and (rolsuper or rolbypassrls);
+   where rolname in ('hermes_worker', 'hermes_ingest', 'hermes_jobs', 'hermes_monitor', 'hermes_monitor_reader', 'authenticated') and (rolsuper or rolbypassrls);
   if bad is not null then raise exception 'FAIL application role with superuser or bypassrls: %', bad; end if;
   select string_agg(r.rolname || '->' || g.rolname, ',') into bad from pg_auth_members m
     join pg_roles r on r.oid = m.member join pg_roles g on g.oid = m.roleid
-   where r.rolname in ('hermes_worker', 'hermes_ingest', 'hermes_jobs', 'authenticated');
+   where r.rolname in ('hermes_worker', 'hermes_ingest', 'hermes_jobs', 'hermes_monitor', 'hermes_monitor_reader', 'authenticated');
   if bad is not null then raise exception 'FAIL application role inherits another role: %', bad; end if;
   raise notice 'PASS no broad or inherited privilege survives';
 
@@ -951,6 +952,54 @@ do $$ declare got text; bad text; begin
      and coalesce(qual, '') || coalesce(with_check, '') !~ 'worker_(customer_id|context)';
   if bad is not null then raise exception 'FAIL worker policy not bound to a lease: %', bad; end if;
   raise notice 'PASS every worker policy is bound to a lease';
+end $$;
+-- 47. the external monitor gets numbers, never rows: its role holds EXECUTE on one function and nothing else, and
+--     the function's owner reads timestamps and flags only (0011)
+do $$ declare bad text; begin
+  select string_agg(c.relname, ',') into bad from pg_class c
+   where c.relnamespace = 'app'::regnamespace and c.relkind in ('r', 'v', 'm')
+     and (has_table_privilege('hermes_monitor', c.oid, 'SELECT') or has_any_column_privilege('hermes_monitor', c.oid, 'SELECT'));
+  if bad is not null then raise exception 'FAIL monitor role can read relations: %', bad; end if;
+  select string_agg(p.proname, ',') into bad from pg_proc p
+   where p.pronamespace = 'app'::regnamespace and p.proname <> 'health_signals' and has_function_privilege('hermes_monitor', p.oid, 'EXECUTE');
+  if bad is not null then raise exception 'FAIL monitor role executes more than health_signals: %', bad; end if;
+  if (select pg_get_userbyid(proowner) from pg_proc where oid = 'app.health_signals()'::regprocedure) <> 'hermes_monitor_reader' then
+    raise exception 'FAIL health_signals is not owned by the reader role';
+  end if;
+  select string_agg(format('%s.%s', c.relname, a.attname), ',') into bad from pg_class c join pg_attribute a on a.attrelid = c.oid
+   where c.relnamespace = 'app'::regnamespace and a.attnum > 0 and not a.attisdropped
+     and has_column_privilege('hermes_monitor_reader', c.oid, a.attnum, 'SELECT')
+     and format('%s.%s', c.relname, a.attname) not in ('retention_runs.job', 'retention_runs.ran_at', 'inquiries.received_at',
+       'inquiries.body_purged_at', 'outbox.dispatched_at', 'outbox.failed_at', 'outbox.needs_human_check', 'outbox.sending_until',
+       'webhook_events.customer_id', 'webhook_events.signature_valid', 'webhook_events.received_at', 'webhook_events.processed_at');
+  if bad is not null then raise exception 'FAIL reader role reads columns beyond timestamps and flags: %', bad; end if;
+  select string_agg(format('%s:%s', c.relname, p.pr), ',') into bad from pg_class c
+   cross join (values ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE')) p(pr)
+   where c.relnamespace = 'app'::regnamespace and c.relkind = 'r' and has_table_privilege('hermes_monitor_reader', c.oid, p.pr);
+  if bad is not null then raise exception 'FAIL reader role can write: %', bad; end if;
+  if has_schema_privilege('hermes_monitor_reader', 'app', 'CREATE') then raise exception 'FAIL reader role kept CREATE on app'; end if;
+  select string_agg(rolname, ',') into bad from pg_roles where rolname in ('hermes_monitor', 'hermes_monitor_reader') and rolcanlogin;
+  if bad is not null then raise exception 'FAIL monitor roles can log in: %', bad; end if;
+  raise notice 'PASS the monitor role holds one function; its owner reads timestamps and flags only';
+end $$;
+set local role hermes_monitor;
+do $$ declare s record; begin
+  begin
+    perform 1 from app.outbox limit 1;
+    raise exception 'FAIL monitor role read a table';
+  exception when insufficient_privilege then null;
+  end;
+  select * into s from app.health_signals();
+  if s.retention_age_seconds is null or s.retention_age_seconds > 60 then raise exception 'FAIL retention age % after case 45', s.retention_age_seconds; end if;
+  if s.overdue_bodies <> 0 then raise exception 'FAIL overdue bodies after the purge: %', s.overdue_bodies; end if;
+  if s.outbox_attention is null or s.webhook_backlog is null or s.webhook_unrouted is null then raise exception 'FAIL null signal'; end if;
+end $$;
+reset role;
+do $$ begin
+  if (select count(*) from app.v_outbox_attention) <> (select outbox_attention from app.health_signals()) then
+    raise exception 'FAIL outbox_attention differs from v_outbox_attention';
+  end if;
+  raise notice 'PASS the monitor gets numbers from one function, agreeing with the operator view, and cannot read a row';
 end $$;
 do $$ declare o text; begin
   select format('owner=%s superuser=%s bypassrls=%s', r.rolname, r.rolsuper, r.rolbypassrls) into o

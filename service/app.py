@@ -10,7 +10,7 @@ The worker runs in a thread as hermes_worker. It accepts connections; it opens n
 HERMES_GRAPH must be "simulate" until a real client exists, and anything else refuses to start).
 """
 from __future__ import annotations
-import json, logging, os, sys, threading
+import json, logging, os, signal, sys, threading
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qsl, urlsplit
@@ -86,10 +86,22 @@ def main():
     webhook = Handler(secrets, Ingest(Database(url, "hermes_ingest")))
     worker = Worker(Database(url, "hermes_worker"), worker_name(), simulated_adapters(),
                     approval_poll_seconds=int(os.environ.get("HERMES_APPROVAL_POLL_SECONDS", "60")))
-    threading.Thread(target=worker.loop, name="worker", daemon=True).start()
+    stop = threading.Event()
+    worker_thread = threading.Thread(target=worker.loop, kwargs={"stop": stop}, name="worker", daemon=True)
+    worker_thread.start()
     port = int(os.environ.get("PORT", "8080"))
+    server = ThreadingHTTPServer(("0.0.0.0", port), make_http_handler(webhook, os.environ.get("HERMES_VERIFY_TOKEN", "")))
+
+    def on_term(signum, frame):                    # Railway sends SIGTERM, then SIGKILL after drainingSeconds: stop taking
+        log.info("SIGTERM: draining")               # requests, let the current task finish (its lease covers a kill anyway)
+        stop.set()
+        threading.Thread(target=server.shutdown, daemon=True).start()   # shutdown() blocks; never call it on this thread
+    signal.signal(signal.SIGTERM, on_term)
     log.info("listening on %s", port)
-    ThreadingHTTPServer(("0.0.0.0", port), make_http_handler(webhook, os.environ.get("HERMES_VERIFY_TOKEN", ""))).serve_forever()
+    server.serve_forever()
+    server.server_close()
+    worker_thread.join(25)
+    log.info("stopped%s", " (worker still busy)" if worker_thread.is_alive() else "")
 
 
 if __name__ == "__main__":

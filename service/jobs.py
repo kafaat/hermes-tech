@@ -31,8 +31,9 @@ def main(argv=None):
     if job not in JOBS or " " in JOBS[job]["role"]:
         sys.exit(f"usage: python -m service.jobs <{'|'.join(j for j, s in JOBS.items() if ' ' not in s['role'])}>")
 
-    def execute(role, query):
-        with psycopg.connect(os.environ["DATABASE_URL"]) as conn, conn.cursor() as cur:
+    def execute(role, query):                        # Railway cron never kills a hung run and skips the next one while
+        with psycopg.connect(os.environ["DATABASE_URL"], connect_timeout=10,   # it is active: bound every wait here
+                             options="-c statement_timeout=300000 -c lock_timeout=30000") as conn, conn.cursor() as cur:
             cur.execute(sql.SQL("set local role {}").format(sql.Identifier(role)))
             cur.execute(query)
             return cur.fetchall()

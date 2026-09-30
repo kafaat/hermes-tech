@@ -137,7 +137,10 @@ class Worker:
     def loop(self, idle_seconds: float = 2.0, stop=None):
         while stop is None or not stop.is_set():
             if self.run_once() is None:
-                time.sleep(idle_seconds)
+                if stop is None:
+                    time.sleep(idle_seconds)
+                else:
+                    stop.wait(idle_seconds)          # SIGTERM wakes the idle wait; a task in hand finishes first
 
     def handle(self, t: Task) -> str:
         with self.db.tx(t.bind) as cur:

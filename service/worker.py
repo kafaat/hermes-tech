@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 from complaints import Matcher, normalize  # noqa: E402
 from content_guard import ContentGuard  # noqa: E402
 
-from service.dispatcher import SENT, Dispatcher, WhatsAppCloudAdapter  # noqa: E402
+from service.dispatcher import SEND_TIMEOUT_SECONDS, SENT, Dispatcher, WhatsAppCloudAdapter  # noqa: E402
 
 log = logging.getLogger("hermes.worker")
 AGENT = "agent_triage"
@@ -74,7 +74,7 @@ class SimulatedGraph:
     def __call__(self, url, body, headers, timeout):
         wamid = "wamid.SIM." + uuid.uuid4().hex
         self.sent.append({"url": url, "to": body.get("to"), "id": wamid})
-        accepted(wamid, self.delay)
+        accepted(wamid, self.delay, timeout=timeout)
         return 200, {"messages": [{"id": wamid}]}
 
 
@@ -85,14 +85,18 @@ class SimulatedOwnerNotice:
     def send(self, row):
         ref = "notice.SIM." + uuid.uuid4().hex
         self.sent.append({"customer_id": row["customer_id"], "payload": row["payload"], "id": ref})
-        accepted(ref, self.delay, row.get("id"))
+        accepted(ref, self.delay, row.get("id"), SEND_TIMEOUT_SECONDS)
         return ref
 
 
-def accepted(ref: str, delay: float, outbox_id=None):
-    """The simulated provider has the message from here on: logged BEFORE the reply is delayed, so a sender killed
-    during the delay leaves exactly the real ambiguity (delivered, sender never told), and the log counts deliveries."""
+def accepted(ref: str, delay: float, outbox_id=None, timeout: float | None = None):
+    """The simulated provider has the message from here on: logged BEFORE the reply is delayed, so a sender stopped
+    during the delay leaves exactly the real ambiguity (delivered, sender never told), and the log counts deliveries.
+    Like a real client, the sender stops waiting at its timeout: a reply later than that never reaches it."""
     log.info("sim-provider accepted %s outbox=%s", ref, outbox_id)
+    if delay and timeout is not None and delay > timeout:
+        time.sleep(timeout)
+        raise TimeoutError(f"no reply within {timeout} s")
     if delay:
         time.sleep(delay)
 

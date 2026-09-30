@@ -16,6 +16,8 @@ import psycopg
 from psycopg import sql
 from psycopg.types.json import Jsonb
 
+from service.dispatcher import DISPATCH_LEASE_SECONDS
+
 
 class Database:
     def __init__(self, url: str, role: str):
@@ -61,7 +63,7 @@ class OutboxPort:
             return cur.fetchone()[0]
 
     def claim(self, outbox_id):
-        tok = self._one("select app.claim_outbox_dispatch(%s, 120)", (outbox_id,))
+        tok = self._one("select app.claim_outbox_dispatch(%s, %s)", (outbox_id, DISPATCH_LEASE_SECONDS))
         return str(tok) if tok else None
 
     def row(self, outbox_id):

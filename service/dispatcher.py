@@ -17,6 +17,13 @@ from typing import Protocol
 
 SENT, FAILED_PERMANENT, FAILED_BEFORE_SEND, AMBIGUOUS = "sent", "failed_permanent", "failed_before_send", "ambiguous"
 
+# Every send is bounded, and the bound sits inside every lease and shutdown window around it. A send that outlived
+# its leases would return the provider's id to a worker the database no longer lets write (fencing), and the
+# id would be lost (staging rehearsal, spec 28.7): SEND_TIMEOUT < app shutdown wait (25 s) < Railway drain (30 s),
+# and SEND_TIMEOUT < dispatch lease and task lease. tests/test_service_dispatcher.py holds the chain.
+SEND_TIMEOUT_SECONDS = 15
+DISPATCH_LEASE_SECONDS = 120
+
 
 class BeforeSend(Exception):
     """The request did not leave this host (or the provider says it did not accept it)."""
@@ -108,7 +115,8 @@ class WhatsAppCloudAdapter:
         p = row["payload"]
         url = f"https://graph.facebook.com/{self.api_version}/{p['phone_number_id']}/messages"
         body = {"messaging_product": "whatsapp", "to": p["to"], "type": "text", "text": {"body": p["body"]}}
-        status, data = self.post(url, body, {"Authorization": f"Bearer {self.token_for_customer(row['customer_id'])}"}, 15)
+        status, data = self.post(url, body, {"Authorization": f"Bearer {self.token_for_customer(row['customer_id'])}"},
+                                 SEND_TIMEOUT_SECONDS)
         if 200 <= status < 300:
             try:
                 return str(data["messages"][0]["id"])

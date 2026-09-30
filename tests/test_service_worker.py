@@ -58,9 +58,19 @@ class TestSimulatedSendDelay(unittest.TestCase):
         order = []
         with mock.patch.object(worker.log, "info", side_effect=lambda *a: order.append("accepted")), \
              mock.patch.object(worker.time, "sleep", side_effect=lambda s: order.append(f"sleep {s}")):
-            ref = worker.SimulatedOwnerNotice(delay=60).send({"id": 7, "customer_id": "c", "payload": {}})
-        self.assertEqual(order, ["accepted", "sleep 60"])
+            ref = worker.SimulatedOwnerNotice(delay=5).send({"id": 7, "customer_id": "c", "payload": {}})
+        self.assertEqual(order, ["accepted", "sleep 5"])
         self.assertTrue(ref.startswith("notice.SIM."))
+
+    def test_a_reply_later_than_the_send_timeout_never_reaches_the_sender(self):
+        order = []
+        with mock.patch.object(worker.log, "info", side_effect=lambda *a: order.append("accepted")), \
+             mock.patch.object(worker.time, "sleep", side_effect=lambda s: order.append(f"sleep {s}")):
+            with self.assertRaises(TimeoutError):                 # after the provider accepted: AMBIGUOUS, not before-send
+                worker.SimulatedOwnerNotice(delay=150).send({"id": 7, "customer_id": "c", "payload": {}})
+            with self.assertRaises(TimeoutError):
+                worker.SimulatedGraph(delay=150)("u", {"to": "x"}, {}, 15)
+        self.assertEqual(order, ["accepted", "sleep 15", "accepted", "sleep 15"])
 
     def test_no_delay_by_default_and_none_outside_simulation(self):
         with mock.patch.dict(os.environ, {"HERMES_GRAPH": "simulate", "HERMES_SIM_SEND_DELAY_SECONDS": ""}):

@@ -27,7 +27,8 @@ from service.webhook import MAX_BODY_BYTES, Handler, verify_subscription
 from service.worker import Worker, simulated_adapters, worker_name
 
 log = logging.getLogger("hermes.app")
-COMMIT = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "")          # lets a caller wait for THIS build, not the previous one
+COMMIT = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "")
+SHUTDOWN_WAIT_SECONDS = 25        # for the task in hand after SIGTERM: above a send's timeout, below Railway's drain (30 s)          # lets a caller wait for THIS build, not the previous one
 
 
 def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | None = None, monitor_token: str = ""):
@@ -123,7 +124,7 @@ def main():
     log.info("listening on %s", port)
     server.serve_forever()
     server.server_close()
-    worker_thread.join(25)
+    worker_thread.join(SHUTDOWN_WAIT_SECONDS)
     log.info("stopped%s", " (worker still busy)" if worker_thread.is_alive() else "")
 
 

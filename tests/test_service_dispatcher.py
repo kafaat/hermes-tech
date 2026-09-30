@@ -133,5 +133,33 @@ class TestDispatcher(unittest.TestCase):
             self.assertIn(f"'{code}'", sql, code)
 
 
+class TestSendBoundsInsideLeases(unittest.TestCase):
+    """A send that outlives its leases returns the provider's id to a worker the database no longer lets write
+    (fencing), and the id is lost (staging rehearsal, spec 28.7). The chain that prevents it."""
+
+    def test_the_send_timeout_sits_inside_every_lease_and_shutdown_window(self):
+        import inspect, re
+        from service import dispatcher
+        from service.worker import Worker
+        root = Path(__file__).resolve().parent.parent
+        shutdown = int(re.search(r"^SHUTDOWN_WAIT_SECONDS = (\d+)", (root / "service/app.py").read_text(encoding="utf-8"), re.M).group(1))
+        task_lease = inspect.signature(Worker.__init__).parameters["lease_seconds"].default
+        railway_drain = 30                                    # drainingSeconds on hermes-app (spec 28.7)
+        self.assertLess(dispatcher.SEND_TIMEOUT_SECONDS, shutdown)
+        self.assertLess(shutdown, railway_drain)
+        self.assertLess(2 * dispatcher.SEND_TIMEOUT_SECONDS, dispatcher.DISPATCH_LEASE_SECONDS)
+        self.assertLess(2 * dispatcher.SEND_TIMEOUT_SECONDS, task_lease)
+        self.assertIn("claim_outbox_dispatch(%s, %s)", (root / "service/pg.py").read_text(encoding="utf-8"))
+
+    def test_the_whatsapp_adapter_passes_the_bound(self):
+        seen = {}
+        def post(url, body, headers, timeout):
+            seen["timeout"] = timeout
+            return 200, {"messages": [{"id": "wamid.X"}]}
+        from service.dispatcher import SEND_TIMEOUT_SECONDS, WhatsAppCloudAdapter
+        WhatsAppCloudAdapter(post, lambda c: "t").send({"customer_id": "c", "payload": {"phone_number_id": "p", "to": "1", "body": "b"}})
+        self.assertEqual(seen["timeout"], SEND_TIMEOUT_SECONDS)
+
+
 if __name__ == "__main__":
     unittest.main()

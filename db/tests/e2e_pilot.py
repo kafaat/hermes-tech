@@ -245,7 +245,8 @@ def main():
         check(status == 303 and where == "/portal/ops?done=resolved", "operator console: resend with a reason is accepted")
         check(bool(wait("resend sent", lambda: q("select 1 from app.outbox where id = %s and dispatched_at is not null", (ob,)))),
               "operator resend -> the worker sent the row again")
-        check(bool(q("select 1 from app.tasks where idempotency_key like %s and status = 'succeeded'", (f"resend:{ob}:%",))),
+        check(bool(wait("resend task done", lambda: q("select 1 from app.tasks where idempotency_key like %s and status = 'succeeded'",
+                                                        (f"resend:{ob}:%",)))),       # sent first, completed in the next transaction
               "operator resend -> its task succeeded")
 
         from service import competitor

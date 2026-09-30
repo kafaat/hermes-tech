@@ -170,7 +170,7 @@ hermes-tech/
 ├── service/              __init__.py · app.py · crawler.py · dispatcher.py · jobs.py · outbox_model.py · pg.py · redact.py · render.py · telemetry.py · webhook.py · worker.py
 ├── tests/                28 modules (inventory in §15.2)
 ├── evals/                complaints_seed.jsonl · content_guard_golden.jsonl · model_admission.json
-├── docs/                 18 documents · adr/ (10 decisions)
+├── docs/                 18 documents · adr/ (11 decisions)
 ├── derived/              policy_matrix.md · agent_capabilities.json · alerts.yaml   (generated)
 ├── ops/                  runbook · incident_template · slo.yaml · otel_genai_mapping.yaml · restore_drill.md
 │                         redteam/ · load/k6_webhook.js · hermes_agent/ (compose · squid · check_container · host_watch)

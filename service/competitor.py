@@ -90,15 +90,17 @@ def check(fetcher: Fetcher, comp: dict) -> dict:
     except FetchRefused as exc:
         code = str(exc.args[0]) if exc.args else "REFUSED"
         if code in BLOCKED_CODES:
-            return {**snap, "status": "blocked", "diff_summary": BLOCKED_CODES[code]}
+            return {**snap, "status": "blocked", "reason": code, "diff_summary": BLOCKED_CODES[code]}
         if code in TEMPORARY_CODES:
-            return {**snap, "status": "unverifiable", "diff_summary": TEMPORARY_CODES[code]}
-        return {**snap, "status": "unverifiable", "diff_summary": f"تعذّر جلب الصفحة ({code}). يُعاد الفحص في موعده التالي."}
+            return {**snap, "status": "unverifiable", "reason": code, "diff_summary": TEMPORARY_CODES[code]}
+        return {**snap, "status": "unverifiable", "reason": code,
+                "diff_summary": f"تعذّر جلب الصفحة ({code}). يُعاد الفحص في موعده التالي."}
     except Exception as exc:                               # noqa: BLE001 - network, TLS, timeouts
-        return {**snap, "status": "unverifiable",
+        return {**snap, "status": "unverifiable", "reason": type(exc).__name__,
                 "diff_summary": f"تعذّر الوصول إلى الموقع ({type(exc).__name__}). يُعاد الفحص في موعده التالي."}
     if page.status != 200:
-        return {**snap, "status": "unverifiable", "diff_summary": f"أعاد الموقع الحالة {page.status}. يُعاد الفحص في موعده التالي."}
+        return {**snap, "status": "unverifiable", "reason": f"HTTP_{page.status}",
+                "diff_summary": f"أعاد الموقع الحالة {page.status}. يُعاد الفحص في موعده التالي."}
     ph = text_hash(page.body)
     facts = extract(page.body)
     if not facts:
@@ -106,27 +108,32 @@ def check(fetcher: Fetcher, comp: dict) -> dict:
             summary = "تغيّر نص الصفحة منذ الفحص السابق، ولا يمكن معرفة ما تغيّر آليًا. " + NO_FACTS
         else:
             summary = NO_FACTS
-        return {**snap, "status": "unverifiable", "page_hash": ph, "diff_summary": summary}
+        return {**snap, "status": "unverifiable", "reason": "NO_STRUCTURED_DATA", "page_hash": ph, "diff_summary": summary}
     last = comp.get("last_facts")
     if not last:
         summary = _first(facts)
     else:
         changes = diff(last, facts)
         summary = summarize(changes) if changes else "لا تغيير في القائمة والأسعار والساعات والتقييم منذ الفحص السابق."
-    return {**snap, "status": "ok", "content_hash": content_hash(facts), "structured_facts": facts, "page_hash": ph,
+    return {**snap, "status": "ok", "reason": "CHANGED" if last and diff(last, facts) else ("FIRST" if not last else "UNCHANGED"),
+            "content_hash": content_hash(facts), "structured_facts": facts, "page_hash": ph,
             "diff_summary": summary}
 
 
-def run(store: Store, fetcher: Fetcher, limit: int = MAX_PER_RUN) -> dict:
+def run(store: Store, fetcher: Fetcher, limit: int = MAX_PER_RUN, report=None) -> dict:
+    """Counts per state. report(competitor_id, state, reason) gets one line per competitor: an id and a code, no
+    page content, so a failed run says why in the job's own log."""
     counts = {"ok": 0, "unverifiable": 0, "blocked": 0, "refused": 0, "error": 0}
     for comp in store.due(limit):
         try:
             snap = check(fetcher, comp)
-            if store.insert(snap):
-                counts[snap["status"]] += 1
-            else:
-                counts["refused"] += 1
+            state = snap["status"] if store.insert(snap) else "refused"
+            counts[state] += 1
+            reason = snap.get("reason", "")
         except Exception as exc:                           # noqa: BLE001 - our side failed; the next competitor still runs
             counts["error"] += 1
-            log.error("competitor check failed: %s", type(exc).__name__)
+            state, reason = "error", type(exc).__name__
+            log.error("competitor check failed: %s", reason)
+        if report:
+            report(comp["id"], state, reason)
     return counts

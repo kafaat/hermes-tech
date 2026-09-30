@@ -101,6 +101,22 @@ class TestRun(unittest.TestCase):
         store = Store(comps, refuse={"c2"})
         self.assertEqual(run(store, Fetcher(P(200, PAGE))), {"ok": 2, "unverifiable": 0, "blocked": 0, "refused": 1, "error": 0})
 
+    def test_each_competitor_reports_an_id_a_state_and_a_code_only(self):
+        lines = []
+        comps = [{**COMP, "id": "c0"}, {**COMP, "id": "c1"}]
+
+        class Two:
+            def __init__(self):
+                self.results = [P(200, PAGE), FetchRefused("UNRESOLVED")]
+
+            def fetch(self, url):
+                r = self.results.pop(0)
+                if isinstance(r, BaseException):
+                    raise r
+                return r
+        run(Store(comps), Two(), report=lambda *a: lines.append(a))
+        self.assertEqual(lines, [("c0", "ok", "FIRST"), ("c1", "unverifiable", "UNRESOLVED")])
+
     def test_a_failure_on_our_side_does_not_stop_the_rest(self):
         class Flaky(Store):
             def insert(self, snap):

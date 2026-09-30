@@ -44,7 +44,9 @@ def main(argv=None):
         from service import competitor
         from service.crawler import Crawler
         from service.pg import CompetitorDb, Database
-        print(f"{job}: {competitor.run(CompetitorDb(Database(os.environ['DATABASE_URL'], JOBS[job]['role'])), Crawler())}")
+        counts = competitor.run(CompetitorDb(Database(os.environ["DATABASE_URL"], JOBS[job]["role"])), Crawler(),
+                                report=lambda cid, state, reason: print(f"{job}: competitor {cid} {state} {reason}"))
+        print(f"{job}: {counts}")
         return
     rows = run(job, execute)
     print(f"{job}: {rows}")

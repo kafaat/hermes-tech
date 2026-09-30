@@ -117,6 +117,15 @@ class TestRun(unittest.TestCase):
         run(Store(comps), Two(), report=lambda *a: lines.append(a))
         self.assertEqual(lines, [("c0", "ok", "FIRST"), ("c1", "unverifiable", "UNRESOLVED")])
 
+    def test_a_refusal_with_a_detail_still_maps_to_its_state_and_never_logs_the_host(self):
+        s = check(Fetcher(FetchRefused("ROBOTS_UNREADABLE", "TimeoutError")), COMP)
+        self.assertEqual((s["status"], s["reason"]), ("unverifiable", "ROBOTS_UNREADABLE:TimeoutError"))
+        self.assertIn("robots.txt", s["diff_summary"])
+        s = check(Fetcher(FetchRefused("UNRESOLVED", "example-restaurant.test")), COMP)
+        self.assertEqual(s["reason"], "UNRESOLVED")
+        s = check(Fetcher(FetchRefused("ROBOTS_DISALLOW", "/private")), COMP)
+        self.assertEqual((s["status"], s["reason"]), ("blocked", "ROBOTS_DISALLOW"))
+
     def test_a_failure_on_our_side_does_not_stop_the_rest(self):
         class Flaky(Store):
             def insert(self, snap):

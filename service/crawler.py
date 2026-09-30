@@ -86,7 +86,17 @@ class Crawler:
         current, hops = url, 0
         while True:
             plan = safe_fetch.plan(current, self.resolver)
-            status, headers, body = _parse(self.connector(plan, _request(current, plan["host"])), plan["max_bytes"])
+            raw, last = None, None
+            for addr in plan.get("addresses", [plan["connect_to"]]):   # every address was validated by plan()
+                try:
+                    raw = self.connector({**plan, "connect_to": addr}, _request(current, plan["host"]))
+                    plan = {**plan, "connect_to": addr}
+                    break
+                except OSError as exc:                     # this address does not answer: try the next validated one
+                    last = exc
+            if raw is None:
+                raise last
+            status, headers, body = _parse(raw, plan["max_bytes"])
             if status in (301, 302, 303, 307, 308) and headers.get("location"):
                 hops += 1
                 if hops > safe_fetch.POLICY["max_redirects"]:
@@ -101,8 +111,8 @@ class Crawler:
             p = self._get(f"https://{u.netloc}/robots.txt")
         except FetchRefused:
             raise
-        except OSError:                               # cannot read robots.txt: do not fetch, and say why (temporary)
-            raise FetchRefused("ROBOTS_UNREADABLE") from None
+        except OSError as exc:                        # cannot read robots.txt: do not fetch, and say why (temporary)
+            raise FetchRefused("ROBOTS_UNREADABLE", type(exc).__name__) from None
         if p.status >= 500:
             raise FetchRefused("ROBOTS_UNREADABLE")   # the site is failing, not forbidding: try again next time
         if p.status >= 400:

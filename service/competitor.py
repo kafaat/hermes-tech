@@ -88,12 +88,14 @@ def check(fetcher: Fetcher, comp: dict) -> dict:
     try:
         page = fetcher.fetch(comp["url"])
     except FetchRefused as exc:
-        code = str(exc.args[0]) if exc.args else "REFUSED"
+        code = getattr(exc, "code", None) or "REFUSED"
+        detail = str(exc)[len(code):].strip()
+        cause = f"{code}:{detail}" if detail and code == "ROBOTS_UNREADABLE" else code   # the cause, never a host or URL
         if code in BLOCKED_CODES:
-            return {**snap, "status": "blocked", "reason": code, "diff_summary": BLOCKED_CODES[code]}
+            return {**snap, "status": "blocked", "reason": cause, "diff_summary": BLOCKED_CODES[code]}
         if code in TEMPORARY_CODES:
-            return {**snap, "status": "unverifiable", "reason": code, "diff_summary": TEMPORARY_CODES[code]}
-        return {**snap, "status": "unverifiable", "reason": code,
+            return {**snap, "status": "unverifiable", "reason": cause, "diff_summary": TEMPORARY_CODES[code]}
+        return {**snap, "status": "unverifiable", "reason": cause,
                 "diff_summary": f"تعذّر جلب الصفحة ({code}). يُعاد الفحص في موعده التالي."}
     except Exception as exc:                               # noqa: BLE001 - network, TLS, timeouts
         return {**snap, "status": "unverifiable", "reason": type(exc).__name__,

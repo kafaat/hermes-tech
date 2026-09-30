@@ -74,6 +74,34 @@ class TestCrawler(unittest.TestCase):
         finally:
             del os.environ["HTTPS_PROXY"]
 
+    def test_an_address_that_does_not_answer_falls_back_to_the_next_validated_one(self):
+        n = Net({"shop.example": ["2a00:1450:4001:82b::200e", PUBLIC]}, {("shop.example", "/robots.txt"): resp(404, b""),
+                                                                         ("shop.example", "/menu"): resp()})
+        tried = []
+
+        def connect(plan, request):
+            tried.append(plan["connect_to"])
+            if plan["connect_to"] == PUBLIC:
+                raise ConnectionRefusedError("down")
+            return n.connect(plan, request)
+        page = Crawler(n.resolve, connect).fetch("https://shop.example/menu")
+        self.assertEqual(page.connected_to, "2a00:1450:4001:82b::200e")
+        self.assertEqual(tried[:2], [PUBLIC, "2a00:1450:4001:82b::200e"])       # IPv4 first, then the IPv6 fallback
+        def all_down(plan, request):
+            raise ConnectionRefusedError("down")
+        with self.assertRaises(FetchRefused) as cm:                             # no address answers: said, not hidden
+            Crawler(Net({"shop.example": [PUBLIC]}, {}).resolve, all_down).fetch("https://shop.example/menu")
+        self.assertEqual(cm.exception.code, "ROBOTS_UNREADABLE")
+
+    def test_an_unreadable_robots_txt_names_its_cause(self):
+        n = Net({"shop.example": [PUBLIC]}, {})
+
+        def down(plan, request):
+            raise TimeoutError("no answer")
+        with self.assertRaises(FetchRefused) as cm:
+            Crawler(n.resolve, down).fetch("https://shop.example/")
+        self.assertEqual((cm.exception.code, str(cm.exception)), ("ROBOTS_UNREADABLE", "ROBOTS_UNREADABLE TimeoutError"))
+
     def test_an_unreadable_robots_txt_is_a_temporary_refusal_not_a_prohibition(self):
         for robots in (resp(503, b""), resp(500, b"")):
             n = Net({"shop.example": [PUBLIC]}, {("shop.example", "/robots.txt"): robots, ("shop.example", "/"): resp(200, b"ok")})

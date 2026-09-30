@@ -65,13 +65,14 @@ def plan(url: str, resolver) -> dict:
         literal = ipaddress.ip_address(host)
         addrs = [str(literal)]
     except ValueError:
-        addrs = sorted({a for a in resolver(host)})
+        found = {a for a in resolver(host)}               # IPv4 first: hosts without IPv6 egress (Railway by default)
+        addrs = sorted(a for a in found if ":" not in a) + sorted(a for a in found if ":" in a)
     if not addrs:
         raise FetchRefused("UNRESOLVED", host)
     bad = [a for a in addrs if not _public(a)]
     if bad:
         raise FetchRefused("NON_PUBLIC_ADDRESS", ",".join(bad))
-    return {"url": url, "host": host, "connect_to": addrs[0], "port": port,
+    return {"url": url, "host": host, "connect_to": addrs[0], "addresses": addrs, "port": port,
             "max_bytes": POLICY["max_bytes"], "timeout_seconds": POLICY["timeout_seconds"]}
 
 

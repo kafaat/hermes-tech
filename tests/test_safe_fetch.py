@@ -50,5 +50,13 @@ class TestSafeFetch(unittest.TestCase):
         self.assertEqual(e.exception.code, "TOO_MANY_REDIRECTS")
 
 
+class TestAddressOrder(unittest.TestCase):
+    def test_ipv4_first_whatever_the_text_order_and_every_address_validated(self):
+        p = plan("https://dual.example/", lambda h: ["2a00:1450:4001:82b::200e", "93.184.216.34", "34.117.59.81"])
+        self.assertEqual(p["addresses"], ["34.117.59.81", "93.184.216.34", "2a00:1450:4001:82b::200e"])
+        self.assertEqual(p["connect_to"], "34.117.59.81")
+        with self.assertRaises(FetchRefused):
+            plan("https://mixed.example/", lambda h: ["93.184.216.34", "10.0.0.5"])     # one private address refuses all
+
 if __name__ == "__main__":
     unittest.main()

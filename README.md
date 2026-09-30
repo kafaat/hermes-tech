@@ -42,7 +42,7 @@ bash db/tests/run_local.sh             # أول بوابة قبل التجربة
 pip install --require-hashes -r requirements-service.txt      # مشغّل Postgres بقفل ببصمات
 DATABASE_URL=... python db/tests/e2e_pilot.py                 # يشغّل service.app ويقود المسار كاملًا عبر HTTP (28 فحصًا)
 
-**بوابة المالك** (`/portal` على hermes-app، المواصفة 28.8): الردود التي تنتظر الموافقة، والرسائل الأخيرة، والمعلومات المعتمدة. على staging: افتح ‎/portal‎ وادخل برمز `HERMES_STAGING_LOGIN_CODE` من متغيرات hermes-app في Railway. في الإنتاج يدخل المالك عبر Supabase Auth. **لوحة المشغّل** (‎/portal/ops‎، المواصفة 28.9): تحسم صفوف الإرسال الغامض؛ على staging زر «دخول كمشغّل» بالرمز نفسه.
+**بوابة المالك** (`/portal` على hermes-app، المواصفة 28.8): الردود التي تنتظر الموافقة، والرسائل الأخيرة، والمعلومات المعتمدة. على staging: افتح ‎/portal‎ وادخل برمز `HERMES_STAGING_LOGIN_CODE` من متغيرات hermes-app في Railway. في الإنتاج يدخل المالك عبر Supabase Auth. **فحص المنافسين** (المواصفة 28.11): مهمة يومية `python -m service.jobs competitor_check` بدور hermes_jobs؛ اللقطات في قسم «منافسوك» في البوابة. **لوحة المشغّل** (‎/portal/ops‎، المواصفة 28.9): تحسم صفوف الإرسال الغامض؛ على staging زر «دخول كمشغّل» بالرمز نفسه.
 DATABASE_URL=... HERMES_WEBHOOK_SECRETS=... HERMES_GRAPH=simulate python -m service.app   # نقطة webhook + العامل
 ```
 قبلها تُطبَّق الترحيلات (db/tests/run_isolation.sh أو ops/railway/migrate.sh). واجهة Graph محاكاة؛ الخدمة ترفض أي وضع آخر.

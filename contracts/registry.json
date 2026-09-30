@@ -50,7 +50,8 @@
     {
       "id": "agent_competitor",
       "contract": "competitor.contract.json",
-      "enabled": true
+      "enabled": false,
+      "reason": "صار سير عمل حتميًا بلا نموذج: service/competitor.py، مهمة competitor_check اليومية (المواصفة 28.11)؛ الملخص محسوب لا مولّد"
     },
     {
       "id": "agent_search",

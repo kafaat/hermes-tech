@@ -40,13 +40,13 @@
 | مخططات JSON والعقود والفهرس والسياسات | 34 فحصًا ناجحًا من 34 | tools/validate.py · الطبقة 1 |
 | قواعد الاتساق المنطقي والسياسة الإحصائية ومعجم الإخفاقات | 136 فحصًا ناجحًا من 136 | tools/validate.py · الطبقة 2 |
 | الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 250 فحصًا ناجحًا من 250 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
-| الاختبارات الآلية | 225 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
+| الاختبارات الآلية | 234 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
-| حالات SQL على Postgres فعلي | 51 حالة و62 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
+| حالات SQL على Postgres فعلي | 52 حالة و63 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
-المجموع: 420/420 فحصًا ناجحًا في أداة التحقق، و225 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
+المجموع: 420/420 فحصًا ناجحًا في أداة التحقق، و234 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
 
 ### وسوم المصدر
@@ -163,12 +163,12 @@ hermes-tech/
 ├── contracts/            agent_contract.schema.json · registry(.schema).json · 8 × *.contract.json
 ├── runtime/              agent_runtime_state · agent_call · ops_summary (schemas) · examples
 ├── policies/             acceptance_policy.json · acceptance_policy.schema.json · complaint_keywords.json · complaint_keywords.schema.json · content_rules.json · content_rules.schema.json · fetch_policy.json
-├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016   (16 files)
+├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017   (17 files)
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
 ├── db/tests/             concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
-├── service/              __init__.py · app.py · auth.py · crawler.py · dispatcher.py · health.py · jobs.py · outbox_model.py · pg.py · portal.py · redact.py · render.py · structured.py · telemetry.py · webhook.py · worker.py
-├── tests/                30 modules (inventory in §15.2)
+├── service/              __init__.py · app.py · auth.py · competitor.py · crawler.py · dispatcher.py · health.py · jobs.py · outbox_model.py · pg.py · portal.py · redact.py · render.py · structured.py · telemetry.py · webhook.py · worker.py
+├── tests/                31 modules (inventory in §15.2)
 ├── evals/                complaints_seed.jsonl · content_guard_golden.jsonl · model_admission.json
 ├── docs/                 18 documents · adr/ (11 decisions)
 ├── derived/              policy_matrix.md · agent_capabilities.json · alerts.yaml   (generated)
@@ -197,7 +197,7 @@ hermes-tech/
 المخطط في المساحة app على Supabase Postgres 15 أو أحدث. كل جدول يخص عميلًا يحمل customer_id غير فارغ.
 
 <!-- gen:migrations -->
-الترحيلات 16 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
+الترحيلات 17 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
 
 - `0001_core` — الأنواع والجداول والقيود
 - `0002_rls` — الأدوار ودوال الهوية وأمن الصف
@@ -215,6 +215,7 @@ hermes-tech/
 - `0014_outbox_effect_once` — الأثر بلا موافقة يُدرج مرة واحدة لكل هدف: المهمة المعادة تستعيد صفها ولا ترسل تنبيهًا ثانيًا
 - `0015_outbox_resend_task` — «أعد الإرسال» من المشغّل يُدرج مهمته في المعاملة نفسها، فلا يبقى صف معلقًا بلا من يرسله
 - `0016_claim_task_kinds` — العامل لا يستلم إلا أنواع المهام التي يعرفها، فالنسخة القديمة أثناء النشر تترك الأنواع الجديدة
+- `0017_competitor_facts` — حقائق المنافس المنظمة وبصمة نص الصفحة في اللقطة، ودور مهمة الفحص اليومي بسقف شهري تفرضه القاعدة
 <!-- /gen:migrations -->
 
 ![الشكل 2 · الكيانات الرئيسية والعلاقات (مبسّط)](diagrams/erd.png)
@@ -296,7 +297,7 @@ hermes-tech/
 | نص الاستفسار (inquiries.body) | 30 يومًا ثم يُفرَّغ يوميًا بالدالة app.purge_inquiry_bodies تحت الدور hermes_jobs الذي يمحو النص ولا يقرؤه؛ كل تشغيل يُسجَّل في retention_runs، والعرض v_retention_status ينذر بعد يومين بلا تشغيل ناجح أو بنص تجاوز 31 يومًا (1.8) |
 | سجل النداءات | 365 يومًا، و730 للبحث والتحصيل (من العقود) |
 | سجل التدقيق | دائم؛ لا حذف |
-| لقطات المنافسين | البصمة والملخص فقط، لا الصفحة كاملة |
+| لقطات المنافسين | البصمة والملخص، والحقائق المنظمة المستخرجة (الأصناف والأسعار والساعات والتقييم، ≤ 64 كيلوبايت) وبصمة النص المرئي؛ لا الصفحة ولا نصها (0017، 28.11). الحقائق ليست الصفحة: هي ما ينشره المنافس نفسه لمحركات البحث، ولازمة لحساب الفرق التالي |
 
 ## 5. العزل بين العملاء وأمن قاعدة البيانات
 
@@ -404,11 +405,12 @@ create policy kb_facts_worker_rw on app.kb_facts for all to hermes_worker
 49. `an effect without an approval is enqueued once per target: a re-run task gets its row back, never a second`
 50. `an operator settles an outbox row that waits for a human: only with aal2, only with a reason, only once; a`
 51. `a worker claims only the kinds it names; no list claims every kind, as before (0016)`
+52. `the competitor job (hermes_jobs): reads active competitors and their snapshots, writes a snapshot only for the`
 46. `the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)`
 47. `the external monitor gets numbers, never rows: its role holds EXECUTE on one function and nothing else, and`
 48. `every table whose policies filter by customer_id has an index leading with customer_id (0013)`
 
-الملف db/tests/rls_isolation_test.sql ينفّذ 51 حالة داخل معاملة تُلغى في النهاية، ويطلب run_isolation.sh ظهور 62 إشعار نجاح (بعض الحالات تطلق أكثر من إشعار)، بعد تطبيق كل الترحيلات بدور مالك عادي. العناوين بلغة الملف نفسه لأنها الحالات كما تُنفَّذ.
+الملف db/tests/rls_isolation_test.sql ينفّذ 52 حالة داخل معاملة تُلغى في النهاية، ويطلب run_isolation.sh ظهور 63 إشعار نجاح (بعض الحالات تطلق أكثر من إشعار)، بعد تطبيق كل الترحيلات بدور مالك عادي. العناوين بلغة الملف نفسه لأنها الحالات كما تُنفَّذ.
 <!-- /gen:sql_cases -->
 
 ## 6. عقود الوكلاء
@@ -986,9 +988,10 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_run_evals_exit | حارس المحتوى يوقف CI دائمًا؛ الشكاوى تقرير إلا مع --gate standing-send | 3 |
 | test_safe_fetch | حارس SSRF: البيانات الوصفية والشبكات الخاصة وIPv6 الحامل لـ IPv4 وإعادة التوجيه | 6 |
 | test_service_boundaries | مسار واحد لكل ضمان: الزاحف وحده يفتح اتصالًا، لا إدراج HTML خام، لا حلقة إعادة في الموزّع | 5 |
-| test_service_crawler | الزاحف: العنوان المثبّت، إعادة الحل لكل قفزة، الوكيل الوسيط من البيئة، robots وصفحات الدخول والحجم | 6 |
+| test_service_competitor | فحص المنافسين اليومي: المستحقّون، والحالات الثلاث (حقائق، بلا بيانات منظمة، محجوب)، والفرق المحسوب | 7 |
+| test_service_crawler | الزاحف: العنوان المثبّت، إعادة الحل لكل قفزة، الوكيل الوسيط من البيئة، robots وصفحات الدخول والحجم | 7 |
 | test_service_dispatcher | الموزّع: الغامض لا يُعاد، قبل الإرسال يُحرَّر، الرفض نهائي، مطابقة رموز الآلة للترحيل 0010 | 14 |
-| test_service_portal | بوابة المالك: رمز الجلسة يُتحقق بصرامة، الإجراء مربوط بالجلسة (CSRF والأصل)، لا سكربت، كل قيمة مُهرَّبة | 17 |
+| test_service_portal | بوابة المالك: رمز الجلسة يُتحقق بصرامة، الإجراء مربوط بالجلسة (CSRF والأصل)، لا سكربت، كل قيمة مُهرَّبة | 18 |
 | test_service_redact | حجب السجلات: الهواتف بالأرقام العربية، حقول المحتوى، الرموز، نص الاستثناءات | 6 |
 | test_service_render | القوالب: التهريب، روابط javascript: بكل تمويه، مواضع القالب الخطرة | 6 |
 | test_service_structured | حقائق المنافس المنظمة (JSON-LD): إعادة التصميم لا تغيّر شيئًا، تغيّر السعر يُكتشف ويُقال بالعربية، والمدخل العدائي محدود | 9 |
@@ -999,7 +1002,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_supply_chain | غياب CODEOWNERS فشل، pull_request_target فشل، والتعليقات لا تُعدّ إجراءات | 4 |
 | test_triage | المرحلة الثانية تضيف ولا تلغي، العتبة، استفسارات المالك | 5 |
 | test_validator_negative | اختبارات طفرات: يُدخل كل عيب وُجد في المراجعات ويتأكد أن المتحقق يرفضه | 13 |
-| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **225** |
+| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **234** |
 <!-- /gen:tests -->
 
 ### 15.3 العيوب التي تمنعها اختبارات الطفرات
@@ -1247,7 +1250,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 ### 21.3 شروط ما قبل التجربة (مولّدة منذ 1.8)
 
 <!-- gen:conditions -->
-قائمة مولّدة من docs/claims.yaml (كل ادعاء قراره fix_before_pilot) وحالته المحسوبة الآن. «في CI فقط» تعني أن الاختبار مكتوب ولم يُشغَّل؛ الشرط الأول مشترك بينها كلها: أول تشغيل ناجح لمهمة database على Postgres فعلي يغطي 55 ادعاءً بجزء إنتاجي ينتظر CI، ومنها كل حالات السلطة والعزل.
+قائمة مولّدة من docs/claims.yaml (كل ادعاء قراره fix_before_pilot) وحالته المحسوبة الآن. «في CI فقط» تعني أن الاختبار مكتوب ولم يُشغَّل؛ الشرط الأول مشترك بينها كلها: أول تشغيل ناجح لمهمة database على Postgres فعلي يغطي 56 ادعاءً بجزء إنتاجي ينتظر CI، ومنها كل حالات السلطة والعزل.
 
 | الادعاء | الشرط | الحالة الآن |
 | --- | --- | --- |
@@ -1263,6 +1266,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | P2 | ملف الحمل pilot ناجح على staging | تشغيل مسجّل |
 | P4 | بوابة المالك: يرى المالك ويقرر مقترحات منشآته وحدها بجلسة موثقة، ولا يُرسل رد قبل قراره | متحقق هنا + ينتظر CI |
 | P5 | لوحة المشغّل: صف الصندوق الصادر الذي يحتاج إنسانًا يحسمه مشغّل بتحقق ثنائي وسبب مكتوب مرة واحدة، و«أعد الإرسال» يُرسل فعلًا | متحقق هنا + ينتظر CI |
+| P6 | فحص المنافسين: لقطة أسبوعية بحالة صريحة (حقائق، بلا بيانات منظمة، محجوب) وملخص محسوب، لعميل المنافس وحده وبسقف شهري | متحقق هنا + ينتظر CI |
 | P3 | سعر واتساب لليمن وترخيص صور FLUX التجاري مؤكدان كتابيًا | إجرائي |
 
 خارج المصفوفة ولا يُولَّد: اختبار القبول للشكاوى ليس شرطًا للتجربة بل لأي سياسة إرسال دون موافقة لكل رد (22.2).
@@ -1635,14 +1639,14 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 <!-- gen:claims -->
 | الحالة | العدد |
 | --- | --- |
-| متحقق هنا | 37 |
+| متحقق هنا | 38 |
 | في CI فقط | 42 |
 | بنيوي فقط | 4 |
 | تشغيل مسجّل | 1 |
 | إجرائي | 4 |
-| **المجموع** | **88** |
+| **المجموع** | **89** |
 
-منها 55 بجزء إنتاجي ينتظر أول تشغيل في CI. ادعاءات بقرار «مقبول» معلن لا تحجب الإصدار: C9.4، A26، A35؛ منها A35 حد ثقة مسمّى (27.5) لا نقص تنفيذ.
+منها 56 بجزء إنتاجي ينتظر أول تشغيل في CI. ادعاءات بقرار «مقبول» معلن لا تحجب الإصدار: C9.4، A26، A35؛ منها A35 حد ثقة مسمّى (27.5) لا نقص تنفيذ.
 <!-- /gen:claims -->
 
 ### 27.7 ما بقي مفتوحًا
@@ -1821,10 +1825,30 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 
 الاختبار: tests/test_service_structured.py (9 اختبارات: صفحة مطعم عربية بقائمة، إعادة تصميم بالبصمة نفسها، أسعار ملتبسة، مدخل عدائي عميق وكبير ومحارف اتجاه، كتل معطوبة، سكربت غير JSON-LD، التغييرات بترتيبها وصياغتها). مصدر الفكرة والأفكار الأخرى وحالتها: docs/reference_projects.md. بقي: ربطه بمهمة فحص المنافس ولقطاتها (تخزين الحقائق لمقارنة اللقطة التالية) عند بناء agent_competitor.
 
+### 28.11 فحص المنافسين: سير عمل حتمي لا وكيل
+
+**القرارات.** (1) الحقائق في عمود `structured_facts` على `competitor_snapshots` لا جدول منفصل؛ ومعه `page_hash` لبصمة النص المرئي. (2) `agent_competitor` عُطّل في السجل: وكيل لا يحتاج نموذجًا سير عمل، والملخص محسوب من الفروق. (3) مهمة يومية واحدة تفحص المستحقّين (آخر لقطة أقدم من 7 أيام)، بنمط retention-job.
+
+**السلسلة** (service/competitor.py، `python -m service.jobs competitor_check`، الدور hermes_jobs): المستحقّون ← الزاحف (robots، عنوان مثبّت، لا صفحات دخول) ← `structured.extract` ← البصمة والفرق ← لقطة واحدة لكل منافس في معاملتها. فشل منافس لا يوقف الباقين.
+
+| الحالة | متى | ما يقرؤه المالك |
+| --- | --- | --- |
+| ok | حقائق منظمة | أول لقطة: جرد الأصناف والساعات والتقييم؛ بعدها الفرق المحسوب أو «لا تغيير» |
+| unverifiable | جُلبت بلا بيانات منظمة، أو تعذّر الجلب مؤقتًا | «المتابعة الآلية لا تعمل لهذا المنافس…»، ومعها «تغيّر نص الصفحة» إن تغيّرت بصمة نصها؛ أو سبب الفشل المؤقت |
+| blocked | robots.txt يمنع، أو صفحة دخول | أننا لا نتجاوز ذلك |
+
+**القاعدة تفرض:** اللقطة لعميل المنافس نفسه فقط، ولا لقطة لمنافس غير نشط، و10 لقطات لكل عميل في الشهر الميلادي كحد أقصى (package_limits)، ودور المهمة لا يقرأ ملخصات المالك. الحالة 52.
+
+**ما كشفه البناء:** (أ) صفحة واقعية بـ`["Restaurant","LocalBusiness"]` صُنفت «localbusiness» لأن الاختيار كان أبجديًا؛ صار الأخص أولًا. (ب) تعذّر قراءة robots.txt (شبكة أو خطأ خادم) كان يُبلَّغ كأن الموقع يمنع الفحص؛ صار `ROBOTS_UNREADABLE` مؤقتًا يُعاد، والمنع (401/403 أو Disallow) يبقى محجوبًا. في الحالتين لا جلب.
+
+**ما يراه المالك والمشغّل.** بوابة المالك: قسم «منافسوك» بآخر حالة وملخص لكل منافس. لوحة المشغّل: عدد المنافسين النشطين وكم منهم ببيانات منظمة وبلاها ويمنعون الفحص، وهو مقياس نسبة المواقع اليمنية التي تنشر JSON-LD المطلوب في أول 5 عملاء: إن كانت دون 20% فقيمة الوحدة الفعلية صغيرة.
+
+**التحقق.** tests/test_service_competitor.py (7 اختبارات على صفحة مطعم عربية واقعية في tests/fixtures/)، والحالة 52، وفي المسار الكامل: المهمة بدور hermes_jobs تجد المنافس المستحق، وتودع لقطة ok بالجرد، ولا يعود مستحقًا في الأسبوع نفسه، ويراها المالك في البوابة. الصفحة الحقيقية الأولى تُفحص على staging (HERMES_E2E_COMPETITOR_URL). الادعاء P6.
+
 ## الملحق أ · رموز الأخطاء
 
 <!-- gen:errors -->
-مولّد من docs/error_codes.yaml (87 رمزًا)، المصدر نفسه لقاموس باب البيانات.
+مولّد من docs/error_codes.yaml (88 رمزًا)، المصدر نفسه لقاموس باب البيانات.
 
 | الرمز | المصدر | منذ | المعنى |
 | --- | --- | --- | --- |
@@ -1914,6 +1938,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | TOO_LARGE | crawler | 1.8 | الصفحة أكبر من الحد |
 | MALFORMED_RESPONSE | crawler | 1.8 | استجابة HTTP غير صالحة |
 | ROBOTS_DISALLOW | crawler | 1.8 | robots.txt يمنع الجلب |
+| ROBOTS_UNREADABLE | crawler | 1.8 | تعذّرت قراءة robots.txt (شبكة أو خطأ خادم)؛ لا جلب، ويُعاد لاحقًا |
 | LOGIN_PAGE | crawler | 1.8 | صفحة دخول: لا تُجلب |
 <!-- /gen:errors -->
 

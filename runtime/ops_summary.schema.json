@@ -219,6 +219,7 @@
               "RESERVATION_EXCEEDED",
               "RESOLUTION_REQUIRED",
               "ROBOTS_DISALLOW",
+              "ROBOTS_UNREADABLE",
               "ROLLBACK_MUST_RESTORE_A_DEPLOYED_APPROVED_ARTIFACT",
               "ROLLBACK_OPERATOR_AAL2_ONLY",
               "SCHEME_NOT_ALLOWED",

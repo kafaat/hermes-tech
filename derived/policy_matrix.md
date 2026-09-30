@@ -50,7 +50,7 @@ A = allow · D = deny · P = proposal (queued for a human who executes it) · bl
 | agent_site_builder | yes | onboarding | 0.3 | 2.4 | 2.4 |
 | agent_content | yes | monthly_active | 0.08 | 0.4 | 0.4 |
 | agent_replies | yes | monthly_active | 0.02 | 0.05 | 0.2 |
-| agent_competitor | yes | monthly_active | 0.03 | 0.1 | 0.35 |
+| agent_competitor | no | monthly_active | 0.03 | 0.1 | 0.35 |
 | agent_search | yes | acquisition | 0.02 | 0.2 | 30.0 |
 | agent_billing | no | monthly_active | 0.01 | 0.02 | 0.05 |
 | agent_quality | yes | monthly_active | 0.005 | 0.02 | 0.1 |

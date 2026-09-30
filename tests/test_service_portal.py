@@ -63,7 +63,10 @@ class FakeStore:
                                "payload": {"to": "967700000001", "body": "<script>alert(1)</script> نفتح 9"}}],
                 "inquiries": [{"received_at": datetime(2026, 9, 30, tzinfo=timezone.utc), "category": "pricing", "owner_inquiry": False,
                                "body": "\"><img src=x onerror=alert(1)>"}],
-                "facts": [{"id": "f1", "topic": "hours", "fact": "9-11", "approved": False}]}
+                "facts": [{"id": "f1", "topic": "hours", "fact": "9-11", "approved": False}],
+                "competitors": [{"label": "بيت <i>الريف</i>", "fetched_at": datetime(2026, 9, 30, tzinfo=timezone.utc), "status": "ok",
+                                 "summary": "تغيّر سعر مندي: 4500 ← 5000 YER"},
+                                {"label": "مطعم ب", "fetched_at": None, "status": None, "summary": None}]}
 
     def decide(self, claims, approval_id, decision):
         if self.fail:
@@ -82,6 +85,7 @@ class FakeStore:
         if not self.operator:
             return None
         return {"retention_last_run": datetime(2026, 9, 30, 18, 40, tzinfo=timezone.utc), "overdue_bodies": 0, "unrouted": 2,
+                "competitors": {"active": 5, "structured": 1, "unstructured": 3, "blocked": 1},
                 "rows": [{"id": 7, "customer": "مطعم", "topic": "notify.owner", "attempts": 1, "last_error": "<i>AMBIGUOUS</i>",
                           "needs_human_check": True},
                          {"id": 8, "customer": None, "topic": "notify.owner", "attempts": 1, "last_error": None,
@@ -196,6 +200,13 @@ class TestPortal(unittest.TestCase):
         self.assertEqual(status, 503)
         self.assertNotIn("connection refused", body.decode())
 
+    def test_the_owner_sees_each_competitor_state_escaped(self):
+        page = portal().handle("GET", "/portal", cookie(sign(GOOD)), b"")[2].decode()
+        self.assertIn("بيت &lt;i&gt;الريف&lt;/i&gt;", page)
+        self.assertIn("تمت المتابعة", page)
+        self.assertIn("تغيّر سعر مندي: 4500 ← 5000 YER", page)
+        self.assertIn("لم يُفحص بعد", page)
+
     def test_fact_approval_and_logout(self):
         store, token = FakeStore(), sign(GOOD)
         csrf = csrf_token(token, SECRET)
@@ -225,6 +236,7 @@ class TestOperatorConsole(unittest.TestCase):
         self.assertIn("&lt;i&gt;AMBIGUOUS&lt;/i&gt;", page)
         self.assertEqual(page.count('action="/portal/ops/resolve"'), 1)                     # row 8 still waits for the worker
         self.assertIn("ينتظر العامل", page)
+        self.assertIn("ببيانات منظمة 1 · بلا بيانات منظمة 3 · يمنعون الفحص 1", page)
         self.assertIn(csrf_token(token, SECRET), page)
 
     def test_a_resolution_needs_csrf_a_known_value_and_a_reason(self):

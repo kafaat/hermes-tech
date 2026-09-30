@@ -69,7 +69,7 @@
     {
       "agent_id": "agent_competitor",
       "version": "1.0.0",
-      "enabled": true,
+      "enabled": false,
       "purpose": "قراءة صفحات عامة لمنافسين محددين وتلخيص الفرق المحسوب آليًا؛ لا دخول حسابات ولا تجاوز حماية.",
       "tools": [
         "firecrawl.scrape",

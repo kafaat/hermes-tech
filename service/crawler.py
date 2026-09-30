@@ -101,10 +101,12 @@ class Crawler:
             p = self._get(f"https://{u.netloc}/robots.txt")
         except FetchRefused:
             raise
-        except OSError:
-            return False                              # cannot read robots.txt: do not fetch
+        except OSError:                               # cannot read robots.txt: do not fetch, and say why (temporary)
+            raise FetchRefused("ROBOTS_UNREADABLE") from None
+        if p.status >= 500:
+            raise FetchRefused("ROBOTS_UNREADABLE")   # the site is failing, not forbidding: try again next time
         if p.status >= 400:
-            return p.status in (404, 410)             # no robots.txt: allowed; 401/403/5xx: not
+            return p.status in (404, 410)             # no robots.txt: allowed; 401/403: not
         rp = RobotFileParser()
         rp.parse(p.body.decode("utf-8", "replace").splitlines())
         return rp.can_fetch(USER_AGENT, url)

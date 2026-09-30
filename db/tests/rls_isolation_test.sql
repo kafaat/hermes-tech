@@ -1015,6 +1015,51 @@ do $$ begin
 end $$;
 select set_config('app.task_id', '', true), set_config('app.task_token', '', true);
 
+-- 52. the competitor job (hermes_jobs): reads active competitors and their snapshots, writes a snapshot only for the
+--     competitor's own customer, at most 10 per customer per calendar month, and never an inactive competitor (0017)
+insert into app.competitors (id, customer_id, url, label, active) values
+  ('00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-00000000000b', 'https://k52-a.test/', 'k52 active', true),
+  ('00000000-0000-0000-0000-0000000000c2', '00000000-0000-0000-0000-00000000000b', 'https://k52-b.test/', 'k52 retired', false);
+set local role hermes_jobs;
+do $$ declare n int; begin
+  if not exists (select 1 from app.competitors where id = '00000000-0000-0000-0000-0000000000c1') then
+    raise exception 'FAIL the job cannot see an active competitor';
+  end if;
+  if exists (select 1 from app.competitors where id = '00000000-0000-0000-0000-0000000000c2') then
+    raise exception 'FAIL the job sees a retired competitor';
+  end if;
+  begin
+    insert into app.competitor_snapshots (customer_id, competitor_id, status, diff_summary)
+    values ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-0000000000c1', 'unverifiable', 'x');
+    raise exception 'FAIL a snapshot was filed under another customer';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into app.competitor_snapshots (customer_id, competitor_id, status, diff_summary)
+    values ('00000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-0000000000c2', 'unverifiable', 'x');
+    raise exception 'FAIL a retired competitor was checked';
+  exception when insufficient_privilege then null;
+  end;
+  for n in 1..10 loop
+    insert into app.competitor_snapshots (customer_id, competitor_id, content_hash, status, diff_summary, structured_facts, page_hash)
+    values ('00000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-0000000000c1', repeat('a', 64), 'ok', 'check ' || n,
+            '{"items": []}', repeat('b', 64));
+  end loop;
+  begin
+    insert into app.competitor_snapshots (customer_id, competitor_id, status, diff_summary)
+    values ('00000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-0000000000c1', 'unverifiable', 'eleventh');
+    raise exception 'FAIL an eleventh check this month was accepted';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform diff_summary from app.competitor_snapshots limit 1;
+    raise exception 'FAIL the job reads the owner summaries';
+  exception when insufficient_privilege then null;
+  end;
+  raise notice 'PASS the competitor job writes for the competitor''s own customer only, ten a month, never a retired one';
+end $$;
+reset role;
+
 -- 46. the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)
 do $$ declare got text; bad text; begin
   select string_agg(relname, ',' order by relname collate "C") into got from pg_class

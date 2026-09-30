@@ -90,4 +90,5 @@ codes:
   TOO_LARGE:                     {kind: error, since: "1.8", src: crawler, ar: "الصفحة أكبر من الحد"}
   MALFORMED_RESPONSE:            {kind: error, since: "1.8", src: crawler, ar: "استجابة HTTP غير صالحة"}
   ROBOTS_DISALLOW:               {kind: error, since: "1.8", src: crawler, ar: "robots.txt يمنع الجلب"}
+  ROBOTS_UNREADABLE:             {kind: error, since: "1.8", src: crawler, ar: "تعذّرت قراءة robots.txt (شبكة أو خطأ خادم)؛ لا جلب، ويُعاد لاحقًا"}
   LOGIN_PAGE:                    {kind: error, since: "1.8", src: crawler, ar: "صفحة دخول: لا تُجلب"}

@@ -65,6 +65,12 @@ def _types(node: dict) -> set[str]:
     return {str(x).lower().rsplit("/", 1)[-1] for x in (t if isinstance(t, list) else [t]) if x}
 
 
+def _specific(types: set[str]) -> str:
+    """The most specific business type: ["Restaurant", "LocalBusiness"] is a restaurant, not a local business."""
+    specific = sorted(types - {"localbusiness", "organization", "foodestablishment", "store"})
+    return specific[0] if specific else sorted(types)[0]
+
+
 def _price(v) -> str | None:
     """A decimal string ("1500", "12.5"), or None. Thousands separators and currency symbols are not guessed at."""
     s = _s(v)
@@ -147,7 +153,7 @@ def extract(body: bytes | str) -> dict:
         if t & BUSINESS_TYPES and not business:
             addr = n.get("address") if isinstance(n.get("address"), dict) else {}
             business = {k: v for k, v in {
-                "name": _s(n.get("name")), "type": sorted(t & BUSINESS_TYPES)[0],
+                "name": _s(n.get("name")), "type": _specific(t & BUSINESS_TYPES),
                 "telephone": _s(n.get("telephone")), "price_range": _s(n.get("priceRange")),
                 "locality": _s(addr.get("addressLocality")), "street": _s(addr.get("streetAddress")),
                 "hours": _hours(n) or None}.items() if v}

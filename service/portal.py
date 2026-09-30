@@ -79,6 +79,9 @@ APPROVAL = """<div class="card"><div class="meta">إلى {{to}} · تنتهي ص
 NONE = """<p class="meta">{{text}}</p>"""
 INQUIRIES_H = """<h2>رسائل الأيام السبعة الأخيرة ({{count}})</h2>"""
 INQUIRY = """<div class="card"><div class="meta">{{when}} · {{category}}{{flag}}</div><div class="body">{{body}}</div></div>"""
+COMPETITORS_H = """<h2>منافسوك ({{count}})</h2><p class="meta">فحص أسبوعي لما ينشره موقع المنافس من قائمة وأسعار وساعات وتقييم.</p>"""
+COMPETITOR = """<div class="card"><div class="meta">{{label}} · {{when}} · {{state}}</div><div class="body">{{summary}}</div></div>"""
+SNAPSHOT_STATE = {"ok": "تمت المتابعة", "unverifiable": "لا متابعة آلية", "blocked": "الموقع يمنع الفحص", None: "لم يُفحص بعد"}
 FACTS_H = """<h2>معلومات منشأتك ({{count}})</h2><p class="meta">لا يُرد على عميل إلا بمعلومة اعتمدتها أنت.</p>"""
 FACT = """<div class="card"><div class="meta">{{topic}} · {{state}}</div><div class="body">{{fact}}</div></div>"""
 FACT_PENDING = """<div class="card"><div class="meta">{{topic}} · تنتظر اعتمادك</div><div class="body">{{fact}}</div>
@@ -92,7 +95,8 @@ STAGING_LOGIN = """<div class="card"><p class="meta">بيئة التجربة (st
 OPS_TOP = """<h1>لوحة المشغّل</h1><p class="meta">جلسة مشغّل بتحقق ثنائي · <a href="/portal">بوابة المالك</a></p>
 <form method="post" action="/portal/logout"><input type="hidden" name="csrf" value="{{csrf}}"><button>خروج</button></form>"""
 OPS_HEALTH = """<h2>الحالة</h2><div class="card"><div>آخر محو ناجح: {{retention}}</div><div>نصوص تجاوزت 31 يومًا: {{overdue}}</div>
-<div>أحداث موقّعة لا تتبع أي قناة: {{unrouted}}</div></div>"""
+<div>أحداث موقّعة لا تتبع أي قناة: {{unrouted}}</div>
+<div>المنافسون النشطون: {{competitors}} · ببيانات منظمة {{structured}} · بلا بيانات منظمة {{unstructured}} · يمنعون الفحص {{blocked}}</div></div>"""
 OPS_ROWS_H = """<h2>صفوف الصندوق الصادر التي تحتاج إنسانًا ({{count}})</h2>
 <p class="meta">«تحتاج قرارًا»: الإرسال غامض، لا يُعاد آليًا أبدًا. «ينتظر العامل»: انتهى حجز الإرسال بلا نتيجة، وسيعلّمه العامل
 عند استعادة المهمة. قبل «أُرسل فعلًا» تحقق من المزوّد؛ «أعد الإرسال» يُرسل مرة أخرى وقد يصل مرتين إن كان الأول قد وصل.</p>"""
@@ -252,7 +256,10 @@ class Portal:
         out = [_r(OPS_TOP, csrf=csrf)]
         if done in MESSAGES:
             out.append(_r(FLASH, message=MESSAGES[done]))
+        comp = data.get("competitors") or {"active": 0, "structured": 0, "unstructured": 0, "blocked": 0}
         out.append(_r(OPS_HEALTH, retention=_when(data["retention_last_run"]), overdue=data["overdue_bodies"],
+                      competitors=comp["active"], structured=comp["structured"], unstructured=comp["unstructured"],
+                      blocked=comp["blocked"],
                       unrouted=data["unrouted"]))
         out.append(_r(OPS_ROWS_H, count=len(data["rows"])))
         for r in data["rows"]:
@@ -293,6 +300,12 @@ class Portal:
             out.append(_r(INQUIRY, when=_when(q["received_at"]), category=CATEGORY_AR.get(q["category"] or "", "بلا تصنيف"),
                           flag=" · سؤال لك" if q["owner_inquiry"] else "",
                           body=q["body"] if q["body"] is not None else "(حُذف النص بعد 30 يومًا)"))
+        comps = data.get("competitors", [])
+        if comps:
+            out.append(_r(COMPETITORS_H, count=len(comps)))
+            for c in comps:
+                out.append(_r(COMPETITOR, label=c["label"], when=_when(c["fetched_at"]), state=SNAPSHOT_STATE.get(c["status"], "—"),
+                              summary=c["summary"] or "يُفحص خلال الأيام القادمة."))
         out.append(_r(FACTS_H, count=len(data["facts"])))
         for f in data["facts"]:
             if f["approved"]:

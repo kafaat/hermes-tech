@@ -20,7 +20,10 @@ check each step. Seeding is idempotent and uses a fixed staging tenant; every ru
   8. operator console: a row waiting for a human (the state an interrupted send leaves) is shown only to an aal2
      operator, not to the owner nor to the operator without a second factor; "resend" with a reason queues its
      task and the worker sends it
-  9. GET /deps (external monitor): without X-Monitor-Token only the code and one word; with it, numbers only, and
+  9. competitor check (workflow, 28.11): the daily job as hermes_jobs finds the due competitor, reads the Arabic
+     restaurant fixture (no network in CI), files an 'ok' snapshot with the inventory, is not due again the same week,
+     and the owner sees it in the portal. HERMES_E2E_COMPETITOR_URL (staging) adds one real page for the daily job.
+ 10. GET /deps (external monitor): without X-Monitor-Token only the code and one word; with it, numbers only, and
      nothing failing after this run (a purge not yet due is not stale: the database knows when it is due)
 """
 from __future__ import annotations
@@ -244,6 +247,39 @@ def main():
               "operator resend -> the worker sent the row again")
         check(bool(q("select 1 from app.tasks where idempotency_key like %s and status = 'succeeded'", (f"resend:{ob}:%",))),
               "operator resend -> its task succeeded")
+
+        from service import competitor
+        from service.pg import CompetitorDb, Database
+
+        class FixtureFetcher:
+            def fetch(self, url):
+                class P:
+                    status, body = 200, (ROOT / "tests/fixtures/competitor_restaurant_ar.html").read_bytes()
+                return P()
+        comp_id = str(uuid.uuid4())
+        q("insert into app.competitors (id, customer_id, url, label, active) values (%s, %s, %s, %s, true)",
+          (comp_id, CUSTOMER, f"https://e2e-{run}.example.test/", f"e2e {run}"))
+        jobs = CompetitorDb(Database(DB, "hermes_jobs"))
+        try:
+            due = [c for c in jobs.due(200) if c["id"] == comp_id]
+            check(len(due) == 1, "competitor job: the new competitor is due")
+            counts = competitor.run(type("S", (), {"due": lambda self, n: due, "insert": lambda self, snap: jobs.insert(snap)})(),
+                                    FixtureFetcher())
+            snap = q("select status::text, diff_summary, structured_facts->'business'->>'type', page_hash from app.competitor_snapshots"
+                     " where competitor_id = %s", (comp_id,))
+            check(counts["ok"] == 1 and len(snap) == 1 and snap[0][0] == "ok" and snap[0][2] == "restaurant"
+                  and snap[0][1].startswith("أول لقطة: 9 صنفًا") and snap[0][3] is not None,
+                  "competitor job: an 'ok' snapshot with the inventory, facts and page hash, filed as hermes_jobs")
+            check(not [c for c in jobs.due(200) if c["id"] == comp_id], "competitor job: not due again the same week")
+            status, _, page = portal(url, issue_staging_token(OWNER, JWT_SECRET))
+            check(status == 200 and f"e2e {run}" in page and "أول لقطة" in page, "portal: the owner sees the competitor snapshot")
+        finally:
+            q("update app.competitors set active = false where id = %s", (comp_id,))   # the daily job must not fetch it
+        real = os.environ.get("HERMES_E2E_COMPETITOR_URL")
+        if real:
+            q("update app.competitors set active = false where customer_id = %s and label = 'staging real page' and url <> %s", (CUSTOMER, real))
+            q("insert into app.competitors (customer_id, url, label, active) values (%s, %s, 'staging real page', true)"
+              " on conflict (customer_id, url) do update set active = true", (CUSTOMER, real))
 
         def get_deps(headers):
             try:

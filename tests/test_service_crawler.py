@@ -74,6 +74,17 @@ class TestCrawler(unittest.TestCase):
         finally:
             del os.environ["HTTPS_PROXY"]
 
+    def test_an_unreadable_robots_txt_is_a_temporary_refusal_not_a_prohibition(self):
+        for robots in (resp(503, b""), resp(500, b"")):
+            n = Net({"shop.example": [PUBLIC]}, {("shop.example", "/robots.txt"): robots, ("shop.example", "/"): resp(200, b"ok")})
+            with self.assertRaises(FetchRefused) as cm:
+                Crawler(n.resolve, n.connect).fetch("https://shop.example/")
+            self.assertEqual(cm.exception.args[0], "ROBOTS_UNREADABLE")
+        n = Net({"shop.example": [PUBLIC]}, {("shop.example", "/robots.txt"): resp(403, b""), ("shop.example", "/"): resp(200, b"ok")})
+        with self.assertRaises(FetchRefused) as cm:
+            Crawler(n.resolve, n.connect).fetch("https://shop.example/")
+        self.assertEqual(cm.exception.args[0], "ROBOTS_DISALLOW")
+
     def test_robots_disallow_login_pages_and_size(self):
         n = Net({"shop.example": [PUBLIC]}, {("shop.example", "/robots.txt"): resp(200, b"User-agent: *\nDisallow: /private"),
                                              ("shop.example", "/login"): resp(), ("shop.example", "/big"): resp(200, b"x" * 2_000_001),

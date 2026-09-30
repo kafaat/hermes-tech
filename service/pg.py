@@ -111,7 +111,13 @@ class PortalDb:
             cur.execute("select id, topic, fact, approved_by_owner from app.kb_facts where customer_id = any(%s::uuid[])"
                         " order by approved_by_owner, topic limit 200", (ids,))
             facts = [{"id": str(r[0]), "topic": r[1], "fact": r[2], "approved": r[3]} for r in cur.fetchall()]
-        return {"customers": customers, "approvals": approvals, "inquiries": inquiries, "facts": facts}
+            cur.execute("select c.label, s.fetched_at, s.status::text, s.diff_summary from app.competitors c"
+                        " left join lateral (select fetched_at, status, diff_summary from app.competitor_snapshots s"
+                        "   where s.competitor_id = c.id and s.customer_id = c.customer_id order by fetched_at desc limit 1) s on true"
+                        " where c.customer_id = any(%s::uuid[]) and c.active order by c.label", (ids,))
+            competitors = [{"label": r[0], "fetched_at": r[1], "status": r[2], "summary": r[3]} for r in cur.fetchall()]
+        return {"customers": customers, "approvals": approvals, "inquiries": inquiries, "facts": facts,
+                "competitors": competitors}
 
     def decide(self, claims: dict, approval_id: str, decision: str) -> bool:
         with self.db.tx(claims=claims) as cur:
@@ -140,10 +146,55 @@ class PortalDb:
             last_run, overdue = cur.fetchone()
             cur.execute("select count(*) from app.webhook_events where customer_id is null and signature_valid")
             unrouted = cur.fetchone()[0]
-        return {"rows": rows, "retention_last_run": last_run, "overdue_bodies": overdue, "unrouted": unrouted}
+            cur.execute("select count(*) filter (where s.status = 'ok'), count(*) filter (where s.status = 'unverifiable'),"
+                        " count(*) filter (where s.status = 'blocked'), count(*) from app.competitors c left join lateral"
+                        " (select status from app.competitor_snapshots s where s.competitor_id = c.id order by fetched_at desc limit 1) s"
+                        " on true where c.active")
+            structured, unstructured, blocked, active = cur.fetchone()
+        return {"rows": rows, "retention_last_run": last_run, "overdue_bodies": overdue, "unrouted": unrouted,
+                "competitors": {"structured": structured, "unstructured": unstructured, "blocked": blocked, "active": active}}
 
     def resolve(self, claims: dict, outbox_id: str, resolution: str, reason: str) -> None:
         """app.resolve_outbox: the database checks the operator (aal2), the reason and that the row waits for a
         human; 'resend' also queues the task that sends it again (0015)."""
         with self.db.tx(claims=claims) as cur:
             cur.execute("select app.resolve_outbox(%s, %s, %s)", (int(outbox_id), resolution, reason))
+
+
+class CompetitorDb:
+    """competitor.Store as hermes_jobs (0017): reads active competitors and their snapshots, inserts one snapshot per
+    check for the competitor's own customer; the database refuses more than 10 a customer a month."""
+
+    def __init__(self, db: Database):
+        self.db = db
+
+    def due(self, limit: int) -> list[dict]:
+        with self.db.tx() as cur:
+            cur.execute("""
+                select c.id, c.customer_id, c.url, c.label, f.structured_facts, h.page_hash
+                  from app.competitors c
+                  left join lateral (select max(fetched_at) as at from app.competitor_snapshots s
+                                      where s.competitor_id = c.id) l on true
+                  left join lateral (select structured_facts from app.competitor_snapshots s
+                                      where s.competitor_id = c.id and s.status = 'ok'
+                                      order by fetched_at desc limit 1) f on true
+                  left join lateral (select page_hash from app.competitor_snapshots s
+                                      where s.competitor_id = c.id and s.page_hash is not null
+                                      order by fetched_at desc limit 1) h on true
+                 where c.active and (l.at is null or l.at < now() - interval '7 days')
+                 order by l.at nulls first
+                 limit %s""", (limit,))
+            return [{"id": str(r[0]), "customer_id": str(r[1]), "url": r[2], "label": r[3], "last_facts": r[4],
+                     "last_page_hash": r[5]} for r in cur.fetchall()]
+
+    def insert(self, snap: dict) -> bool:
+        try:
+            with self.db.tx() as cur:
+                cur.execute("insert into app.competitor_snapshots (customer_id, competitor_id, content_hash, diff_summary,"
+                            " status, structured_facts, page_hash) values (%s, %s, %s, %s, %s::app.snapshot_status, %s, %s)",
+                            (snap["customer_id"], snap["competitor_id"], snap["content_hash"], snap["diff_summary"],
+                             snap["status"], Jsonb(snap["structured_facts"]) if snap["structured_facts"] is not None else None,
+                             snap["page_hash"]))
+            return True
+        except psycopg.errors.InsufficientPrivilege:       # the policy's refusal: monthly cap reached, or competitor inactive
+            return False

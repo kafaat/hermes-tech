@@ -36,6 +36,15 @@ python tools/check_spec.py --check     # كل رقم وجرد في المواص�
 python tools/build_manifest.py --check # الملفات والتقارير تخص الإصدار المعلن في VERSION
 bash db/tests/run_local.sh             # أول بوابة قبل التجربة: الترحيلات بمالك عادي، كل الحالات، ثلاثة سباقات (Docker)
 ```
+
+### الخدمة والمسار الكامل (P1، القسم 28 من المواصفة)
+```bash
+pip install --require-hashes -r requirements-service.txt      # مشغّل Postgres بقفل ببصمات
+DATABASE_URL=... python db/tests/e2e_pilot.py                 # يشغّل service.app ويقود المسار كاملًا عبر HTTP (26 فحصًا)
+DATABASE_URL=... HERMES_WEBHOOK_SECRETS=... HERMES_GRAPH=simulate python -m service.app   # نقطة webhook + العامل
+```
+قبلها تُطبَّق الترحيلات (db/tests/run_isolation.sh أو ops/railway/migrate.sh). واجهة Graph محاكاة؛ الخدمة ترفض أي وضع آخر.
+staging على Railway: الخدمة hermes-app، والمهمة db-migrate (الترحيلات ثم العزل ثم المسار الكامل) مع كل دفع إلى main.
 `validate.py` يستخدم `jsonschema` إن وُجد، وإلا مدققًا مدمجًا يغطي كل الكلمات المستخدمة في المخططات.
 الترحيلات لا تُطبَّق يدويًا بدور superuser: `db/tests/run_isolation.sh` يطبّقها بدور `hermes_owner` كما يجب في الإنتاج.
 

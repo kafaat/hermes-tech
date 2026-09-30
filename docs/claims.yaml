@@ -1,7 +1,8 @@
 # Every "must / must not" claim in the specification, mapped to what enforces it.
 # Status is COMPUTED by tools/check_claims.py from the refs, never written here:
 #   verified_here : a behavioural python test ran here, or a validator check of a config invariant
-#   ci_only       : a behavioural test exists but runs only in CI on real Postgres/Docker (not executed yet)
+#   ci_only       : a behavioural test exists and runs in CI on real Postgres on every push (spec 28.4);
+#                   the status is computed from refs, and this tool does not read CI results
 #   structural    : only the validator's static check (the SQL or file is there; behaviour not exercised)
 #   manual        : only a written procedure
 #   gap           : nothing enforces it

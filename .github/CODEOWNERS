@@ -1,16 +1,16 @@
 # Changes to CI, the release gate, its checkers, the policies they enforce, the claims and inventories they
 # compare against, and the database tests need the owner's review (ADR-0008). In a one-person project the
 # workflow-guard job (base checkers judge the change) is what actually holds; CODEOWNERS adds the review
-# once a second account exists. Replace @OWNER_HANDLE during first setup (docs/setup_guide.md, step 3).
-/.github/                              @OWNER_HANDLE
-/tools/                                @OWNER_HANDLE
-/policies/                             @OWNER_HANDLE
-/evals/                                @OWNER_HANDLE
-/db/migrations/                        @OWNER_HANDLE
-/db/tests/                             @OWNER_HANDLE
-/db/local/                             @OWNER_HANDLE
-/docs/claims.yaml                      @OWNER_HANDLE
-/docs/error_codes.yaml                 @OWNER_HANDLE
-/docs/security_definer_inventory.md    @OWNER_HANDLE
-/requirements-ci.txt                   @OWNER_HANDLE
-/VERSION                               @OWNER_HANDLE
+# once a second account exists. Owner set during first setup (docs/setup_guide.md, step 3).
+/.github/                              @kafaat
+/tools/                                @kafaat
+/policies/                             @kafaat
+/evals/                                @kafaat
+/db/migrations/                        @kafaat
+/db/tests/                             @kafaat
+/db/local/                             @kafaat
+/docs/claims.yaml                      @kafaat
+/docs/error_codes.yaml                 @kafaat
+/docs/security_definer_inventory.md    @kafaat
+/requirements-ci.txt                   @kafaat
+/VERSION                               @kafaat

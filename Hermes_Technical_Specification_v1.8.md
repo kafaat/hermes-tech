@@ -43,7 +43,7 @@
 | الاختبارات الآلية | 183 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
-| سلسلة التوريد | 0 fail · 7 warn | tools/check_supply_chain.py (15.5 و16) |
+| سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
 | حالات SQL على Postgres فعلي | 46 حالة و53 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
 المجموع: 415/415 فحصًا ناجحًا في أداة التحقق، و183 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
@@ -1027,7 +1027,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | ترخيص صور FLUX.1 [dev] | غير مؤكد للاستخدام التجاري عبر fal | تأكيد مكتوب من fal ضمن مسار الموردين، أو نموذج بترخيص تجاري |
 | Meta: App Review والتحقق التجاري | لم يبدأ؛ مسودات ونشر يدوي حتى القبول | بدء التحقق مبكرًا |
 <!-- gen:supply -->
-| تثبيت إجراءات CI وبصمات التبعيات وCODEOWNERS | 7 تحذيرات و0 فشل: `validate.yml: action not pinned to a commit SHA: actions/checkout@v4`؛ `validate.yml: action not pinned to a commit SHA: actions/setup-python@v5`؛ `validate.yml: action not pinned to a commit SHA: actions/checkout@v4`؛ `validate.yml: action not pinned to a commit SHA: actions/checkout@v4`؛ `validate.yml: action not pinned to a commit SHA: actions/checkout@v4`؛ `requirements-ci.txt: dependencies without --hash`؛ `CODEOWNERS still has the @OWNER_HANDLE placeholder` | docs/setup_guide.md بشبكة وحساب المالك؛ بوابة الإصدار تحوّلها إلى فشل، فلا وسم قبل الصفر |
+| تثبيت إجراءات CI وبصمات التبعيات وCODEOWNERS | 0 تحذيرات و0 فشل:  | docs/setup_guide.md بشبكة وحساب المالك؛ بوابة الإصدار تحوّلها إلى فشل، فلا وسم قبل الصفر |
 <!-- /gen:supply -->
 | مزوّد نماذج ثانٍ | لا يوجد؛ الطابور البشري بديل في التجربة | حدود evals/model_admission.json قبل المستوى 2 |
 | اختبار اختراق Hermes Agent | خمسة ضوابط بفاحص آلي وأربع حالات بكشف كناري؛ لم تُنفّذ | تنفيذها قبل التجربة ثم كل ربع سنة |

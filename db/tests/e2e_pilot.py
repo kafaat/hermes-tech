@@ -12,25 +12,30 @@ check each step. Seeding is idempotent and uses a fixed staging tenant; every ru
   2. a complaint                          -> escalated to the owner (notify.owner sent), NO reply proposal
   3. redelivery of the same webhook       -> 200, no second event or task
   4. a bad signature                      -> 401, nothing stored
-  5. the owner approves                   -> outbox consumes the approval once, the reply is sent, task succeeded
+  5. the owner approves IN THE PORTAL     -> signed in with a session token, sees the proposal (another user does
+                                            not), a decision without the CSRF token is refused; the approval is
+                                            consumed once by the outbox, the reply is sent, task succeeded
   6. the delivery receipt webhook         -> routed, processed, task succeeded
   7. audit: enqueue by the leased agent and the owner's decision, in the chain
   8. GET /deps (external monitor): without X-Monitor-Token only the code and one word; with it, numbers only, and
      nothing failing after this run (a purge not yet due is not stale: the database knows when it is due)
 """
 from __future__ import annotations
-import hashlib, hmac, json, os, socket, subprocess, sys, time, urllib.error, urllib.request, uuid
+import hashlib, hmac, json, os, socket, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 from pathlib import Path
 
 import psycopg
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+from service.auth import csrf_token, issue_staging_token  # noqa: E402
 DB = os.environ["DATABASE_URL"]
 CUSTOMER = "00000000-0000-0000-0000-0000000e2e01"
 OWNER = "00000000-0000-0000-0000-0000000e2e0a"
 PHONE_ID = "pn-e2e-staging"
 HOURS = "نفتح يوميًا من ٩ صباحًا إلى ١١ مساءً"
 MONITOR_TOKEN = os.environ.get("HERMES_MONITOR_TOKEN") or uuid.uuid4().hex   # staging: the service's own (shared var)
+JWT_SECRET = os.environ.get("HERMES_JWT_SECRET") or uuid.uuid4().hex * 2       # staging: the service's own (shared var)
 failures = []
 
 
@@ -80,6 +85,23 @@ def post(url, secret, payload, signature=None):
         return e.code
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None
+
+
+def portal(url, token, method="GET", form=None):
+    """(status, location, page) as a browser holding the owner's session cookie would see them."""
+    req = urllib.request.Request(url + ("/portal" if method == "GET" else form.pop("_path")), method=method,
+                                 data=urllib.parse.urlencode(form).encode() if form else None,
+                                 headers={"Cookie": f"__Host-hermes_owner={token}"})
+    try:
+        with urllib.request.build_opener(_NoRedirect).open(req, timeout=15) as r:
+            return r.status, r.headers.get("Location"), r.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.headers.get("Location"), e.read().decode()
+
+
 def wait(what, fn, timeout=90):
     end = time.time() + timeout
     while time.time() < end:
@@ -100,7 +122,7 @@ def start_app():
     s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
     secret = uuid.uuid4().hex
     env = {**os.environ, "HERMES_WEBHOOK_SECRETS": secret, "HERMES_GRAPH": "simulate", "PORT": str(port),
-           "HERMES_MONITOR_TOKEN": MONITOR_TOKEN,
+           "HERMES_MONITOR_TOKEN": MONITOR_TOKEN, "HERMES_JWT_SECRET": JWT_SECRET,
            "HERMES_APPROVAL_POLL_SECONDS": "1", "HERMES_VERIFY_TOKEN": "e2e"}
     proc = subprocess.Popen([sys.executable, "-m", "service.app"], cwd=ROOT, env=env)
     return f"http://127.0.0.1:{port}", secret, proc
@@ -158,8 +180,21 @@ def main():
         check(not q("select 1 from app.outbox where topic = 'reply.send' and target_id = %s", (q_ext,)), "nothing sent before the owner decides")
 
         if ap:
-            q("update app.approvals set decision = 'approved', decided_by = %s where id = %s", (OWNER, ap_id),
-              role="authenticated", claims={"sub": OWNER, "aal": "aal1"})
+            token = issue_staging_token(OWNER, JWT_SECRET)
+            status, _, page = portal(url, token)
+            check(status == 200 and HOURS in page and str(ap_id) in page, "portal: the owner sees the pending proposal")
+            stranger = issue_staging_token(str(uuid.uuid4()), JWT_SECRET)
+            status, _, page = portal(url, stranger)
+            check(status == 200 and str(ap_id) not in page, "portal: a signed-in stranger sees no proposal of this tenant")
+            status, _, _ = portal(url, stranger, "POST", {"_path": "/portal/decide", "approval": str(ap_id), "decision": "approved",
+                                                          "csrf": csrf_token(stranger, JWT_SECRET)})
+            check(q("select decision::text from app.approvals where id = %s", (ap_id,))[0][0] == "pending",
+                  f"portal: a stranger's decision changes nothing ({status})")
+            status, _, _ = portal(url, token, "POST", {"_path": "/portal/decide", "approval": str(ap_id), "decision": "approved"})
+            check(status == 403, "portal: a decision without the session's CSRF token is refused")
+            status, where, _ = portal(url, token, "POST", {"_path": "/portal/decide", "approval": str(ap_id), "decision": "approved",
+                                                           "csrf": csrf_token(token, JWT_SECRET)})
+            check(status == 303 and where == "/portal?done=approved", "portal: the owner approves")
             sent = wait("reply sent", lambda: q("select id, provider_message_id, approval_id from app.outbox where topic = 'reply.send'"
                                                  " and target_id = %s and dispatched_at is not null", (q_ext,)))
             if sent:

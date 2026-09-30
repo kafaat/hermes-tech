@@ -5,6 +5,7 @@
 
   GET  /webhook   Meta subscription handshake (webhook.verify_subscription)
   POST /webhook   webhook.Handler: size limit, HMAC on the raw bytes, then insert as hermes_ingest; 200 only after commit
+  GET  /portal, POST /portal/...   the owner portal (service/portal.py): pending replies, inquiries, facts
   GET  /healthz   database reachable (as hermes_ingest), the deployed commit and the handler counters (numbers only)
   GET  /deps      what must stay true between deploys, for an external uptime monitor: app.health_signals() as
                   hermes_monitor (numbers, never rows); 503 when a signal fails. The numbers and the failing names
@@ -22,7 +23,8 @@ from urllib.parse import parse_qsl, urlsplit
 
 from service import redact
 from service.health import SIGNALS, assess, authorized
-from service.pg import Database, Ingest
+from service.pg import Database, Ingest, PortalDb
+from service.portal import Portal
 from service.webhook import MAX_BODY_BYTES, Handler, verify_subscription
 from service.worker import Worker, simulated_adapters, worker_name
 
@@ -31,18 +33,30 @@ COMMIT = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "")
 SHUTDOWN_WAIT_SECONDS = 25        # for the task in hand after SIGTERM: above a send's timeout, below Railway's drain (30 s)          # lets a caller wait for THIS build, not the previous one
 
 
-def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | None = None, monitor_token: str = ""):
+def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | None = None, monitor_token: str = "",
+                      portal: Portal | None = None):
     class H(BaseHTTPRequestHandler):
         def _reply(self, status: int, body: str, ctype: str = "text/plain; charset=utf-8"):
-            data = body.encode("utf-8")
+            data = body.encode("utf-8") if isinstance(body, str) else body
             self.send_response(status)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
 
+        def _portal(self, body: bytes = b""):
+            status, headers, data = portal.handle(self.command, self.path, dict(self.headers.items()), body)
+            self.send_response(status)
+            for k, v in headers:
+                self.send_header(k, v)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
         def do_GET(self):
             u = urlsplit(self.path)
+            if portal is not None and (u.path == "/portal" or u.path.startswith("/portal/")):
+                return self._portal()
             if u.path == "/healthz":                   # Railway calls it at deploy time only: a build that cannot reach
                 try:                                   # the database never goes live
                     with webhook.ingest.db.tx() as cur:
@@ -72,7 +86,16 @@ def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | N
             return self._reply(404, "not found")
 
         def do_POST(self):
-            if urlsplit(self.path).path != "/webhook":
+            path = urlsplit(self.path).path
+            if portal is not None and path.startswith("/portal/"):
+                try:
+                    length = int(self.headers.get("Content-Length") or 0)
+                except ValueError:
+                    return self._reply(400, "bad length")
+                if length > 4096:
+                    return self._reply(413, "too large")
+                return self._portal(self.rfile.read(length))
+            if path != "/webhook":
                 return self._reply(404, "not found")
             try:
                 length = int(self.headers.get("Content-Length") or 0)
@@ -112,9 +135,14 @@ def main():
     worker_thread = threading.Thread(target=worker.loop, kwargs={"stop": stop}, name="worker", daemon=True)
     worker_thread.start()
     port = int(os.environ.get("PORT", "8080"))
+    secret = os.environ.get("HERMES_JWT_SECRET", "")          # Supabase project JWT secret; unset: the portal signs nobody in
+    portal = Portal(PortalDb(Database(url, "authenticated")), secret,
+                    staging_login_code=os.environ.get("HERMES_STAGING_LOGIN_CODE", ""),
+                    staging_owner_id=os.environ.get("HERMES_STAGING_OWNER_ID", ""),
+                    simulate=os.environ.get("HERMES_GRAPH") == "simulate")
     server = ThreadingHTTPServer(("0.0.0.0", port), make_http_handler(
         webhook, os.environ.get("HERMES_VERIFY_TOKEN", ""), Database(url, "hermes_monitor"),
-        os.environ.get("HERMES_MONITOR_TOKEN", "")))
+        os.environ.get("HERMES_MONITOR_TOKEN", ""), portal))
 
     def on_term(signum, frame):                    # Railway sends SIGTERM, then SIGKILL after drainingSeconds: stop taking
         log.info("SIGTERM: draining")               # requests, let the current task finish (its lease covers a kill anyway)

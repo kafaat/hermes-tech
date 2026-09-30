@@ -40,13 +40,13 @@
 | مخططات JSON والعقود والفهرس والسياسات | 34 فحصًا ناجحًا من 34 | tools/validate.py · الطبقة 1 |
 | قواعد الاتساق المنطقي والسياسة الإحصائية ومعجم الإخفاقات | 136 فحصًا ناجحًا من 136 | tools/validate.py · الطبقة 2 |
 | الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 250 فحصًا ناجحًا من 250 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
-| الاختبارات الآلية | 216 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
+| الاختبارات الآلية | 225 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
 | حالات SQL على Postgres فعلي | 51 حالة و62 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
-المجموع: 420/420 فحصًا ناجحًا في أداة التحقق، و216 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
+المجموع: 420/420 فحصًا ناجحًا في أداة التحقق، و225 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
 
 ### وسوم المصدر
@@ -167,8 +167,8 @@ hermes-tech/
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
 ├── db/tests/             concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
-├── service/              __init__.py · app.py · auth.py · crawler.py · dispatcher.py · health.py · jobs.py · outbox_model.py · pg.py · portal.py · redact.py · render.py · telemetry.py · webhook.py · worker.py
-├── tests/                29 modules (inventory in §15.2)
+├── service/              __init__.py · app.py · auth.py · crawler.py · dispatcher.py · health.py · jobs.py · outbox_model.py · pg.py · portal.py · redact.py · render.py · structured.py · telemetry.py · webhook.py · worker.py
+├── tests/                30 modules (inventory in §15.2)
 ├── evals/                complaints_seed.jsonl · content_guard_golden.jsonl · model_admission.json
 ├── docs/                 18 documents · adr/ (11 decisions)
 ├── derived/              policy_matrix.md · agent_capabilities.json · alerts.yaml   (generated)
@@ -991,6 +991,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_service_portal | بوابة المالك: رمز الجلسة يُتحقق بصرامة، الإجراء مربوط بالجلسة (CSRF والأصل)، لا سكربت، كل قيمة مُهرَّبة | 17 |
 | test_service_redact | حجب السجلات: الهواتف بالأرقام العربية، حقول المحتوى، الرموز، نص الاستثناءات | 6 |
 | test_service_render | القوالب: التهريب، روابط javascript: بكل تمويه، مواضع القالب الخطرة | 6 |
+| test_service_structured | حقائق المنافس المنظمة (JSON-LD): إعادة التصميم لا تغيّر شيئًا، تغيّر السعر يُكتشف ويُقال بالعربية، والمدخل العدائي محدود | 9 |
 | test_service_telemetry | المراقبة: قائمة سماح للسمات، لا أحداث محتوى، لا بيانات شخصية في القيم المسموحة | 8 |
 | test_service_webhook | معالج webhook: HMAC على البايتات الخام قبل التحليل، 401 بلا تخزين، إعادة التسليم نجاح، القناة المخاطَبة | 9 |
 | test_service_worker | حلقة العامل (P1): الشكوى وسؤال السعر يُصعَّدان، والرد من حقيقة اعتمدها المالك ويجتاز الحارس فقط | 9 |
@@ -998,7 +999,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_supply_chain | غياب CODEOWNERS فشل، pull_request_target فشل، والتعليقات لا تُعدّ إجراءات | 4 |
 | test_triage | المرحلة الثانية تضيف ولا تلغي، العتبة، استفسارات المالك | 5 |
 | test_validator_negative | اختبارات طفرات: يُدخل كل عيب وُجد في المراجعات ويتأكد أن المتحقق يرفضه | 13 |
-| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **216** |
+| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **225** |
 <!-- /gen:tests -->
 
 ### 15.3 العيوب التي تمنعها اختبارات الطفرات
@@ -1805,6 +1806,20 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 **ما كشفه النشر على staging (0016).** أثناء تداخل النشر استلمت النسخة القديمة مهمة `outbox.resend` الجديدة، فقرأت مفتاحها كحدث وارد وفشلت قبل أي إرسال (InvalidTextRepresentation)، وحبسها الإيجار دقيقتين حتى استلمتها النسخة الجديدة وأرسلتها مرة واحدة. النتيجة صحيحة لكنها متأخرة، وأي نوع مهمة جديد سيكررها. صار `claim_task` يأخذ قائمة الأنواع التي يعرفها المستدعي (بلا قائمة = كل الأنواع كما كان)، والعامل يمرر قائمته؛ فمن هذه النسخة فصاعدًا لا تستلم نسخة قديمة نوعًا لا تعرفه. الاستدعاء القديم بثلاث وسائط يبقى صالحًا أثناء التداخل. الحالة 51. إعادة تشغيل المسار الكامل بعد انتهاء التداخل: أُرسل خلال ثانيتين.
 
 **التحقق.** 5 اختبارات وحدة للوحة، والحالة 50، وفي المسار الكامل: صف ينتظر إنسانًا (الحالة التي يتركها إرسال مقطوع) لا يراه المالك ولا المشغّل بجلسة aal1، ويراه المشغّل aal2، فيعيد إرساله بسبب، فتُنجز المهمة ويُرسل الصف. الادعاء P5.
+
+### 28.10 حقائق المنافس المنظمة (JSON-LD)
+
+كثير من مواقع المطاعم والمتاجر تنشر قائمتها وأسعارها وساعات عملها وتقييمها بصيغة schema.org JSON-LD لمحركات البحث. `service/structured.py` يقرأ هذه البيانات من صفحة جلبها الزاحف عبر المسار الوحيد (robots، عنوان مثبّت، لا صفحات دخول)، ولا يقرأ شكل الصفحة أبدًا:
+
+| الدالة | ما تعيده |
+| --- | --- |
+| `extract(body)` | المنشأة (الاسم، النوع، الهاتف، المنطقة، مستوى الأسعار، الساعات)، والأصناف بأسعارها وعملتها، والتقييم وعدده؛ أو لا شيء |
+| `content_hash(facts)` | بصمة الحقائق وحدها، فلا تتغير بإعادة تصميم الموقع؛ لا بصمة لصفحة بلا حقائق (اللقطة «غير قابلة للتحقق» لا «سليمة») |
+| `diff(old, new)` و`summarize` | تغييرات مرتبة (سعر، صنف جديد أو مُزال، ساعات، مستوى أسعار، تقييم) وأسطر عربية للمالك محسوبة لا مولّدة |
+
+هذا ما يعدّ به عقد agent_competitor («تلخيص الفرق المحسوب آليًا») دون نموذج. **الحدود:** لا جلب ولا اتباع روابط @id ولا تنفيذ؛ 20 كتلة كحد أقصى، والكتلة الأكبر من 256 كيلوبايت تُسقط كاملة لا تُقتطع، و5000 عقدة، وعمق 12، و300 صنف، وكل نص يُقص إلى 200 حرف وتُزال منه محارف التحكم واتجاه النص. **الأسعار لا تُخمَّن:** «YER 1500» و«1.500,00» والسالب والنص تبقى بلا سعر. صفحة بلا JSON-LD تعطي لا شيء، لا تخمينًا من التصميم.
+
+الاختبار: tests/test_service_structured.py (9 اختبارات: صفحة مطعم عربية بقائمة، إعادة تصميم بالبصمة نفسها، أسعار ملتبسة، مدخل عدائي عميق وكبير ومحارف اتجاه، كتل معطوبة، سكربت غير JSON-LD، التغييرات بترتيبها وصياغتها). مصدر الفكرة والأفكار الأخرى وحالتها: docs/reference_projects.md. بقي: ربطه بمهمة فحص المنافس ولقطاتها (تخزين الحقائق لمقارنة اللقطة التالية) عند بناء agent_competitor.
 
 ## الملحق أ · رموز الأخطاء
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Railway staging job: apply every migration not yet applied, as the plain owner hermes_owner (as in CI),
-# then run the isolation cases (one transaction, rolled back) against the real database, and, when
+# then run the isolation cases in a scratch database on the same server (built from zero each time), and, when
 # HERMES_APP_URL is set, the end-to-end run of the pilot path against that running service (db/tests/e2e_pilot.py).
 # MIGRATE_ONLY=1 applies the migrations and stops: hermes-app runs it as its pre-deploy command, so a new build
 # never starts against an unmigrated schema, and a failed migration leaves the previous deployment serving.
@@ -26,8 +26,17 @@ done
 
 if [ "${MIGRATE_ONLY:-}" = 1 ]; then echo "migrations: up to date"; exit 0; fi   # hermes-app pre-deploy
 
+# The isolation cases run in their own database on the same server, rebuilt from scratch on every run: one long
+# rolled-back transaction on the live database deadlocked with the live worker during a load run (spec 28.7), and a
+# scratch database also proves the whole migration chain from zero on this server's Postgres version.
+iso_url=$(python3 -c 'import os, urllib.parse as u; p = u.urlsplit(os.environ["DATABASE_URL"]); print(u.urlunsplit(p._replace(path="/hermes_isolation")))')
+db -c "drop database if exists hermes_isolation with (force)" -c "create database hermes_isolation"
+PGOPTIONS="-c client_min_messages=warning" psql "$iso_url" -q -v ON_ERROR_STOP=1 -f db/local/0000_supabase_shim.sql
+for f in db/migrations/*.sql; do
+  PGOPTIONS="-c role=hermes_owner -c client_min_messages=warning" psql "$iso_url" -q -v ON_ERROR_STOP=1 -f "$f"
+done
 expected=$(grep -o "raise notice 'PASS" db/tests/rls_isolation_test.sql | wc -l)
-out=$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/tests/rls_isolation_test.sql 2>&1) || { echo "$out"; echo "isolation: FAILED"; exit 1; }
+out=$(psql "$iso_url" -v ON_ERROR_STOP=1 -f db/tests/rls_isolation_test.sql 2>&1) || { echo "$out"; echo "isolation: FAILED"; exit 1; }
 got=$(grep -c "NOTICE:  PASS" <<<"$out" || true)
 [ "$got" -eq "$expected" ] || { echo "$out"; echo "isolation: $got/$expected PASS notices"; exit 1; }
 echo "isolation: $got/$expected PASS"

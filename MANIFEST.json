@@ -1,8 +1,8 @@
 {
  "package_version": "1.8",
  "registry_version": "1.8.0",
- "source_id": "21817b5ac286f24ff9183607ff9099748234bbe4c0f4ecb26feac84d350f81a7",
- "file_count": 184,
+ "source_id": "6f27a4900595e25da3121eb2665dec066646029e9d80bb461879c4c0c02889dc",
+ "file_count": 187,
  "files": {
   ".github/CODEOWNERS": "067ae87535debd10972f58220d584fa82e3dbe8a6faf36c02ef439f37e82e99c",
   ".github/workflows/validate.yml": "c0335407d8566ed91699134e2d1425f474bd5512b655c7a7bb50abf4336cd65c",
@@ -102,6 +102,8 @@
   "ops/incident_template.md": "2fdf28f1aa816029e3c88513423791d12675f8e9b04f3efb81fdecdd43dc82e8",
   "ops/load/k6_webhook.js": "81dcf5350ddcd4a912427acdf83947fb4ec80b0cf769e7bd8a1fcc715e74f852",
   "ops/otel_genai_mapping.yaml": "f4f94f595f011510c5a1b40bd5b5d89e95cc7346cc872b422608429260c158d8",
+  "ops/railway/Dockerfile": "86b1169eb9fe7271abfea297ffc6886ab96f9c0c68f2c402a4d1e441e5a52b25",
+  "ops/railway/migrate.sh": "07e576c1ac97ed0158a09c1177eb8b007f78f7da271bc2ac19ae1a7ad57c1728",
   "ops/redteam/hermes_agent.md": "07b5dda0d12415593851dbbaf85fdfaaabc70749dd6ca6ac1a7525ce638c3425",
   "ops/redteam/hermes_cases.yaml": "d1b05b07b625a4b80d48019e902eec8297472b972ba1cc0c7f60fcd725f0a070",
   "ops/restore_drill.md": "51bd93b166cca4063418a3a7cd8ae3097787a5c7c78ae3f68be6d6eac4c1e926",
@@ -114,6 +116,7 @@
   "policies/content_rules.json": "162b21a96ef4df3a3510af168f2e7b2b8628338d6e58d0b3411414b7bb2eb7ab",
   "policies/content_rules.schema.json": "0b0e89664a7233ea9e6527a02ee12bbba2e4c96f0e84f3d9ae6efe4ca7a9fff2",
   "policies/fetch_policy.json": "7a97957d271cdcdf31f02ae09928045d78b6a14905ef6c7f2a513f49f05142bc",
+  "railway.json": "372f203f7fb99c0c5676c3c5445441dde1d07bec2cb320f0aee75493ab5d0456",
   "reports/claims.json": "e9a27a8e43c589be6a1edf43859e6da4fb52c99322d64b1e7ed5c4b8ca32bb57",
   "reports/claims_report.txt": "ad43963d3551fdb96cd97c14f2455032c44f98eb0e23a735afe81c7502e97fa5",
   "reports/defects_after_fix.txt": "355010aa2a7dbefa430cd117e22a6addb49b67b67e6cb7daaeb1a58b070a0ff1",

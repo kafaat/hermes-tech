@@ -22,12 +22,12 @@ class TestTelemetry(unittest.TestCase):
 
     def test_only_mapped_attributes_leave_and_content_events_are_dropped(self):
         span = {"name": "chat gpt-5.4-mini", "attributes": {
-            "gen_ai.request.model": "gpt-5.4-mini", "gen_ai.usage.input_tokens": 812, "hermes.agent_id": "agent_replies",
+            "gen_ai.request.model": "gpt-5.4-mini", "gen_ai.usage.input_tokens": 812, "gen_ai.agent.id": "agent_replies", "hermes.agent_id": "agent_replies",
             "gen_ai.input.messages": [{"role": "user", "content": "أريد حجز طاولة باسم أحمد"}],
             "gen_ai.output.messages": "تم", "gen_ai.prompt": "x", "hermes.body": "نص", "http.request.body": "x"},
             "events": [{"name": "gen_ai.content.prompt", "attributes": {"gen_ai.prompt": "كامل النص"}}]}
         out = sanitize_span(span)
-        self.assertEqual(set(out["attributes"]), {"gen_ai.request.model", "gen_ai.usage.input_tokens", "hermes.agent_id"})
+        self.assertEqual(set(out["attributes"]), {"gen_ai.request.model", "gen_ai.usage.input_tokens", "gen_ai.agent.id"})
         self.assertEqual(out["events"], [])
 
     def test_mapped_attribute_that_carries_personal_data_is_dropped(self):

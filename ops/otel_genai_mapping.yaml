@@ -1,4 +1,6 @@
-# agent_calls row -> OpenTelemetry span (GenAI semantic conventions, gen_ai.*)
+# agent_calls row -> OpenTelemetry span (GenAI semantic conventions, gen_ai.*). Names checked against
+# open-telemetry/semantic-conventions model/gen-ai (main, 29 Sep 2026): gen_ai.agent.{id,name,description,version} and
+# gen_ai.tool.{name,call.id,...} exist; there is no gen_ai.agent.type/workflow/task/handoff. Task and customer stay hermes.*.
 # Content capture is OFF by default: prompts and completions are never exported.
 version: 1.0.0
 span_name: "chat {model}"            # tool-only calls: "execute_tool {tool}"
@@ -10,7 +12,7 @@ attributes:
   gen_ai.usage.output_tokens: tokens_out
   gen_ai.tool.name: tool
   error.type: error_code              # only when outcome != success
-  hermes.agent_id: agent_id
+  gen_ai.agent.id: agent_id           # was hermes.agent_id: the standard name exists, so the vendor one goes
   hermes.task_id: task_id
   hermes.customer_ref: customer_id    # internal id; never names, phones or message text
   hermes.cost_usd: cost_usd

@@ -371,7 +371,8 @@ for name, fn in sorted(final.functions.items()):
         check(f"`app.{name}(" in inventory, "sql", f"app.{name}: security definer function listed in docs/security_definer_inventory.md")
         check("set search_path" in fn["head"].lower(), "sql", f"app.{name}: security definer function pins search_path")
 check("revoke execute on all functions in schema app from public" in sql, "sql", "EXECUTE on app functions revoked from PUBLIC")
-check("alter default privileges in schema app revoke execute on functions from public" in sql, "sql", "future app functions start without PUBLIC EXECUTE")
+# the global form: a per-schema default cannot revoke the built-in PUBLIC EXECUTE (it only adds)
+check(re.search(r"alter default privileges\s+revoke execute on functions from public", sql) is not None, "sql", "future app functions start without PUBLIC EXECUTE")
 check("grant execute on function app.assert_approved(uuid, uuid, text) to hermes_worker, authenticated" in sql, "sql",
       "guard helper executable by the roles whose writes fire the guard triggers")
 check("leads_name_source_required" in sql, "sql", "lead names require a non-Google source (Maps caching terms)")

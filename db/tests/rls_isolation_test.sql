@@ -6,10 +6,16 @@ insert into app.customers (id, public_ref, business_name, sector, city, currency
   ('00000000-0000-0000-0000-00000000000a', 'cust_aaaa', 'مطعم أ', 'restaurant', 'city_1', 'zone_a', 'active'),
   ('00000000-0000-0000-0000-00000000000b', 'cust_bbbb', 'ورشة ب', 'home_services', 'city_1', 'zone_a', 'active');
 insert into app.customer_users (customer_id, auth_user_id, role) values
-  ('00000000-0000-0000-0000-00000000000a', '11111111-1111-1111-1111-111111111111', 'owner');
+  ('00000000-0000-0000-0000-00000000000a', '11111111-1111-1111-1111-111111111111', 'owner'),
+  ('00000000-0000-0000-0000-00000000000b', '33333333-3333-3333-3333-333333333333', 'owner');
+-- an approved fact is written by its own business's owner (kb_facts_guard, 0009), fixtures included
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
 insert into app.kb_facts (customer_id, topic, fact, approved_by_owner) values
-  ('00000000-0000-0000-0000-00000000000a', 'hours', 'A', true),
+  ('00000000-0000-0000-0000-00000000000a', 'hours', 'A', true);
+select set_config('request.jwt.claim.sub', '33333333-3333-3333-3333-333333333333', true);
+insert into app.kb_facts (customer_id, topic, fact, approved_by_owner) values
   ('00000000-0000-0000-0000-00000000000b', 'hours', 'B', true);
+select set_config('request.jwt.claim.sub', '', true);
 
 -- v1.7 helpers (run as superuser): a worker's tenant now comes ONLY from a live task lease
 create function pg_temp.bind_as(c uuid) returns void language plpgsql as $$
@@ -487,7 +493,8 @@ do $$ declare ap uuid; pay jsonb; begin
   begin
     update app.outbox set payload = pay || '{"body":"x"}' where approval_id = ap;
     raise exception 'FAIL outbox payload changed after approval';
-  exception when raise_exception then if sqlerrm like 'FAIL%' then raise; end if;
+  -- since 0010 the worker holds no UPDATE on payload at all (O2), so the grant refuses before the trigger
+  exception when raise_exception or insufficient_privilege then if sqlerrm like 'FAIL%' then raise; end if;
   end;
   raise notice 'PASS outbox verifies, consumes once and freezes the payload';
 -- 32. published content is bound to its consumed approval and immutable (P1-03)
@@ -555,26 +562,28 @@ reset role;
 -- 34. only an owner marks a fact approved; any edit resets it (P1-01)
 select pg_temp.bind_as('00000000-0000-0000-0000-00000000000a');
 set local role hermes_worker;
-do $$ begin
+do $$ declare k uuid; begin
   begin
     insert into app.kb_facts (customer_id, topic, fact, approved_by_owner) values ('00000000-0000-0000-0000-00000000000a', 'hours', 'y', true);
     raise exception 'FAIL worker approved a fact';
   exception when insufficient_privilege then null;
   end;
-  insert into app.kb_facts (id, customer_id, topic, fact) values ('00000000-0000-0000-0000-0000000000c9', '00000000-0000-0000-0000-00000000000a', 'hours', '9-5');
+  -- the worker is granted no id column (0009): the database picks the id
+  insert into app.kb_facts (customer_id, topic, fact) values ('00000000-0000-0000-0000-00000000000a', 'hours', '9-5') returning id into k;
+  perform set_config('test.kb', k::text, true);
 end $$;
 reset role;
 select set_config('app.task_id', '', true), set_config('app.task_token', '', true), set_config('app.customer_id', '', true);
 select pg_temp.as_user('11111111-1111-1111-1111-111111111111', 'aal1');
 set local role authenticated;
-update app.kb_facts set approved_by_owner = true where id = '00000000-0000-0000-0000-0000000000c9';
+update app.kb_facts set approved_by_owner = true where id = current_setting('test.kb')::uuid;
 reset role;
 select pg_temp.bind_as('00000000-0000-0000-0000-00000000000a');
 set local role hermes_worker;
-update app.kb_facts set fact = '9-6' where id = '00000000-0000-0000-0000-0000000000c9';
+update app.kb_facts set fact = '9-6' where id = current_setting('test.kb')::uuid;
 reset role;
 do $$ begin
-  if (select approved_by_owner from app.kb_facts where id = '00000000-0000-0000-0000-0000000000c9') then raise exception 'FAIL edited fact kept its approval'; end if;
+  if (select approved_by_owner from app.kb_facts where id = current_setting('test.kb')::uuid) then raise exception 'FAIL edited fact kept its approval'; end if;
   raise notice 'PASS fact approval is owner-only and edit-sensitive';
 end $$;
 

@@ -284,11 +284,12 @@ begin
           raise exception 'OUTBOX_BAD_CLAIM' using errcode = 'P0001';
         end if;
       elsif live then                                            -- heartbeat by the holder, or release before the request left
-        if not ((new.sending_token = old.sending_token and new.sending_until > old.sending_until)
-                or (new.sending_until is null and new.sending_token is null and new.last_error like 'BEFORE_SEND%')) then
+        -- coalesce: with a NULL last_error or token the test is NULL, and "if not NULL" would let the release through
+        if not coalesce((new.sending_token = old.sending_token and new.sending_until > old.sending_until)
+                or (new.sending_until is null and new.sending_token is null and new.last_error like 'BEFORE_SEND%'), false) then
           raise exception 'OUTBOX_LEASE_HELD' using errcode = 'P0001';
         end if;
-      elsif not (t.provider_idempotent and new.sending_token is not null and new.sending_until > clock_timestamp()) then
+      elsif not coalesce(t.provider_idempotent and new.sending_token is not null and new.sending_until > clock_timestamp(), false) then
         raise exception 'OUTBOX_AMBIGUOUS_NEEDS_HUMAN' using errcode = 'P0001';  -- expired and unconfirmed: sent or not?
       end if;
     end if;
@@ -516,8 +517,10 @@ do $$ begin
 end $$;
 grant usage on schema app to hermes_jobs;
 alter table app.inquiries add column body_purged_at timestamptz;
+-- no "body_purged_at is null" here: an UPDATE that reads columns must also leave a row the SELECT policy
+-- admits, and the purged row has body_purged_at set. The job still never reads a body (column grant below).
 create policy inquiries_retention_select on app.inquiries for select to hermes_jobs
-  using (body_purged_at is null and received_at < now() - interval '30 days');
+  using (received_at < now() - interval '30 days');
 create policy inquiries_retention_purge on app.inquiries for update to hermes_jobs
   using (body_purged_at is null and received_at < now() - interval '30 days')
   with check (body is null and body_purged_at is not null);

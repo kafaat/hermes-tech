@@ -11,7 +11,9 @@ begin;
 
 -- ------------------------------------------------------------ 1. function privileges
 revoke execute on all functions in schema app from public;
-alter default privileges in schema app revoke execute on functions from public;
+-- global form: a per-schema default can only ADD to the global defaults, so "in schema app" cannot
+-- revoke the built-in PUBLIC EXECUTE and left every later app function open (found on first Postgres run)
+alter default privileges revoke execute on functions from public;
 grant execute on function app.current_user_customer_ids() to authenticated;
 grant execute on function app.is_operator()               to authenticated;
 grant execute on function app.worker_customer_id()        to hermes_worker, authenticated;

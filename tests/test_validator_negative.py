@@ -90,6 +90,17 @@ class TestValidatorNegative(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("FAIL [sql] EXECUTE on app functions revoked from PUBLIC", out)
 
+    def test_schema_scoped_default_privileges_do_not_count(self):
+        # "in schema app" cannot revoke the built-in PUBLIC EXECUTE; only the global form closes new functions
+        def m(t):
+            p = t / "db/migrations/0006_v12_hardening.sql"
+            p.write_text(p.read_text(encoding="utf-8").replace(
+                "alter default privileges revoke execute on functions from public;",
+                "alter default privileges in schema app revoke execute on functions from public;"), encoding="utf-8")
+        code, out = run_with(m)
+        self.assertEqual(code, 1)
+        self.assertIn("FAIL [sql] future app functions start without PUBLIC EXECUTE", out)
+
     def test_fallback_without_admission_record(self):
         code, out = run_with(lambda t: edit_json(t, "contracts/content.contract.json",
                                                  lambda d: d["model"].__setitem__("fallback", "gpt-5.4-nano")))
@@ -100,7 +111,8 @@ class TestValidatorNegative(unittest.TestCase):
         code, out = run_with(lambda t: edit_json(t, "contracts/replies.contract.json",
                                                  lambda d: d["permissions"].__setitem__("requires_human_approval", ["reply:send"])))
         self.assertEqual(code, 1)
-        self.assertIn("unexpected property 'requires_human_approval'", out)
+        # wording differs between jsonschema (CI) and the built-in fallback: check the verdict, not the phrase
+        self.assertRegex(out, r"FAIL \[schema\] replies\.contract\.json matches agent_contract\.schema\.json -> .*requires_human_approval")
 
 
 if __name__ == "__main__":

@@ -1043,6 +1043,17 @@ do $$ begin
   end if;
   raise notice 'PASS the monitor gets numbers from one function, agreeing with the operator view, and cannot read a row';
 end $$;
+-- 48. every table whose policies filter by customer_id has an index leading with customer_id (0013)
+do $$ declare bad text; begin
+  select string_agg(distinct p.tablename, ',') into bad from pg_policies p
+    join pg_class c on c.relname = p.tablename and c.relnamespace = 'app'::regnamespace
+    join pg_attribute a on a.attrelid = c.oid and a.attname = 'customer_id'
+   where p.schemaname = 'app' and coalesce(p.qual, '') || coalesce(p.with_check, '') ~ '\mcustomer_id\M'
+     and not exists (select 1 from pg_index i where i.indrelid = c.oid and i.indkey[0] = a.attnum);
+  if bad is not null then raise exception 'FAIL tables filtered by customer_id without a leading index: %', bad; end if;
+  raise notice 'PASS every table filtered by customer_id has an index leading with it';
+end $$;
+
 do $$ declare o text; begin
   select format('owner=%s superuser=%s bypassrls=%s', r.rolname, r.rolsuper, r.rolbypassrls) into o
     from pg_class c join pg_roles r on r.oid = c.relowner where c.oid = 'app.tasks'::regclass;

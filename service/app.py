@@ -7,8 +7,10 @@
   POST /webhook   webhook.Handler: size limit, HMAC on the raw bytes, then insert as hermes_ingest; 200 only after commit
   GET  /healthz   database reachable (as hermes_ingest), the deployed commit and the handler counters (numbers only)
   GET  /deps      what must stay true between deploys, for an external uptime monitor: app.health_signals() as
-                  hermes_monitor (numbers, never rows); 503 names the failing signals. Railway checks /healthz at
-                  deploy time only and never reports a skipped or hung cron run, so this is read from outside.
+                  hermes_monitor (numbers, never rows); 503 when a signal fails. The numbers and the failing names
+                  only with X-Monitor-Token = HERMES_MONITOR_TOKEN; otherwise the code and "ok" / "degraded".
+                  Railway checks /healthz at deploy time only and never reports a skipped or hung cron run, so this
+                  is read from outside.
 The worker runs in a thread as hermes_worker. It accepts connections; it opens none (the Graph API is simulated:
 HERMES_GRAPH must be "simulate" until a real client exists, and anything else refuses to start).
 """
@@ -19,7 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qsl, urlsplit
 
 from service import redact
-from service.health import SIGNALS, assess
+from service.health import SIGNALS, assess, authorized
 from service.pg import Database, Ingest
 from service.webhook import MAX_BODY_BYTES, Handler, verify_subscription
 from service.worker import Worker, simulated_adapters, worker_name
@@ -29,7 +31,7 @@ COMMIT = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "")          # lets a caller w
 
 
 def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | None = None,
-                      retention_max_age_hours: float = 26):
+                      retention_max_age_hours: float = 26, monitor_token: str = ""):
     class H(BaseHTTPRequestHandler):
         def _reply(self, status: int, body: str, ctype: str = "text/plain; charset=utf-8"):
             data = body.encode("utf-8")
@@ -51,14 +53,19 @@ def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | N
                 return self._reply(200, json.dumps({"status": "ok", "commit": COMMIT, "webhook": asdict(webhook.counters)}),
                                    "application/json")
             if u.path == "/deps" and monitor is not None:
+                full = authorized(self.headers.get("X-Monitor-Token"), monitor_token)
                 try:
                     with monitor.tx() as cur:
                         cur.execute("select " + ", ".join(SIGNALS) + " from app.health_signals()")
                         signals = dict(zip(SIGNALS, cur.fetchone()))
                 except Exception as exc:               # noqa: BLE001
+                    if not full:
+                        return self._reply(503, "db_unreachable")
                     return self._reply(503, json.dumps({"status": "db_unreachable", "error": type(exc).__name__}),
                                        "application/json")
                 status, body = assess(signals, retention_max_age_hours)
+                if not full:
+                    return self._reply(status, body["status"])
                 return self._reply(status, json.dumps(body), "application/json")
             if u.path == "/webhook":
                 return self._reply(*verify_subscription(dict(parse_qsl(u.query)), verify_token))
@@ -107,7 +114,7 @@ def main():
     port = int(os.environ.get("PORT", "8080"))
     server = ThreadingHTTPServer(("0.0.0.0", port), make_http_handler(
         webhook, os.environ.get("HERMES_VERIFY_TOKEN", ""), Database(url, "hermes_monitor"),
-        float(os.environ.get("HERMES_RETENTION_MAX_AGE_HOURS", "26"))))
+        float(os.environ.get("HERMES_RETENTION_MAX_AGE_HOURS", "26")), os.environ.get("HERMES_MONITOR_TOKEN", "")))
 
     def on_term(signum, frame):                    # Railway sends SIGTERM, then SIGKILL after drainingSeconds: stop taking
         log.info("SIGTERM: draining")               # requests, let the current task finish (its lease covers a kill anyway)

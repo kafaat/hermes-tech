@@ -15,7 +15,8 @@ check each step. Seeding is idempotent and uses a fixed staging tenant; every ru
   5. the owner approves                   -> outbox consumes the approval once, the reply is sent, task succeeded
   6. the delivery receipt webhook         -> routed, processed, task succeeded
   7. audit: enqueue by the leased agent and the owner's decision, in the chain
-  8. GET /deps (external monitor): numbers only, and after this run nothing but a never-run purge may fail
+  8. GET /deps (external monitor): without X-Monitor-Token only the code and one word; with it, numbers only, and
+     after this run nothing but a never-run purge may fail
 """
 from __future__ import annotations
 import hashlib, hmac, json, os, socket, subprocess, sys, time, urllib.error, urllib.request, uuid
@@ -29,6 +30,7 @@ CUSTOMER = "00000000-0000-0000-0000-0000000e2e01"
 OWNER = "00000000-0000-0000-0000-0000000e2e0a"
 PHONE_ID = "pn-e2e-staging"
 HOURS = "نفتح يوميًا من ٩ صباحًا إلى ١١ مساءً"
+MONITOR_TOKEN = os.environ.get("HERMES_MONITOR_TOKEN") or uuid.uuid4().hex   # staging: the service's own (shared var)
 failures = []
 
 
@@ -98,6 +100,7 @@ def start_app():
     s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
     secret = uuid.uuid4().hex
     env = {**os.environ, "HERMES_WEBHOOK_SECRETS": secret, "HERMES_GRAPH": "simulate", "PORT": str(port),
+           "HERMES_MONITOR_TOKEN": MONITOR_TOKEN,
            "HERMES_APPROVAL_POLL_SECONDS": "1", "HERMES_VERIFY_TOKEN": "e2e"}
     proc = subprocess.Popen([sys.executable, "-m", "service.app"], cwd=ROOT, env=env)
     return f"http://127.0.0.1:{port}", secret, proc
@@ -180,11 +183,20 @@ def main():
                         (f"%E2E.{run}%",))[0][0]
         check(unprocessed == 0, "every event of this run processed")
         check(not q("select 1 from app.audit_verify()"), "audit chain intact")
+        def get_deps(headers):
+            try:
+                with urllib.request.urlopen(urllib.request.Request(url + "/deps", headers=headers), timeout=10) as r:
+                    return r.status, r.read().decode()
+            except urllib.error.HTTPError as e:
+                return e.code, e.read().decode()
+        bare_code, bare = get_deps({})
+        code, raw = get_deps({"X-Monitor-Token": MONITOR_TOKEN})
+        check(bare in ("ok", "degraded") and bare_code == code and get_deps({"X-Monitor-Token": "wrong"})[1] == bare,
+              f"/deps without the monitor token: the code and one word only ({bare_code} {bare})")
         try:
-            with urllib.request.urlopen(url + "/deps", timeout=10) as r:
-                code, deps = r.status, json.load(r)
-        except urllib.error.HTTPError as e:
-            code, deps = e.code, json.load(e)
+            deps = json.loads(raw)
+        except ValueError:
+            deps = {}
         signals = {"retention_age_seconds", "overdue_bodies", "outbox_attention", "webhook_backlog", "webhook_unrouted"}
         check(set(deps) == {"status", "failing"} | signals and all(deps[k] is None or isinstance(deps[k], int) for k in signals)
               and (code == 200) == (deps["failing"] == []), f"/deps answers with numbers only ({code} {deps.get('failing')})")

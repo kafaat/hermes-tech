@@ -2,7 +2,7 @@ import sys, unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from service.telemetry import sanitize_span, SanitizingExporter, MAPPING
-from service.health import SIGNALS, assess
+from service.health import SIGNALS, assess, authorized
 
 
 class Sink:
@@ -64,6 +64,13 @@ class TestDepsAssessment(unittest.TestCase):
             status, body = assess({**self.OK, key: 1})
             self.assertEqual((status, body["status"], body["failing"]), (503, "degraded", [key]))
         self.assertEqual(assess({**self.OK, "webhook_unrouted": 500})[0], 200)
+
+    def test_the_numbers_need_the_monitor_token(self):
+        self.assertTrue(authorized("s3cret-token", "s3cret-token"))
+        for header in (None, "", "s3cret", "s3cret-token ", "S3CRET-TOKEN"):
+            self.assertFalse(authorized(header, "s3cret-token"))
+        self.assertFalse(authorized("", ""), "no configured token: nobody gets the numbers")
+        self.assertFalse(authorized(None, ""))
 
 
 if __name__ == "__main__":

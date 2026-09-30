@@ -892,6 +892,25 @@ do $$ begin
   raise notice 'PASS retention purges old bodies without reading them';
 end $$;
 
+-- 45b. a failed purge records no run: retention_runs is written inside the purge's own transaction, so its latest row
+--      is the latest SUCCESS, and a run that fails (a permission error, a timeout, a lock) cannot silence the monitor
+do $$ declare before bigint; begin
+  select count(*) into before from app.retention_runs;
+  begin
+    create function app.t45b_fail() returns trigger language plpgsql as $f$ begin raise exception 'forced purge failure'; end $f$;
+    create trigger t45b_fail before update on app.inquiries for each row execute function app.t45b_fail();
+    insert into app.inquiries (customer_id, source, received_at, body)
+    values ('00000000-0000-0000-0000-00000000000a', 'whatsapp', now() - interval '40 days', 'body a failing purge meets');
+    perform app.purge_inquiry_bodies();
+    raise exception 'FAIL the forced purge failure did not happen';
+  exception when raise_exception then
+    if sqlerrm like 'FAIL%' then raise; end if;
+  end;
+  if (select count(*) from app.retention_runs) <> before then raise exception 'FAIL a failed purge recorded a run'; end if;
+  if exists (select 1 from pg_proc where proname = 't45b_fail') then raise exception 'FAIL test trigger survived'; end if;
+  raise notice 'PASS a failed purge records no run: the latest retention_runs row is the latest success';
+end $$;
+
 -- 46. the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)
 do $$ declare got text; bad text; begin
   select string_agg(relname, ',' order by relname collate "C") into got from pg_class

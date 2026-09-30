@@ -1,7 +1,7 @@
 {
  "package_version": "1.8",
  "registry_version": "1.8.0",
- "source_id": "96ca26cfe8f81e658ecb52c43747d43c9f2a5caff64e13d528d90fc0ce1a5145",
+ "source_id": "dbf1c57b1274ee3b41b4a7760817a844d5940f9e0df08f95ff34bf110874a959",
  "file_count": 195,
  "files": {
   ".dockerignore": "51acffa125b3d041889f51bdfe771d46303571b7407c6cc29621dbc9d2c1ce38",
@@ -77,7 +77,7 @@
   "docs/adr/0008-supply-chain.md": "572d59c294bedd06a2d866153f98ed360075152e8718c71648eac99cdf188480",
   "docs/adr/0009-second-model-provider.md": "963f971b8dbc51ee4f8eee03910e2dfa735d9f42867dead1150ffc0fce226519",
   "docs/adr/0010-secrets-management.md": "3b839ada5549f6813321eff781dbb5f04240dd98c2278a91db33d9becd47e986",
-  "docs/adr/0011-outbound-provider-client.md": "fa5d7221d0e1ed5e11c305d1053b69bdb129407bf08ba54916cebfce86458a5d",
+  "docs/adr/0011-outbound-provider-client.md": "1094d3c7119567a1138251b70273f228ac66f4457de60c8adbf1f18b0a62f803",
   "docs/audit_checkpoints.md": "7fbd215bcff6ed358fe879ef7f17d04c62235cfffa03b39e9b33cda8746d7db5",
   "docs/claims.yaml": "ffa2aa1ddedc187c6ac982d4a5a1856e69683cd723dadcf0ab33691237d166c3",
   "docs/defects_v15.md": "ba7295253be1f12438e32e085b0f3287e1f15680fb274b18cc68a6b7568b6248",

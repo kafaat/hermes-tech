@@ -20,13 +20,19 @@ failed = s["http_req_failed"]["values"]["rate"]
 like = f"wamid.LOAD.{run}.%"
 load_end = time.time()
 
-with psycopg.connect(__import__("os").environ["DATABASE_URL"], autocommit=True) as c:
+print(f"verify: k6 sent {sent}, edge p95 {p95_ms:.4g} ms, failed rate {failed:.4g}; waiting for the queue", flush=True)
+with psycopg.connect(__import__("os").environ["DATABASE_URL"], autocommit=True, connect_timeout=10,
+                     options="-c statement_timeout=30000") as c:
     q = lambda sql, *a: c.execute(sql, a).fetchone()
+    said = 0.0
     while True:                                   # wait for the worker to finish every task of this run
         open_tasks = q("select count(*) from app.tasks where idempotency_key like %s and status in ('queued','running')",
                        "wh:whatsapp_cloud:" + like)[0]
         if open_tasks == 0 or time.time() - load_end > drain_limit:
             break
+        if time.time() - said > 30:
+            print(f"verify: {open_tasks} tasks open after {time.time() - load_end:.0f} s", flush=True)
+            said = time.time()
         time.sleep(2)
     drain_s = time.time() - load_end
     events, routed = q("select count(*), count(customer_id) from app.webhook_events where external_event_id like %s", like)

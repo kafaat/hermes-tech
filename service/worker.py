@@ -159,7 +159,11 @@ class Worker:
     def handle(self, t: Task) -> str:
         with self.db.tx(t.bind) as cur:
             cur.execute("select idempotency_key from app.tasks where id = %s", (t.id,))
-            _, kind, ext = cur.fetchone()[0].split(":", 2)                     # 'wh:<kind>:<external id>'
+            key = cur.fetchone()[0]
+        if key.startswith("resend:"):                     # an operator's resend (0015): 'resend:<outbox id>:<attempts>'
+            return self._resend(t, int(key.split(":")[1]))
+        with self.db.tx(t.bind) as cur:
+            _, kind, ext = key.split(":", 2)                                   # 'wh:<kind>:<external id>'
             cur.execute("select id, payload, channel_external_id from app.webhook_events where kind = %s and external_event_id = %s",
                         (kind, ext))
             event_id, payload, channel = cur.fetchone()
@@ -171,6 +175,13 @@ class Worker:
         if proposal is not None:
             return self._after_proposal(t, event_id, ext, proposal)
         return self._message(t, event_id, ext, channel, payload.get("message") or {})
+
+    def _resend(self, t: Task, outbox_id: int) -> str:
+        """The same dispatcher and claim as any send: the database refuses a row that is not pending again, and a
+        second ambiguous result goes back to the operator."""
+        outcome = self._dispatch(t, outbox_id)
+        self._complete(t, "succeeded" if outcome == SENT else "escalated", None if outcome == SENT else f"resend:{outcome}"[:60])
+        return f"resend {outcome}"
 
     def _receipt(self, t: Task, event_id: int, status: dict) -> str:
         with self.db.tx(t.bind) as cur:

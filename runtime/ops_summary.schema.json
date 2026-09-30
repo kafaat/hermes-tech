@@ -195,6 +195,7 @@
               "OUTBOX_BAD_TRANSITION",
               "OUTBOX_TARGET_REQUIRED",
               "OUTBOX_TARGET_CONFLICT",
+              "OUTBOX_RESEND_NEEDS_CUSTOMER",
               "OUTBOX_FINAL",
               "OUTBOX_IMMUTABLE",
               "OUTBOX_LEASE_HELD",

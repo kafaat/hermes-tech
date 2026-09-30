@@ -941,6 +941,54 @@ do $$ begin
   raise notice 'PASS one outbox row per target, backed by a unique index';
 end $$;
 
+-- 50. an operator settles an outbox row that waits for a human: only with aal2, only with a reason, only once; a
+--     "resend" queues the task that sends it again (0015), and a platform row cannot be resent through a worker
+insert into app.outbox (customer_id, topic, payload, target_id)
+values ('00000000-0000-0000-0000-00000000000a', 'notify.owner', '{"event":"T50"}', 'T50'),
+       (null, 'notify.owner', '{"event":"T50p"}', 'T50p');
+update app.outbox set needs_human_check = true, last_error = 'AMBIGUOUS:TEST' where target_id in ('T50', 'T50p');
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222', 'aal1');
+set local role authenticated;
+do $$ declare ob bigint; begin
+  begin
+    perform app.resolve_outbox((select id from app.outbox where target_id = 'T50'), 'resend', 'provider says not delivered');
+    raise exception 'FAIL an aal1 operator resolved a row';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222', 'aal2');
+set local role authenticated;
+do $$ declare ob bigint; begin
+  select id into ob from app.outbox where target_id = 'T50';
+  begin
+    perform app.resolve_outbox(ob, 'resend', 'no');
+    raise exception 'FAIL a resolution without a reason was accepted';
+  exception when raise_exception then if sqlerrm <> 'REASON_REQUIRED' then raise; end if;
+  end;
+  perform app.resolve_outbox(ob, 'resend', 'provider log shows it was never delivered');
+  if not exists (select 1 from app.tasks where idempotency_key = 'resend:' || ob || ':0' and kind = 'outbox.resend'
+                 and agent_id = 'agent_triage' and status = 'queued' and customer_id = '00000000-0000-0000-0000-00000000000a') then
+    raise exception 'FAIL resend queued no task';
+  end if;
+  if exists (select 1 from app.outbox where id = ob and (needs_human_check or sending_until is not null or resolution <> 'resend')) then
+    raise exception 'FAIL the row is not pending again after resend';
+  end if;
+  begin
+    perform app.resolve_outbox(ob, 'abandon', 'second decision on the same row');
+    raise exception 'FAIL a settled row was settled again';
+  exception when raise_exception then if sqlerrm <> 'OUTBOX_NOT_WAITING_FOR_HUMAN' then raise; end if;
+  end;
+  begin
+    perform app.resolve_outbox((select id from app.outbox where target_id = 'T50p'), 'resend', 'platform row, no customer');
+    raise exception 'FAIL a platform row was queued for a worker';
+  exception when raise_exception then if sqlerrm <> 'OUTBOX_RESEND_NEEDS_CUSTOMER' then raise; end if;
+  end;
+  raise notice 'PASS an operator settles a waiting row once, with aal2 and a reason; resend queues its task';
+end $$;
+reset role;
+select set_config('request.jwt.claim.sub', '', true), set_config('request.jwt.claims', '', true);
+
 -- 46. the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)
 do $$ declare got text; bad text; begin
   select string_agg(relname, ',' order by relname collate "C") into got from pg_class

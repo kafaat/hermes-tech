@@ -15,6 +15,10 @@ the database also refuses a decision not attributed to the session user (DECIDER
   POST /portal/decide              approval=<id> decision=approved|rejected csrf=<token>
   POST /portal/facts/approve       fact=<id> csrf=<token>
   POST /portal/logout
+  GET  /portal/ops                 operator console: outbox rows waiting for a human, retention, unrouted events
+  POST /portal/ops/resolve         outbox=<id> resolution=confirmed_sent|resend|abandon reason=<text> csrf=<token>
+The console shows and does only what app.is_operator() allows: an active operator row AND an aal2 session (a
+completed second factor). The database decides both; the console asks it and says no otherwise.
 Every POST: a form body under 4 KiB, a same-origin Origin header when one is sent, and (except sign-in) the
 session's CSRF token. No script runs on these pages (Content-Security-Policy: script-src 'none'); every value
 is written through service.render, whose templates are checked at render time (claim A24).
@@ -43,6 +47,8 @@ class StorePort(Protocol):
     def overview(self, claims: dict) -> dict: ...
     def decide(self, claims: dict, approval_id: str, decision: str) -> bool: ...
     def approve_fact(self, claims: dict, fact_id: str) -> bool: ...
+    def ops_overview(self, claims: dict) -> dict | None: ...                 # None: not an operator in this session
+    def resolve(self, claims: dict, outbox_id: str, resolution: str, reason: str) -> None: ...
 
 
 HEAD = """<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
@@ -83,8 +89,28 @@ STAGING_LOGIN = """<div class="card"><p class="meta">بيئة التجربة (st
 <form method="post" action="/portal/staging-login"><input type="password" name="code" aria-label="رمز التجربة" autocomplete="off">
 <button class="ok">دخول</button></form></div>"""
 
+OPS_TOP = """<h1>لوحة المشغّل</h1><p class="meta">جلسة مشغّل بتحقق ثنائي · <a href="/portal">بوابة المالك</a></p>
+<form method="post" action="/portal/logout"><input type="hidden" name="csrf" value="{{csrf}}"><button>خروج</button></form>"""
+OPS_HEALTH = """<h2>الحالة</h2><div class="card"><div>آخر محو ناجح: {{retention}}</div><div>نصوص تجاوزت 31 يومًا: {{overdue}}</div>
+<div>أحداث موقّعة لا تتبع أي قناة: {{unrouted}}</div></div>"""
+OPS_ROWS_H = """<h2>صفوف الصندوق الصادر التي تحتاج إنسانًا ({{count}})</h2>
+<p class="meta">«تحتاج قرارًا»: الإرسال غامض، لا يُعاد آليًا أبدًا. «ينتظر العامل»: انتهى حجز الإرسال بلا نتيجة، وسيعلّمه العامل
+عند استعادة المهمة. قبل «أُرسل فعلًا» تحقق من المزوّد؛ «أعد الإرسال» يُرسل مرة أخرى وقد يصل مرتين إن كان الأول قد وصل.</p>"""
+OPS_ROW = """<div class="card"><div class="meta">#{{id}} · {{customer}} · {{topic}} · محاولات {{attempts}} · {{state}}</div>
+<div class="body">{{error}}</div></div>"""
+OPS_ROW_DECIDE = """<div class="card"><div class="meta">#{{id}} · {{customer}} · {{topic}} · محاولات {{attempts}} · تحتاج قرارًا</div>
+<div class="body">{{error}}</div>
+<form method="post" action="/portal/ops/resolve"><input type="hidden" name="outbox" value="{{id}}">
+<input type="hidden" name="csrf" value="{{csrf}}"><input type="text" name="reason" aria-label="السبب" placeholder="السبب (إلزامي)" required minlength="5">
+<button name="resolution" value="confirmed_sent" class="ok">أُرسل فعلًا</button><button name="resolution" value="resend">أعد الإرسال</button>
+<button name="resolution" value="abandon" class="no">تخلَّ عنه</button></form></div>"""
+STAGING_OPERATOR = """<div class="card"><p class="meta">مشغّل بيئة التجربة (staging): الرمز نفسه، وجلسة بتحقق ثنائي مُفترض.</p>
+<form method="post" action="/portal/staging-login"><input type="hidden" name="as" value="operator">
+<input type="password" name="code" aria-label="رمز التجربة" autocomplete="off"><button>دخول كمشغّل</button></form></div>"""
+
 MESSAGES = {"approved": "تمت الموافقة. يُرسل الرد خلال دقيقة.", "rejected": "رُفض المقترح ولن يُرسل.",
-            "fact": "اعتُمدت المعلومة.", "gone": "لم يُنفّذ: المقترح لم يعد معلقًا أو ليس لك.", "error": "تعذّر التنفيذ. أعد المحاولة."}
+            "fact": "اعتُمدت المعلومة.", "resolved": "سُجّل القرار. «أعد الإرسال» يُرسل خلال دقيقة.",
+            "reason": "لم يُنفّذ: السبب إلزامي (خمسة أحرف على الأقل).", "gone": "لم يُنفّذ: المقترح لم يعد معلقًا أو ليس لك.", "error": "تعذّر التنفيذ. أعد المحاولة."}
 
 
 def _r(template: str, **fields) -> str:
@@ -105,10 +131,11 @@ def _when(ts) -> str:
 
 class Portal:
     def __init__(self, store: StorePort, secret: str, *, staging_login_code: str = "", staging_owner_id: str = "",
-                 simulate: bool = False, now=time.time):
+                 staging_operator_id: str = "", simulate: bool = False, now=time.time):
         self.store, self.secret, self.now = store, secret, now
         self.staging = bool(simulate and staging_login_code and staging_owner_id and secret)
         self.staging_code, self.staging_owner = staging_login_code, staging_owner_id
+        self.staging_operator = staging_operator_id if self.staging else ""
 
     # ------------------------------------------------------------ plumbing
     def _page(self, status: int, inner: str, extra: list | None = None):
@@ -150,8 +177,11 @@ class Portal:
     def handle(self, method: str, path: str, headers: dict, body: bytes):
         headers = {k.lower(): v for k, v in headers.items()}
         route = urlsplit(path).path.rstrip("/") or "/"
+        done = parse_qs(urlsplit(path).query).get("done", [""])[0]
         if method == "GET" and route == "/portal":
-            return self._home(headers, parse_qs(urlsplit(path).query).get("done", [""])[0])
+            return self._home(headers, done)
+        if method == "GET" and route == "/portal/ops":
+            return self._ops(headers, done)
         if method != "POST" or not route.startswith("/portal/"):
             return self._page(404, _r(NONE, text="غير موجود"))
         if len(body) > MAX_FORM_BYTES or not self._same_origin(headers):
@@ -163,7 +193,7 @@ class Portal:
         if route == "/portal/session":
             return self._sign_in(form.get("access_token", ""))
         if route == "/portal/staging-login":
-            return self._staging_login(form.get("code", ""))
+            return self._staging_login(form.get("code", ""), form.get("as") == "operator")
         token, claims = self._session(headers)
         if claims is None:
             return self._redirect("/portal", [self._clear()])
@@ -178,9 +208,15 @@ class Portal:
             if route == "/portal/facts/approve":
                 ok = self.store.approve_fact(claims, form.get("fact", ""))
                 return self._redirect("/portal?done=" + ("fact" if ok else "gone"))
+            if route == "/portal/ops/resolve" and form.get("resolution") in ("confirmed_sent", "resend", "abandon"):
+                reason = form.get("reason", "").strip()
+                if len(reason) < 5:
+                    return self._redirect("/portal/ops?done=reason")
+                self.store.resolve(claims, form.get("outbox", ""), form["resolution"], reason[:180])
+                return self._redirect("/portal/ops?done=resolved")
         except Exception as exc:                           # noqa: BLE001 - a guard refused, or a bad id: say so, no detail
             log.warning("portal action refused: %s", type(exc).__name__)
-            return self._redirect("/portal?done=error")
+            return self._redirect(("/portal/ops" if route.startswith("/portal/ops/") else "/portal") + "?done=error")
         return self._page(400, _r(NONE, text="طلب غير صالح"))
 
     def _sign_in(self, access_token: str):
@@ -191,18 +227,51 @@ class Portal:
             return self._page(401, _r(NONE, text="تعذّر تسجيل الدخول."))
         return self._redirect("/portal", [self._cookie(access_token, claims)])
 
-    def _staging_login(self, code: str):
-        if not self.staging or not hmac.compare_digest(code.encode(), self.staging_code.encode()):
+    def _staging_login(self, code: str, as_operator: bool = False):
+        if not self.staging or not hmac.compare_digest(code.encode(), self.staging_code.encode()) \
+           or (as_operator and not self.staging_operator):
             log.info("portal staging login refused")
             return self._page(403, _r(NONE, text="غير مسموح"))
-        token = issue_staging_token(self.staging_owner, self.secret, now=self.now())
-        return self._redirect("/portal", [self._cookie(token, verify_session_token(token, self.secret, self.now()))])
+        who, aal, where = (self.staging_operator, "aal2", "/portal/ops") if as_operator else (self.staging_owner, "aal1", "/portal")
+        token = issue_staging_token(who, self.secret, now=self.now(), aal=aal)
+        log.info("portal staging login as %s", "operator" if as_operator else "owner")
+        return self._redirect(where, [self._cookie(token, verify_session_token(token, self.secret, self.now()))])
+
+    def _ops(self, headers: dict, done: str):
+        token, claims = self._session(headers)
+        if claims is None:
+            return self._redirect("/portal")
+        try:
+            data = self.store.ops_overview(claims)
+        except Exception as exc:                           # noqa: BLE001
+            log.error("ops overview failed: %s", type(exc).__name__)
+            return self._page(503, _r(NONE, text="تعذّر تحميل البيانات الآن. أعد المحاولة بعد قليل."))
+        if data is None:                                   # the database says: not an operator in this session
+            return self._page(403, _r(NONE, text="هذه الصفحة للمشغّلين بجلسة تحقق ثنائي فقط."))
+        csrf = csrf_token(token, self.secret)
+        out = [_r(OPS_TOP, csrf=csrf)]
+        if done in MESSAGES:
+            out.append(_r(FLASH, message=MESSAGES[done]))
+        out.append(_r(OPS_HEALTH, retention=_when(data["retention_last_run"]), overdue=data["overdue_bodies"],
+                      unrouted=data["unrouted"]))
+        out.append(_r(OPS_ROWS_H, count=len(data["rows"])))
+        for r in data["rows"]:
+            fields = dict(id=r["id"], customer=r["customer"] or "المنصة", topic=r["topic"], attempts=r["attempts"],
+                          error=r["last_error"] or "")
+            if r["needs_human_check"]:
+                out.append(_r(OPS_ROW_DECIDE, csrf=csrf, **fields))
+            else:
+                out.append(_r(OPS_ROW, state="ينتظر العامل", **fields))
+        if not data["rows"]:
+            out.append(_r(NONE, text="لا شيء ينتظر قرارًا."))
+        return self._page(200, "".join(out))
 
     def _home(self, headers: dict, done: str):
         token, claims = self._session(headers)
         if claims is None:
             how = ("بيئة تجربة." if self.staging else "الدخول عبر حساب منشأتك (Supabase Auth).")
-            return self._page(200, _r(SIGN_IN, how=how) + (STAGING_LOGIN if self.staging else ""))
+            return self._page(200, _r(SIGN_IN, how=how) + (STAGING_LOGIN if self.staging else "")
+                              + (STAGING_OPERATOR if self.staging_operator else ""))
         try:
             data = self.store.overview(claims)
         except Exception as exc:                           # noqa: BLE001 - the database is away: say so, keep the session

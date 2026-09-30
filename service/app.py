@@ -139,6 +139,7 @@ def main():
     portal = Portal(PortalDb(Database(url, "authenticated")), secret,
                     staging_login_code=os.environ.get("HERMES_STAGING_LOGIN_CODE", ""),
                     staging_owner_id=os.environ.get("HERMES_STAGING_OWNER_ID", ""),
+                    staging_operator_id=os.environ.get("HERMES_STAGING_OPERATOR_ID", ""),
                     simulate=os.environ.get("HERMES_GRAPH") == "simulate")
     server = ThreadingHTTPServer(("0.0.0.0", port), make_http_handler(
         webhook, os.environ.get("HERMES_VERIFY_TOKEN", ""), Database(url, "hermes_monitor"),

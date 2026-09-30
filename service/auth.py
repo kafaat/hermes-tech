@@ -78,11 +78,14 @@ def verify_session_token(token: str, secret: str, now: float | None = None) -> d
     return claims
 
 
-def issue_staging_token(sub: str, secret: str, ttl_seconds: int = 3600, now: float | None = None) -> str:
-    """Staging only: the same format Supabase issues, so the portal path is identical."""
+def issue_staging_token(sub: str, secret: str, ttl_seconds: int = 3600, now: float | None = None, aal: str = "aal1") -> str:
+    """Staging only: the same format Supabase issues, so the portal path is identical. aal2 stands for a completed
+    second factor, which Supabase MFA grants in production; staging grants it to the staging operator only."""
+    if aal not in ("aal1", "aal2"):
+        raise ValueError("aal")
     now = int(time.time() if now is None else now)
     header = _b64e(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
-    body = _b64e(json.dumps({"sub": str(uuid.UUID(sub)), "aud": "authenticated", "role": "authenticated", "aal": "aal1",
+    body = _b64e(json.dumps({"sub": str(uuid.UUID(sub)), "aud": "authenticated", "role": "authenticated", "aal": aal,
                              "iat": now, "exp": now + ttl_seconds}, separators=(",", ":")).encode())
     sig = _b64e(hmac.new(secret.encode(), f"{header}.{body}".encode(), hashlib.sha256).digest())
     return f"{header}.{body}.{sig}"

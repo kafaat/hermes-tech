@@ -123,3 +123,27 @@ class PortalDb:
         with self.db.tx(claims=claims) as cur:
             cur.execute("update app.kb_facts set approved_by_owner = true where id = %s and not approved_by_owner", (fact_id,))
             return cur.rowcount == 1
+
+    def ops_overview(self, claims: dict) -> dict | None:
+        """None unless app.is_operator() holds in this session (an active operator AND aal2); the operator
+        policies then open the outbox, customers, retention and webhook rows."""
+        with self.db.tx(claims=claims) as cur:
+            cur.execute("select app.is_operator()")
+            if not cur.fetchone()[0]:
+                return None
+            cur.execute("select v.id, c.business_name, v.topic, v.attempts, v.last_error, v.needs_human_check"
+                        " from app.v_outbox_attention v left join app.customers c on c.id = v.customer_id"
+                        " order by v.needs_human_check desc, v.id limit 200")
+            rows = [{"id": r[0], "customer": r[1], "topic": r[2], "attempts": r[3], "last_error": r[4],
+                     "needs_human_check": r[5]} for r in cur.fetchall()]
+            cur.execute("select last_run_at, overdue_bodies from app.v_retention_status")
+            last_run, overdue = cur.fetchone()
+            cur.execute("select count(*) from app.webhook_events where customer_id is null and signature_valid")
+            unrouted = cur.fetchone()[0]
+        return {"rows": rows, "retention_last_run": last_run, "overdue_bodies": overdue, "unrouted": unrouted}
+
+    def resolve(self, claims: dict, outbox_id: str, resolution: str, reason: str) -> None:
+        """app.resolve_outbox: the database checks the operator (aal2), the reason and that the row waits for a
+        human; 'resend' also queues the task that sends it again (0015)."""
+        with self.db.tx(claims=claims) as cur:
+            cur.execute("select app.resolve_outbox(%s, %s, %s)", (int(outbox_id), resolution, reason))

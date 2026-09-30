@@ -17,7 +17,10 @@ check each step. Seeding is idempotent and uses a fixed staging tenant; every ru
                                             consumed once by the outbox, the reply is sent, task succeeded
   6. the delivery receipt webhook         -> routed, processed, task succeeded
   7. audit: enqueue by the leased agent and the owner's decision, in the chain
-  8. GET /deps (external monitor): without X-Monitor-Token only the code and one word; with it, numbers only, and
+  8. operator console: a row waiting for a human (the state an interrupted send leaves) is shown only to an aal2
+     operator, not to the owner nor to the operator without a second factor; "resend" with a reason queues its
+     task and the worker sends it
+  9. GET /deps (external monitor): without X-Monitor-Token only the code and one word; with it, numbers only, and
      nothing failing after this run (a purge not yet due is not stale: the database knows when it is due)
 """
 from __future__ import annotations
@@ -32,6 +35,7 @@ from service.auth import csrf_token, issue_staging_token  # noqa: E402
 DB = os.environ["DATABASE_URL"]
 CUSTOMER = "00000000-0000-0000-0000-0000000e2e01"
 OWNER = "00000000-0000-0000-0000-0000000e2e0a"
+OPERATOR = "00000000-0000-0000-0000-0000000e2e0b"
 PHONE_ID = "pn-e2e-staging"
 HOURS = "نفتح يوميًا من ٩ صباحًا إلى ١١ مساءً"
 MONITOR_TOKEN = os.environ.get("HERMES_MONITOR_TOKEN") or uuid.uuid4().hex   # staging: the service's own (shared var)
@@ -92,7 +96,8 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def portal(url, token, method="GET", form=None):
     """(status, location, page) as a browser holding the owner's session cookie would see them."""
-    req = urllib.request.Request(url + ("/portal" if method == "GET" else form.pop("_path")), method=method,
+    target = {"GET": "/portal", "GET_OPS": "/portal/ops"}.get(method) or form.pop("_path")
+    req = urllib.request.Request(url + target, method="GET" if method.startswith("GET") else method,
                                  data=urllib.parse.urlencode(form).encode() if form else None,
                                  headers={"Cookie": f"__Host-hermes_owner={token}"})
     try:
@@ -218,6 +223,28 @@ def main():
                         (f"%E2E.{run}%",))[0][0]
         check(unprocessed == 0, "every event of this run processed")
         check(not q("select 1 from app.audit_verify()"), "audit chain intact")
+        q("insert into app.operators (auth_user_id, display_name, role, mfa_enrolled, active)"
+          " values (%s, 'staging operator', 'founder', true, true) on conflict (auth_user_id) do nothing", (OPERATOR,))
+        target = f"e2e-ops-{run}"
+        q("insert into app.outbox (customer_id, topic, payload, target_id) values (%s, 'notify.owner', %s, %s)",
+          (CUSTOMER, json.dumps({"event": target, "reason": "complaint"}), target))
+        q("update app.outbox set needs_human_check = true, last_error = 'AMBIGUOUS:E2E' where target_id = %s", (target,))
+        ob = q("select id from app.outbox where target_id = %s", (target,))[0][0]
+        op2 = issue_staging_token(OPERATOR, JWT_SECRET, aal="aal2")
+        status, _, _ = portal(url, issue_staging_token(OWNER, JWT_SECRET) , "GET_OPS")
+        check(status == 403, "operator console: refused to the owner")
+        status, _, _ = portal(url, issue_staging_token(OPERATOR, JWT_SECRET), "GET_OPS")
+        check(status == 403, "operator console: refused to the operator without a second factor (aal1)")
+        status, _, page = portal(url, op2, "GET_OPS")
+        check(status == 200 and f"#{ob}" in page, "operator console: the aal2 operator sees the row waiting for a human")
+        status, where, _ = portal(url, op2, "POST", {"_path": "/portal/ops/resolve", "outbox": str(ob), "resolution": "resend",
+                                                     "reason": "e2e: provider log shows no delivery", "csrf": csrf_token(op2, JWT_SECRET)})
+        check(status == 303 and where == "/portal/ops?done=resolved", "operator console: resend with a reason is accepted")
+        check(bool(wait("resend sent", lambda: q("select 1 from app.outbox where id = %s and dispatched_at is not null", (ob,)))),
+              "operator resend -> the worker sent the row again")
+        check(bool(q("select 1 from app.tasks where idempotency_key like %s and status = 'succeeded'", (f"resend:{ob}:%",))),
+              "operator resend -> its task succeeded")
+
         def get_deps(headers):
             try:
                 with urllib.request.urlopen(urllib.request.Request(url + "/deps", headers=headers), timeout=10) as r:

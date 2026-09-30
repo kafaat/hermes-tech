@@ -72,6 +72,7 @@ codes:
   OUTBOX_BAD_TRANSITION:         {kind: error, since: "1.8", src: "0010", ar: "انتقال حالة غير مسموح"}
   OUTBOX_TARGET_REQUIRED:        {kind: error, since: "1.8", src: "0014", ar: "أثر بلا موافقة يحتاج هدفًا يعرّفه"}
   OUTBOX_TARGET_CONFLICT:        {kind: error, since: "1.8", src: "0014", ar: "أثر آخر بالموضوع والهدف نفسيهما وبحمولة مختلفة"}
+  OUTBOX_RESEND_NEEDS_CUSTOMER:  {kind: error, since: "1.8", src: "0015", ar: "إعادة إرسال صف منصة بلا عميل: لا سياق عامل له"}
   OUTBOX_NEEDS_HUMAN:            {kind: error, since: "1.8", src: "0010", ar: "الصف ينتظر مشغّلًا بجلسة aal2"}
   OUTBOX_FINAL:                  {kind: error, since: "1.8", src: "0010", ar: "نتيجة الأثر نهائية"}
   OUTBOX_OUTCOME_UNKNOWN:        {kind: error, since: "1.8", src: "0010", ar: "نتيجة إرسال خارج القائمة"}

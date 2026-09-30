@@ -75,6 +75,23 @@ class FakeStore:
         self.calls.append(("fact", claims["sub"], fact_id))
         return True
 
+    operator = True
+
+    def ops_overview(self, claims):
+        self.calls.append(("ops", claims["sub"]))
+        if not self.operator:
+            return None
+        return {"retention_last_run": datetime(2026, 9, 30, 18, 40, tzinfo=timezone.utc), "overdue_bodies": 0, "unrouted": 2,
+                "rows": [{"id": 7, "customer": "مطعم", "topic": "notify.owner", "attempts": 1, "last_error": "<i>AMBIGUOUS</i>",
+                          "needs_human_check": True},
+                         {"id": 8, "customer": None, "topic": "notify.owner", "attempts": 1, "last_error": None,
+                          "needs_human_check": False}]}
+
+    def resolve(self, claims, outbox_id, resolution, reason):
+        if self.fail:
+            raise RuntimeError("OPERATOR_AAL2_ONLY")
+        self.calls.append(("resolve", claims["sub"], outbox_id, resolution, reason))
+
 
 def portal(store=None, **kw):
     return Portal(store or FakeStore(), SECRET, now=lambda: NOW, **kw)
@@ -186,6 +203,61 @@ class TestPortal(unittest.TestCase):
         self.assertEqual((status, dict(headers)["Location"], store.calls[-1]), (303, "/portal?done=fact", ("fact", OWNER, "f1")))
         status, headers, _ = portal().handle("POST", "/portal/logout", cookie(token), f"csrf={csrf}".encode())
         self.assertIn("Max-Age=0", dict(headers)["Set-Cookie"])
+
+
+OPERATOR = "22222222-2222-2222-2222-222222222222"
+
+
+class TestOperatorConsole(unittest.TestCase):
+    def test_the_console_is_shown_only_when_the_database_says_operator(self):
+        store = FakeStore()
+        store.operator = False
+        status, _, body = portal(store).handle("GET", "/portal/ops", cookie(sign(GOOD)), b"")
+        self.assertEqual(status, 403)
+        self.assertNotIn("#7", body.decode())
+        self.assertEqual(portal().handle("GET", "/portal/ops", {"Host": "h"}, b"")[0], 303)      # no session: sign in
+
+    def test_rows_waiting_for_a_human_get_a_decision_form_and_values_are_escaped(self):
+        token = sign({**GOOD, "sub": OPERATOR, "aal": "aal2"})
+        status, _, body = portal().handle("GET", "/portal/ops", cookie(token), b"")
+        page = body.decode()
+        self.assertEqual(status, 200)
+        self.assertIn("&lt;i&gt;AMBIGUOUS&lt;/i&gt;", page)
+        self.assertEqual(page.count('action="/portal/ops/resolve"'), 1)                     # row 8 still waits for the worker
+        self.assertIn("ينتظر العامل", page)
+        self.assertIn(csrf_token(token, SECRET), page)
+
+    def test_a_resolution_needs_csrf_a_known_value_and_a_reason(self):
+        store, token = FakeStore(), sign({**GOOD, "sub": OPERATOR, "aal": "aal2"})
+        csrf = csrf_token(token, SECRET)
+        p = portal(store)
+        self.assertEqual(p.handle("POST", "/portal/ops/resolve", cookie(token), b"outbox=7&resolution=resend&reason=long enough")[0], 403)
+        self.assertEqual(p.handle("POST", "/portal/ops/resolve", cookie(token),
+                                  f"outbox=7&resolution=delete&reason=long enough&csrf={csrf}".encode())[0], 400)
+        status, headers, _ = p.handle("POST", "/portal/ops/resolve", cookie(token), f"outbox=7&resolution=resend&reason=no&csrf={csrf}".encode())
+        self.assertEqual(dict(headers)["Location"], "/portal/ops?done=reason")
+        self.assertEqual([c for c in store.calls if c[0] == "resolve"], [])
+        status, headers, _ = p.handle("POST", "/portal/ops/resolve", cookie(token),
+                                      f"outbox=7&resolution=resend&reason=provider says not delivered&csrf={csrf}".encode())
+        self.assertEqual((status, dict(headers)["Location"]), (303, "/portal/ops?done=resolved"))
+        self.assertEqual(store.calls[-1], ("resolve", OPERATOR, "7", "resend", "provider says not delivered"))
+        status, headers, _ = portal(FakeStore(fail=True)).handle("POST", "/portal/ops/resolve", cookie(token),
+                                                                 f"outbox=7&resolution=abandon&reason=long enough&csrf={csrf}".encode())
+        self.assertEqual(dict(headers)["Location"], "/portal/ops?done=error")
+
+    def test_the_staging_operator_login_gives_aal2_only_to_the_configured_operator(self):
+        form = b"code=letmein-staging-0123456789&as=operator"
+        no_op = portal(staging_login_code="letmein-staging-0123456789", staging_owner_id=OWNER, simulate=True)
+        self.assertEqual(no_op.handle("POST", "/portal/staging-login", {"Host": "h"}, form)[0], 403)
+        p = portal(staging_login_code="letmein-staging-0123456789", staging_owner_id=OWNER, staging_operator_id=OPERATOR, simulate=True)
+        status, headers, _ = p.handle("POST", "/portal/staging-login", {"Host": "h"}, form)
+        claims = verify_session_token(dict(headers)["Set-Cookie"].split(";")[0].split("=", 1)[1], SECRET, NOW)
+        self.assertEqual((status, dict(headers)["Location"], claims["sub"], claims["aal"]), (303, "/portal/ops", OPERATOR, "aal2"))
+        status, headers, _ = p.handle("POST", "/portal/staging-login", {"Host": "h"}, b"code=letmein-staging-0123456789")
+        owner = verify_session_token(dict(headers)["Set-Cookie"].split(";")[0].split("=", 1)[1], SECRET, NOW)
+        self.assertEqual((owner["sub"], owner["aal"]), (OWNER, "aal1"))
+        off = portal(staging_login_code="letmein-staging-0123456789", staging_owner_id=OWNER, staging_operator_id=OPERATOR, simulate=False)
+        self.assertEqual(off.handle("POST", "/portal/staging-login", {"Host": "h"}, form)[0], 403)
 
 
 if __name__ == "__main__":

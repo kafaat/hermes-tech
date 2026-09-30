@@ -1,14 +1,14 @@
 {
  "package_version": "1.8",
  "registry_version": "1.8.0",
- "source_id": "cabc49d23761a5691fd017095a315589e8b73698c8fee2d267cc50cc6fc78fe8",
+ "source_id": "1c8eb7ce925b6569bbc393e69a85a260efce7872ae800f3c8aad53af5ea69651",
  "file_count": 203,
  "files": {
   ".dockerignore": "51acffa125b3d041889f51bdfe771d46303571b7407c6cc29621dbc9d2c1ce38",
   ".github/CODEOWNERS": "9e1afe8d5ff4d8b3cd4e96f13746dc6ead9d23b263b0d2cd69b801cd9534dead",
   ".github/workflows/validate.yml": "3786f7634df8d3b5188eef271769820c6f3e98d1961d5d76d9cd43ffc1b0828d",
   ".gitignore": "862263fa1f46c20f0d1e4dac5ffcc75abd55c08211b2c3864c5f8764b9d87793",
-  "Hermes_Technical_Specification_v1.8.md": "d13e9a308681b825e537a2892fb8346791d63d604d1d6deda01a8ba793fff9ee",
+  "Hermes_Technical_Specification_v1.8.md": "35ecd19c083c1a82b6806373dbd6e28cfecf1552c4cce5ed2e3d2f15e2ae1a79",
   "README.md": "6b92eb4f9adff4d04d097594e51052aa9c83d9978e1e0dced79694012cd10a25",
   "VERSION": "d2e181481b9515797bc42f282b122d2529d24ea985125bd5c95ded5004e0c7c9",
   "cli/hermes_cli_spec.md": "fff3ace5ee8d389fa56bd288c2a8cac2123bcd6bef0c0eebd67d4c9e1e529202",

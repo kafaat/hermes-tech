@@ -68,23 +68,33 @@ class SimulatedGraph:
     is not built: it needs a Meta app and business verification (P3), and a network path under the single-path
     rule (tests/test_service_boundaries.py)."""
 
-    def __init__(self):
-        self.sent = []
+    def __init__(self, delay: float = 0.0):
+        self.sent, self.delay = [], delay
 
     def __call__(self, url, body, headers, timeout):
         wamid = "wamid.SIM." + uuid.uuid4().hex
         self.sent.append({"url": url, "to": body.get("to"), "id": wamid})
+        accepted(wamid, self.delay)
         return 200, {"messages": [{"id": wamid}]}
 
 
 class SimulatedOwnerNotice:
-    def __init__(self):
-        self.sent = []
+    def __init__(self, delay: float = 0.0):
+        self.sent, self.delay = [], delay
 
     def send(self, row):
         ref = "notice.SIM." + uuid.uuid4().hex
         self.sent.append({"customer_id": row["customer_id"], "payload": row["payload"], "id": ref})
+        accepted(ref, self.delay, row.get("id"))
         return ref
+
+
+def accepted(ref: str, delay: float, outbox_id=None):
+    """The simulated provider has the message from here on: logged BEFORE the reply is delayed, so a sender killed
+    during the delay leaves exactly the real ambiguity (delivered, sender never told), and the log counts deliveries."""
+    log.info("sim-provider accepted %s outbox=%s", ref, outbox_id)
+    if delay:
+        time.sleep(delay)
 
 
 class Worker:
@@ -221,8 +231,14 @@ def _json(v):
     return Jsonb(v)
 
 
-def simulated_adapters():
-    graph, notice = SimulatedGraph(), SimulatedOwnerNotice()
+def simulated_adapters(delay: float | None = None):
+    """HERMES_SIM_SEND_DELAY_SECONDS delays the provider's reply (staging experiments on interrupted sends; 0 by
+    default). Only with HERMES_GRAPH=simulate: there is no real provider to slow down, and none may be."""
+    if delay is None:
+        delay = float(os.environ.get("HERMES_SIM_SEND_DELAY_SECONDS") or 0)
+    if delay and os.environ.get("HERMES_GRAPH") != "simulate":
+        raise RuntimeError("HERMES_SIM_SEND_DELAY_SECONDS needs HERMES_GRAPH=simulate")
+    graph, notice = SimulatedGraph(delay), SimulatedOwnerNotice(delay)
     return {"reply.send": WhatsAppCloudAdapter(graph, lambda customer_id: "staging-simulated-token"), "notify.owner": notice}
 
 

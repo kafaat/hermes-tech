@@ -1,6 +1,7 @@
 """Worker decision (P1): complaints and owner inquiries escalate, replies only from owner-approved facts that pass
 the content guard. The database path of the same loop runs in db/tests/e2e_pilot.py (CI and staging)."""
-import sys, unittest
+import os, sys, unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -9,7 +10,8 @@ sys.path.insert(0, str(ROOT / "tools"))
 from complaints import Matcher  # noqa: E402
 from content_guard import ContentGuard  # noqa: E402
 from service.dispatcher import WhatsAppCloudAdapter  # noqa: E402
-from service.worker import SimulatedGraph, decide  # noqa: E402
+from service import worker  # noqa: E402
+from service.worker import SimulatedGraph, decide, simulated_adapters  # noqa: E402
 
 M, G = Matcher(), ContentGuard()
 FACTS = {"hours": "نفتح يوميًا من ٩ صباحًا إلى ١١ مساءً"}
@@ -47,6 +49,27 @@ class TestWorkerDecision(unittest.TestCase):
         self.assertTrue(ref.startswith("wamid.SIM."))
         self.assertEqual((g.sent[0]["to"], g.sent[0]["id"]), ("967700000001", ref))
         self.assertIn("/pn/messages", g.sent[0]["url"])
+
+
+class TestSimulatedSendDelay(unittest.TestCase):
+    """Staging knob for interrupted-send experiments: the provider accepts first, the reply comes late."""
+
+    def test_the_provider_accepts_before_the_delay(self):
+        order = []
+        with mock.patch.object(worker.log, "info", side_effect=lambda *a: order.append("accepted")), \
+             mock.patch.object(worker.time, "sleep", side_effect=lambda s: order.append(f"sleep {s}")):
+            ref = worker.SimulatedOwnerNotice(delay=60).send({"id": 7, "customer_id": "c", "payload": {}})
+        self.assertEqual(order, ["accepted", "sleep 60"])
+        self.assertTrue(ref.startswith("notice.SIM."))
+
+    def test_no_delay_by_default_and_none_outside_simulation(self):
+        with mock.patch.dict(os.environ, {"HERMES_GRAPH": "simulate", "HERMES_SIM_SEND_DELAY_SECONDS": ""}):
+            self.assertEqual(simulated_adapters()["notify.owner"].delay, 0)
+        with mock.patch.dict(os.environ, {"HERMES_GRAPH": "simulate", "HERMES_SIM_SEND_DELAY_SECONDS": "5"}):
+            self.assertEqual(simulated_adapters()["notify.owner"].delay, 5)
+        with mock.patch.dict(os.environ, {"HERMES_GRAPH": "live", "HERMES_SIM_SEND_DELAY_SECONDS": "5"}):
+            with self.assertRaises(RuntimeError):
+                simulated_adapters()
 
 
 if __name__ == "__main__":

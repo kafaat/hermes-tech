@@ -51,6 +51,13 @@ with psycopg.connect(__import__("os").environ["DATABASE_URL"], autocommit=True, 
         "inbound_to_triage_p95_seconds": (float(p95_triage or 0), p95_triage is not None and p95_triage < 60),
         "queue_drain_seconds_after_load": (drain_s, open_tasks == 0),
     }
+    # the owner notices this run sent through the outbox (one per escalated event): the evidence for interrupted sends
+    ob = q("select count(*), count(*) filter (where dispatched_at is not null), count(*) filter (where sending_until is not null"
+           " and dispatched_at is null and failed_at is null), count(*) filter (where needs_human_check),"
+           " count(*) filter (where dispatched_at is null and failed_at is null and sending_until < now())"
+           " from app.outbox where topic = 'notify.owner' and target_id like %s", like)
+    print(f"outbox notify.owner: rows {ob[0]}, sent {ob[1]}, still sending {ob[2]}, needs human {ob[3]}, "
+          f"sending expired {ob[4]}", flush=True)
     for gate, (value, ok) in results.items():
         print(("PASS " if ok else "FAIL ") + f"{gate} = {value:.4g}")
     print(f"load: sent {sent}, stored {events}, tasks {tasks}")

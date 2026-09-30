@@ -64,7 +64,7 @@ def make_http_handler(webhook: Handler, verify_token: str):
 
 
 def main():
-    handler = logging.StreamHandler()                        # added before install(): the filter goes on the handler,
+    handler = logging.StreamHandler(sys.stdout)              # added before install(): the filter goes on the handler,
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))  # so every logger is redacted
     logging.getLogger().addHandler(handler)
     logging.getLogger().setLevel(logging.INFO)

@@ -1,7 +1,7 @@
 {
  "package_version": "1.8",
  "registry_version": "1.8.0",
- "source_id": "e5fc2bc2468629e973ece7a4a20f686349f2f381d2863d375a0efeb630fd589a",
+ "source_id": "79e99310af503f59baa3b22d2ec29c770c4f93c3610e0d3cbf55818b95a8a73d",
  "file_count": 194,
  "files": {
   ".dockerignore": "51acffa125b3d041889f51bdfe771d46303571b7407c6cc29621dbc9d2c1ce38",
@@ -138,7 +138,7 @@
   "runtime/agent_runtime_state.schema.json": "dfd84b85a43dfce471730581fd2138a7e37eaa0546b73759e8b793894ae6e3e4",
   "runtime/ops_summary.schema.json": "6796afee16a26ec5090af217971aa3bdb98bef64213ae8c56e4bc999ed71f35b",
   "service/__init__.py": "0ad5bb8f316fff0920ecd272d6d58406277e131eba0b7865eb27021727889232",
-  "service/app.py": "022517981ea64114de45a82b5f0818d8f6d5a1a331da32cbbf22f2f7cb16886d",
+  "service/app.py": "61b12552ef50f76d90caabced4b105609340389595c8cb961bc71543cf236f87",
   "service/crawler.py": "f34ba954f2e27768d27059c268aa52b34da57da6eb3679ad55ee6596737acafd",
   "service/dispatcher.py": "58ca8fd8d247c7a40e216f56865d3a2b37566865f94462bc507cce664b493258",
   "service/jobs.py": "1c72d9d1a28eeeb93c956af57fcd0d1ee6b1b3db0f81eb7223c2f160b358efa3",

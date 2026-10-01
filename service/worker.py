@@ -203,9 +203,11 @@ class Worker:
                         " and (valid_until is null or valid_until >= current_date)")
             facts = dict(cur.fetchall())
             cats = route.get("categories") or []
-            cur.execute("insert into app.inquiries (customer_id, source, body, matched_category, owner_inquiry, routed_to)"
-                        " values (%s, 'whatsapp', %s, %s, %s, %s)",
-                        (t.customer_id, text, cats[0] if cats else None, route["kind"] == "owner_inquiry", route.get("routes", [])))
+            cur.execute("insert into app.inquiries (customer_id, source, body, matched_category, owner_inquiry, routed_to, event_ref)"
+                        " values (%s, 'whatsapp', %s, %s, %s, %s, %s)"
+                        " on conflict (customer_id, event_ref) where event_ref is not null do nothing",   # a re-run task: once (0018)
+                        (t.customer_id, text, cats[0] if cats else None, route["kind"] == "owner_inquiry", route.get("routes", []),
+                         ext[:200] or None))
         d = decide(text, route, facts, self.guard, self.matcher.rules)
         if d["action"] == "propose":
             reply = {"phone_number_id": channel, "to": str(msg.get("from", "")), "body": d["body"], "in_reply_to": ext}

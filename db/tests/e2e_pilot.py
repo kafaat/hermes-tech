@@ -185,6 +185,8 @@ def main():
         inq = q("select matched_category::text from app.inquiries where customer_id = %s and body in (%s, %s)",
                 (CUSTOMER, "متى تفتحون اليوم؟", "الفاتورة غلط ودفعت مرتين"))
         check("pricing" in {r[0] for r in inq}, "inquiries recorded with the matched category")
+        check(q("select count(*) from app.inquiries where customer_id = %s and event_ref in (%s, %s)", (CUSTOMER, q_ext, c_ext))[0][0] == 2,
+              "one inquiry per inbound message, keyed by its message id (0018)")
         check(not q("select 1 from app.outbox where topic = 'reply.send' and target_id = %s", (q_ext,)), "nothing sent before the owner decides")
 
         if ap:

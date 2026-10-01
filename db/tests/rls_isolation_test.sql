@@ -1060,6 +1060,38 @@ do $$ declare n int; begin
 end $$;
 reset role;
 
+-- 53. one inquiry per inbound message: a re-run task inserts it once; another customer's same id is its own (0018)
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000a');
+set local role hermes_worker;
+do $$ begin
+  insert into app.inquiries (customer_id, source, body, event_ref) values ('00000000-0000-0000-0000-00000000000a', 'whatsapp', 'k53', 'wamid.K53')
+    on conflict (customer_id, event_ref) where event_ref is not null do nothing;
+  insert into app.inquiries (customer_id, source, body, event_ref) values ('00000000-0000-0000-0000-00000000000a', 'whatsapp', 'k53', 'wamid.K53')
+    on conflict (customer_id, event_ref) where event_ref is not null do nothing;
+  if (select count(*) from app.inquiries where event_ref = 'wamid.K53') <> 1 then
+    raise exception 'FAIL a re-run task inserted the same message twice';
+  end if;
+  begin
+    insert into app.inquiries (customer_id, source, body, event_ref) values ('00000000-0000-0000-0000-00000000000a', 'whatsapp', 'k53', 'wamid.K53');
+    raise exception 'FAIL a plain second insert of the same message was accepted';
+  exception when unique_violation then null;
+  end;
+end $$;
+reset role;
+select set_config('app.task_id', '', true), set_config('app.task_token', '', true);
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000b');
+set local role hermes_worker;
+do $$ begin
+  insert into app.inquiries (customer_id, source, body, event_ref) values ('00000000-0000-0000-0000-00000000000b', 'whatsapp', 'k53b', 'wamid.K53')
+    on conflict (customer_id, event_ref) where event_ref is not null do nothing;
+  if (select count(*) from app.inquiries where event_ref = 'wamid.K53') <> 1 then
+    raise exception 'FAIL the same message id under another customer was dropped (or the first is visible)';
+  end if;
+  raise notice 'PASS one inquiry per inbound message per customer, backed by a unique index';
+end $$;
+reset role;
+select set_config('app.task_id', '', true), set_config('app.task_token', '', true), set_config('app.customer_id', '', true);
+
 -- 46. the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)
 do $$ declare got text; bad text; begin
   select string_agg(relname, ',' order by relname collate "C") into got from pg_class

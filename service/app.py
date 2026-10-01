@@ -27,7 +27,7 @@ from service import redact
 from service.health import SIGNALS, assess, authorized
 from service.pg import Database, Ingest, PortalDb
 from service.portal import Portal
-from service.supabase_auth import SupabaseAuth, project_host
+from service.supabase_auth import from_env as supabase_from_env
 from service.webhook import MAX_BODY_BYTES, Handler, verify_subscription
 from service.worker import Worker, simulated_adapters, worker_name
 
@@ -159,16 +159,6 @@ def main():
     worker_thread.join(SHUTDOWN_WAIT_SECONDS)
     log.info("stopped%s", " (worker still busy)" if worker_thread.is_alive() else "")
 
-
-def supabase_from_env(env) -> SupabaseAuth | None:
-    """None when sign-in is not configured; a half configuration refuses to start rather than run without it."""
-    url, key = env.get("HERMES_SUPABASE_URL", ""), env.get("HERMES_SUPABASE_ANON_KEY", "")
-    if not url and not key:
-        return None
-    if not (url and key and env.get("HERMES_JWT_SECRET")):
-        sys.exit("HERMES_SUPABASE_URL, HERMES_SUPABASE_ANON_KEY and HERMES_JWT_SECRET go together")
-    from service.crawler import ApiClient                  # the one network path (spec 28.12)
-    return SupabaseAuth(url, key, ApiClient({project_host(url)}))
 
 
 if __name__ == "__main__":

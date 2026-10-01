@@ -197,7 +197,7 @@ class TestOperatorSecondFactor(unittest.TestCase):
 
 class TestConfiguration(unittest.TestCase):
     def test_sign_in_is_off_unset_on_with_all_three_and_refuses_half(self):
-        from service.app import supabase_from_env
+        from service.supabase_auth import from_env as supabase_from_env
         self.assertIsNone(supabase_from_env({}))
         auth = supabase_from_env({"HERMES_SUPABASE_URL": URL, "HERMES_SUPABASE_ANON_KEY": KEY, "HERMES_JWT_SECRET": SECRET})
         self.assertEqual(auth.api.hosts, frozenset({"abcd1234.supabase.co"}))     # that project host and nothing else

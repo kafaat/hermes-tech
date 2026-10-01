@@ -14,7 +14,7 @@ a refusal is an AuthFailed with a short code (rate_limited, invalid, unavailable
 sentence. Tokens and codes never enter a log line or an exception message.
 """
 from __future__ import annotations
-import re
+import re, sys
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -116,3 +116,14 @@ class SupabaseAuth:
             self._call("POST", "/auth/v1/logout?scope=local", {}, access=access)
         except AuthFailed:
             pass                                                        # the cookies are cleared either way
+
+
+def from_env(env) -> SupabaseAuth | None:
+    """None when sign-in is not configured; a half configuration refuses to start rather than run without it."""
+    url, key = env.get("HERMES_SUPABASE_URL", ""), env.get("HERMES_SUPABASE_ANON_KEY", "")
+    if not url and not key:
+        return None
+    if not (url and key and env.get("HERMES_JWT_SECRET")):
+        sys.exit("HERMES_SUPABASE_URL, HERMES_SUPABASE_ANON_KEY and HERMES_JWT_SECRET go together")
+    from service.crawler import ApiClient                  # the one network path (spec 28.12)
+    return SupabaseAuth(url, key, ApiClient({project_host(url)}))

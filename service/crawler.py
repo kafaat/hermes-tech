@@ -41,11 +41,24 @@ def system_resolver(host: str) -> list[str]:
         raise
 
 
+class NotSent(OSError):
+    """The request never left this host: the connection or the TLS handshake failed before a byte was written.
+    A sender may treat it as a clean failure; anything after the first byte stays ambiguous."""
+
+
 def tls_connector(plan: dict, request: bytes) -> bytes:
     """Connect to the pinned address; verify the certificate for the hostname; read at most max_bytes + 1."""
     ctx = ssl.create_default_context()
-    with socket.create_connection((plan["connect_to"], plan["port"]), timeout=plan["timeout_seconds"]) as raw:
-        with ctx.wrap_socket(raw, server_hostname=plan["host"]) as s:
+    try:
+        raw = socket.create_connection((plan["connect_to"], plan["port"]), timeout=plan["timeout_seconds"])
+    except OSError as exc:
+        raise NotSent(type(exc).__name__) from None
+    with raw:
+        try:
+            s = ctx.wrap_socket(raw, server_hostname=plan["host"])
+        except OSError as exc:                                   # certificate or handshake: nothing was sent
+            raise NotSent(type(exc).__name__) from None
+        with s:
             s.settimeout(plan["timeout_seconds"])
             s.sendall(request)
             chunks, size = [], 0
@@ -126,7 +139,7 @@ class Crawler:
         except FetchRefused:
             raise
         except OSError as exc:                        # cannot read robots.txt: do not fetch, and say why (temporary)
-            raise FetchRefused("ROBOTS_UNREADABLE", type(exc).__name__) from None
+            raise FetchRefused("ROBOTS_UNREADABLE", str(exc) if isinstance(exc, NotSent) else type(exc).__name__) from None
         if p.status >= 500:
             raise FetchRefused("ROBOTS_UNREADABLE")   # the site is failing, not forbidding: try again next time
         if p.status >= 400:

@@ -1,7 +1,8 @@
 """Staging process: the webhook endpoint and the worker loop (P1), wired to Postgres.
 
     python -m service.app      env: DATABASE_URL, HERMES_WEBHOOK_SECRETS (comma-separated), HERMES_VERIFY_TOKEN,
-                                    HERMES_GRAPH=simulate, PORT (default 8080), HERMES_APPROVAL_POLL_SECONDS (60)
+                                    HERMES_GRAPH=simulate|live (live: HERMES_GRAPH_TOKEN), PORT (default 8080),
+                                    HERMES_APPROVAL_POLL_SECONDS (60)
 
   GET  /webhook   Meta subscription handshake (webhook.verify_subscription)
   POST /webhook   webhook.Handler: size limit, HMAC on the raw bytes, then insert as hermes_ingest; 200 only after commit
@@ -14,8 +15,9 @@
                   only with X-Monitor-Token = HERMES_MONITOR_TOKEN; otherwise the code and "ok" / "degraded".
                   Railway checks /healthz at deploy time only and never reports a skipped or hung cron run, so this
                   is read from outside.
-The worker runs in a thread as hermes_worker. The only outbound connections are the portal's calls to the Supabase
-project host, through crawler.ApiClient (spec 28.12); the Graph API is simulated unless HERMES_GRAPH says otherwise.
+The worker runs in a thread as hermes_worker. Outbound connections go through crawler.ApiClient only (spec 28.12):
+the portal's calls to the Supabase project host, and with HERMES_GRAPH=live the Graph API. HERMES_GRAPH must be
+"simulate" or "live" (spec 28.14), and anything else refuses to start.
 """
 from __future__ import annotations
 import json, logging, os, signal, sys, threading
@@ -29,7 +31,7 @@ from service.pg import Database, Ingest, PortalDb
 from service.portal import Portal
 from service.supabase_auth import from_env as supabase_from_env
 from service.webhook import MAX_BODY_BYTES, Handler, verify_subscription
-from service.worker import Worker, simulated_adapters, worker_name
+from service.worker import Worker, adapters_for, worker_name
 
 log = logging.getLogger("hermes.app")
 COMMIT = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "")
@@ -125,14 +127,16 @@ def main():
     logging.getLogger().addHandler(handler)
     logging.getLogger().setLevel(logging.INFO)
     redact.install()
-    if os.environ.get("HERMES_GRAPH") != "simulate":
-        sys.exit("HERMES_GRAPH must be 'simulate': no real Graph API client is built (P3)")
+    try:
+        adapters = adapters_for(os.environ)
+    except RuntimeError as exc:
+        sys.exit(str(exc))
     url = os.environ["DATABASE_URL"]
     secrets = [s.strip().encode() for s in os.environ["HERMES_WEBHOOK_SECRETS"].split(",") if s.strip()]
     if not secrets:
         sys.exit("HERMES_WEBHOOK_SECRETS is empty")
     webhook = Handler(secrets, Ingest(Database(url, "hermes_ingest")))
-    worker = Worker(Database(url, "hermes_worker"), worker_name(), simulated_adapters(),
+    worker = Worker(Database(url, "hermes_worker"), worker_name(), adapters,
                     approval_poll_seconds=int(os.environ.get("HERMES_APPROVAL_POLL_SECONDS", "60")))
     stop = threading.Event()
     worker_thread = threading.Thread(target=worker.loop, kwargs={"stop": stop}, name="worker", daemon=True)

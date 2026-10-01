@@ -151,8 +151,28 @@ class PortalDb:
                         " (select status from app.competitor_snapshots s where s.competitor_id = c.id order by fetched_at desc limit 1) s"
                         " on true where c.active")
             structured, unstructured, blocked, active = cur.fetchone()
+            sources = []                                   # one line per external source (spec 28.15), numbers only
+            cur.execute("select count(*), max(received_at) from app.webhook_events"
+                        " where signature_valid and received_at > now() - interval '24 hours'")
+            n, last = cur.fetchone()
+            sources.append({"source": "whatsapp_inbound", "ok": n, "failed": 0, "waiting": 0, "last": last, "cause": None})
+            for topic in ("reply.send", "notify.owner"):
+                cur.execute("select count(*) filter (where dispatched_at is not null),"
+                            " count(*) filter (where failed_at is not null and resolution is null),"
+                            " count(*) filter (where needs_human_check), max(dispatched_at),"
+                            " (select split_part(last_error, ':', 1) from app.outbox x where x.topic = %s"
+                            "   and x.last_error is not null and x.created_at > now() - interval '24 hours'"
+                            "   group by 1 order by count(*) desc, 1 limit 1)"
+                            " from app.outbox where topic = %s and created_at > now() - interval '24 hours'", (topic, topic))
+                ok, failed, waiting, last, cause = cur.fetchone()
+                sources.append({"source": topic, "ok": ok, "failed": failed, "waiting": waiting, "last": last, "cause": cause})
+            cur.execute("select count(*) filter (where status = 'ok'), count(*) filter (where status <> 'ok'), max(fetched_at)"
+                        " from app.competitor_snapshots where fetched_at > now() - interval '7 days'")
+            ok, other, last = cur.fetchone()
+            sources.append({"source": "competitor_sites", "ok": ok, "failed": other, "waiting": 0, "last": last, "cause": None})
         return {"rows": rows, "retention_last_run": last_run, "overdue_bodies": overdue, "unrouted": unrouted,
-                "competitors": {"structured": structured, "unstructured": unstructured, "blocked": blocked, "active": active}}
+                "competitors": {"structured": structured, "unstructured": unstructured, "blocked": blocked, "active": active},
+                "sources": sources}
 
     def resolve(self, claims: dict, outbox_id: str, resolution: str, reason: str) -> None:
         """app.resolve_outbox: the database checks the operator (aal2), the reason and that the row waits for a

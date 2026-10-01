@@ -228,6 +228,26 @@ class TestOperatorConsole(unittest.TestCase):
         self.assertNotIn("#7", body.decode())
         self.assertEqual(portal().handle("GET", "/portal/ops", {"Host": "h"}, b"")[0], 303)      # no session: sign in
 
+    def test_each_external_source_gets_a_line_with_numbers_and_a_verdict(self):
+        store = FakeStore()
+        base = store.ops_overview
+
+        def with_sources(claims):
+            d = base(claims)
+            d["sources"] = [
+                {"source": "whatsapp_inbound", "ok": 12, "failed": 0, "waiting": 0, "last": datetime(2026, 10, 1, tzinfo=timezone.utc), "cause": None},
+                {"source": "reply.send", "ok": 3, "failed": 1, "waiting": 1, "last": None, "cause": "<b>TimeoutError</b>"},
+                {"source": "notify.owner", "ok": 0, "failed": 0, "waiting": 0, "last": None, "cause": None},
+                {"source": "competitor_sites", "ok": 0, "failed": 1, "waiting": 0, "last": None, "cause": None}]
+            return d
+        store.ops_overview = with_sources
+        page = portal(store).handle("GET", "/portal/ops", cookie(sign({**GOOD, "sub": OPERATOR, "aal": "aal2"})), b"")[2].decode()
+        self.assertIn("رسائل واتساب الواردة · سليم", page)
+        self.assertIn("الردود عبر Graph · يحتاج نظرًا", page)
+        self.assertIn("السبب الأكثر: &lt;b&gt;TimeoutError&lt;/b&gt;", page)
+        self.assertIn("تنبيهات المالك · لا نشاط", page)
+        self.assertIn("مواقع المنافسين · سليم", page)          # a site without structured data is not our failure
+
     def test_rows_waiting_for_a_human_get_a_decision_form_and_values_are_escaped(self):
         token = sign({**GOOD, "sub": OPERATOR, "aal": "aal2"})
         status, _, body = portal().handle("GET", "/portal/ops", cookie(token), b"")

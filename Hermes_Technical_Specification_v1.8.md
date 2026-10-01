@@ -40,13 +40,13 @@
 | مخططات JSON والعقود والفهرس والسياسات | 34 فحصًا ناجحًا من 34 | tools/validate.py · الطبقة 1 |
 | قواعد الاتساق المنطقي والسياسة الإحصائية ومعجم الإخفاقات | 136 فحصًا ناجحًا من 136 | tools/validate.py · الطبقة 2 |
 | الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 250 فحصًا ناجحًا من 250 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
-| الاختبارات الآلية | 288 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
+| الاختبارات الآلية | 293 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
 | حالات SQL على Postgres فعلي | 53 حالة و64 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
-المجموع: 420/420 فحصًا ناجحًا في أداة التحقق، و288 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
+المجموع: 420/420 فحصًا ناجحًا في أداة التحقق، و293 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
 
 ### وسوم المصدر
@@ -167,8 +167,8 @@ hermes-tech/
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
 ├── db/tests/             concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
-├── service/              __init__.py · app.py · auth.py · competitor.py · crawler.py · dispatcher.py · health.py · jobs.py · outbox_model.py · pg.py · portal.py · qr.py · redact.py · render.py · site_seo.py · structured.py · supabase_auth.py · telemetry.py · webhook.py · worker.py
-├── tests/                36 modules (inventory in §15.2)
+├── service/              __init__.py · app.py · auth.py · competitor.py · crawler.py · dispatcher.py · health.py · jobs.py · media_policy.py · outbox_model.py · pg.py · portal.py · qr.py · redact.py · render.py · site_seo.py · structured.py · supabase_auth.py · telemetry.py · webhook.py · worker.py
+├── tests/                37 modules (inventory in §15.2)
 ├── evals/                complaints_seed.jsonl · content_guard_golden.jsonl · model_admission.json
 ├── docs/                 18 documents · adr/ (11 decisions)
 ├── derived/              policy_matrix.md · agent_capabilities.json · alerts.yaml   (generated)
@@ -996,6 +996,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_service_crawler | الزاحف: العنوان المثبّت، إعادة الحل لكل قفزة، الوكيل الوسيط من البيئة، robots وصفحات الدخول والحجم | 15 |
 | test_service_dispatcher | الموزّع: الغامض لا يُعاد، قبل الإرسال يُحرَّر، الرفض نهائي، مطابقة رموز الآلة للترحيل 0010 | 14 |
 | test_service_graph_live | مرسل Graph الحقيقي: مغلق دون إعداد صريح، المضيف الوحيد graph.facebook.com عبر المسار المثبّت، والنتيجة الملتبسة لا تُعاد آليًا | 7 |
+| test_service_media_policy | صور المنشورات: صورة المالك كما هي، وصورة المخزون أو المولّدة لا تُنشر إلا بوسم «صورة توضيحية» ومصدر مرخّص | 5 |
 | test_service_portal | بوابة المالك: رمز الجلسة يُتحقق بصرامة، الإجراء مربوط بالجلسة (CSRF والأصل)، لا سكربت، كل قيمة مُهرَّبة | 19 |
 | test_service_qr | رمز QR لرابط واتساب يُولَّد محليًا: ترميز صحيح يطابق مرجعًا، ورابط wa.me ثابت لا تحويل عبر طرف ثالث | 6 |
 | test_service_redact | حجب السجلات: الهواتف بالأرقام العربية، حقول المحتوى، الرموز، نص الاستثناءات | 6 |
@@ -1010,7 +1011,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_supply_chain | غياب CODEOWNERS فشل، pull_request_target فشل، والتعليقات لا تُعدّ إجراءات | 4 |
 | test_triage | المرحلة الثانية تضيف ولا تلغي، العتبة، استفسارات المالك | 5 |
 | test_validator_negative | اختبارات طفرات: يُدخل كل عيب وُجد في المراجعات ويتأكد أن المتحقق يرفضه | 13 |
-| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **288** |
+| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **293** |
 <!-- /gen:tests -->
 
 ### 15.3 العيوب التي تمنعها اختبارات الطفرات
@@ -1968,6 +1969,21 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 الاختبار يثبّت بصمات المرجع ولا يحتاج segno ولا OpenCV في CI.
 
 الاختبارات: tests/test_service_qr.py (6).
+
+### 28.19 صور المنشورات: لا صورة مخزون على أنها طبق المطعم
+
+صورة مندي من مكتبة مجانية تُعرض على أنها طبق المطعم تخدع زبائنه، أيًّا كان ترخيصها. `service/media_policy.py` يحكم على الصورة قبل أن يُقترح المنشور على المالك:
+
+| المصدر | يمر إن | وإلا |
+| --- | --- | --- |
+| صورة المالك | دائمًا | — |
+| مخزون | من Unsplash أو Pexels أو Pixabay، وصفحة الصورة مسجلة على مضيفها، والتعليق فيه «صورة توضيحية»، و`depicts_offer` مذكور وقيمته false | محجوب برمز السبب |
+| مولّدة | مولّد بترخيص تجاري مؤكد كتابيًا (القائمة فارغة حتى P3؛ FLUX.1 [dev] غير تجاري)، بالشرطين نفسيهما | `GENERATOR_LICENSE_UNCONFIRMED` |
+| غير ذلك | — | `UNKNOWN_SOURCE` |
+
+صفوف صور المخزون في docs/licensing_matrix.md، وفي ops/runbook.md قاعدة أدوات الويب الخارجية (لا رمز حقيقي ولا بيانات عميل). **ضغط الصور داخل الخدمة** ينتظر قرارًا: يحتاج مكتبة صور (Pillow) في سلسلة التوريد، وهي مكتبة كبيرة بسجل ثغرات متكرر، فلا تُضاف دون قرار المالك ومراجعة.
+
+الاختبارات: tests/test_service_media_policy.py (5).
 
 ## الملحق أ · رموز الأخطاء
 

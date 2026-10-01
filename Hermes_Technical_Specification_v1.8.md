@@ -40,13 +40,13 @@
 | مخططات JSON والعقود والفهرس والسياسات | 34 فحصًا ناجحًا من 34 | tools/validate.py · الطبقة 1 |
 | قواعد الاتساق المنطقي والسياسة الإحصائية ومعجم الإخفاقات | 136 فحصًا ناجحًا من 136 | tools/validate.py · الطبقة 2 |
 | الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 250 فحصًا ناجحًا من 250 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
-| الاختبارات الآلية | 282 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
+| الاختبارات الآلية | 288 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
 | حالات SQL على Postgres فعلي | 53 حالة و64 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
-المجموع: 420/420 فحصًا ناجحًا في أداة التحقق، و282 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
+المجموع: 420/420 فحصًا ناجحًا في أداة التحقق، و288 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
 
 ### وسوم المصدر
@@ -167,8 +167,8 @@ hermes-tech/
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
 ├── db/tests/             concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
-├── service/              __init__.py · app.py · auth.py · competitor.py · crawler.py · dispatcher.py · health.py · jobs.py · outbox_model.py · pg.py · portal.py · redact.py · render.py · site_seo.py · structured.py · supabase_auth.py · telemetry.py · webhook.py · worker.py
-├── tests/                35 modules (inventory in §15.2)
+├── service/              __init__.py · app.py · auth.py · competitor.py · crawler.py · dispatcher.py · health.py · jobs.py · outbox_model.py · pg.py · portal.py · qr.py · redact.py · render.py · site_seo.py · structured.py · supabase_auth.py · telemetry.py · webhook.py · worker.py
+├── tests/                36 modules (inventory in §15.2)
 ├── evals/                complaints_seed.jsonl · content_guard_golden.jsonl · model_admission.json
 ├── docs/                 18 documents · adr/ (11 decisions)
 ├── derived/              policy_matrix.md · agent_capabilities.json · alerts.yaml   (generated)
@@ -997,6 +997,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_service_dispatcher | الموزّع: الغامض لا يُعاد، قبل الإرسال يُحرَّر، الرفض نهائي، مطابقة رموز الآلة للترحيل 0010 | 14 |
 | test_service_graph_live | مرسل Graph الحقيقي: مغلق دون إعداد صريح، المضيف الوحيد graph.facebook.com عبر المسار المثبّت، والنتيجة الملتبسة لا تُعاد آليًا | 7 |
 | test_service_portal | بوابة المالك: رمز الجلسة يُتحقق بصرامة، الإجراء مربوط بالجلسة (CSRF والأصل)، لا سكربت، كل قيمة مُهرَّبة | 19 |
+| test_service_qr | رمز QR لرابط واتساب يُولَّد محليًا: ترميز صحيح يطابق مرجعًا، ورابط wa.me ثابت لا تحويل عبر طرف ثالث | 6 |
 | test_service_redact | حجب السجلات: الهواتف بالأرقام العربية، حقول المحتوى، الرموز، نص الاستثناءات | 6 |
 | test_service_render | القوالب: التهريب، روابط javascript: بكل تمويه، مواضع القالب الخطرة | 6 |
 | test_service_site_seo | بيانات موقع العميل المنظمة: JSON-LD من الحقائق المعتمدة وحدها، لا يكسر وسم السكربت، وقارئنا يقرؤه كاملًا؛ وsitemap وrobots | 8 |
@@ -1009,7 +1010,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_supply_chain | غياب CODEOWNERS فشل، pull_request_target فشل، والتعليقات لا تُعدّ إجراءات | 4 |
 | test_triage | المرحلة الثانية تضيف ولا تلغي، العتبة، استفسارات المالك | 5 |
 | test_validator_negative | اختبارات طفرات: يُدخل كل عيب وُجد في المراجعات ويتأكد أن المتحقق يرفضه | 13 |
-| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **282** |
+| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **288** |
 <!-- /gen:tests -->
 
 ### 15.3 العيوب التي تمنعها اختبارات الطفرات
@@ -1949,6 +1950,24 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 - **sitemap.xml وrobots.txt:** صفحات الموقع (5 كحد أقصى، حد الباقة)، روابط https من المضيف نفسه، ومسارات بلا `..`.
 
 الاختبارات: tests/test_service_site_seo.py (8)، واختبار الكتالوج في tests/test_service_structured.py.
+
+### 28.18 رمز QR لواتساب المنشأة يُولَّد هنا
+
+مواقع توليد QR كثيرًا ما ترمّز رابطًا قصيرًا عندها يحوّل إلى الهدف. إن انتهى الاشتراك تتعطل الرموز المطبوعة على الطاولات والقوائم، وكل مسح يمر بطرف ثالث. `service/qr.py` يرمّز رابط `wa.me` نفسه:
+
+- **الرابط:** `wa_me(رقم، تحية)` يعطي `https://wa.me/<رقم دولي بالأرقام>?text=<تحية مرمّزة>`. يقبل `+` و`00` والمسافات في الإدخال، ويرفض رقمًا محليًا يبدأ بـ0 أو قصيرًا، أو تحية أطول من 120 حرفًا.
+- **الترميز:** ISO/IEC 18004، وضع البايت، تصحيح أخطاء M (يتحمّل تلف نحو 15%)، الإصدارات 1 إلى 10 (حتى 213 بايتًا)، والقناع الأقل عقوبة. النص الأطول يُرفض، لا يُقص.
+- **الناتج:** SVG مستقل بمنطقة هادئة من 4 وحدات، بلا سكربت ولا روابط.
+
+**التحقق:**
+
+- **مطابقة المرجع:** المصفوفة لكل قناع من الثمانية طابقت مُرمّزًا مستقلًا (segno 1.6.6) على 128 نصًا عبر الإصدارات 1–10. لم يُستثنَ إلا بايت صفري زائد يضيفه segno حين تنتهي البيانات على حد بايت، وهو مقبول عند القارئ لكنه ليس ما يصفه المعيار.
+- **القراءة الفعلية:** قرأ OpenCV أربعة رموز مولّدة كما هي، منها رابط بتحية عربية (الإصدار 10).
+- **اختيار القناع:** قد يختلف عن segno، لأنه يقيّم الأقنعة قبل كتابة بتات الصيغة. كل قناع من الثمانية رمز صالح.
+
+الاختبار يثبّت بصمات المرجع ولا يحتاج segno ولا OpenCV في CI.
+
+الاختبارات: tests/test_service_qr.py (6).
 
 ## الملحق أ · رموز الأخطاء
 

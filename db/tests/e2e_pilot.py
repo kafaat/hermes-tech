@@ -160,6 +160,18 @@ def main():
         check(bool(wait("service healthy", healthy, 300)),
               f"service answers /healthz at {url}" + (f" on commit {want[:7]}" if want else ""))
         seed()
+        # a run that crashed mid-way can leave a reply proposal pending (its event unprocessed counts as a backlog in
+        # /deps): the test owner rejects its own leftovers, as a person would, and waits for those tasks to close
+        leftovers = q("select a.id, a.target_id from app.approvals a where a.customer_id = %s and a.decision = 'pending'"
+                      " and a.proposal_action = 'reply:send' and a.expires_at > now()", (CUSTOMER,))
+        if leftovers:
+            owner = issue_staging_token(OWNER, JWT_SECRET)
+            for ap_left, _ in leftovers:
+                portal(url, owner, "POST", {"_path": "/portal/decide", "approval": str(ap_left), "decision": "rejected",
+                                            "csrf": csrf_token(owner, JWT_SECRET)})
+            wait("leftover tasks closed", lambda: not q(
+                "select 1 from app.webhook_events where customer_id = %s and processed_at is null and external_event_id = any(%s)",
+                (CUSTOMER, [t for _, t in leftovers])), 150)
         run = uuid.uuid4().hex[:10]
         q_ext, c_ext = f"wamid.E2E.{run}.q", f"wamid.E2E.{run}.c"
         batch = message_payload({"messages": [

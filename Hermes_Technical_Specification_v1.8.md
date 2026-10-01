@@ -44,7 +44,7 @@
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
-| حالات SQL على Postgres فعلي | 52 حالة و63 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
+| حالات SQL على Postgres فعلي | 53 حالة و64 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
 المجموع: 420/420 فحصًا ناجحًا في أداة التحقق، و240 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
@@ -163,7 +163,7 @@ hermes-tech/
 ├── contracts/            agent_contract.schema.json · registry(.schema).json · 8 × *.contract.json
 ├── runtime/              agent_runtime_state · agent_call · ops_summary (schemas) · examples
 ├── policies/             acceptance_policy.json · acceptance_policy.schema.json · complaint_keywords.json · complaint_keywords.schema.json · content_rules.json · content_rules.schema.json · fetch_policy.json
-├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017   (17 files)
+├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018   (18 files)
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
 ├── db/tests/             concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
@@ -197,7 +197,7 @@ hermes-tech/
 المخطط في المساحة app على Supabase Postgres 15 أو أحدث. كل جدول يخص عميلًا يحمل customer_id غير فارغ.
 
 <!-- gen:migrations -->
-الترحيلات 17 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
+الترحيلات 18 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
 
 - `0001_core` — الأنواع والجداول والقيود
 - `0002_rls` — الأدوار ودوال الهوية وأمن الصف
@@ -216,6 +216,7 @@ hermes-tech/
 - `0015_outbox_resend_task` — «أعد الإرسال» من المشغّل يُدرج مهمته في المعاملة نفسها، فلا يبقى صف معلقًا بلا من يرسله
 - `0016_claim_task_kinds` — العامل لا يستلم إلا أنواع المهام التي يعرفها، فالنسخة القديمة أثناء النشر تترك الأنواع الجديدة
 - `0017_competitor_facts` — حقائق المنافس المنظمة وبصمة نص الصفحة في اللقطة، ودور مهمة الفحص اليومي بسقف شهري تفرضه القاعدة
+- `0018_inquiries_event_once` — استفسار واحد لكل رسالة واردة: المهمة المعادة لا تدرج الرسالة مرة ثانية
 <!-- /gen:migrations -->
 
 ![الشكل 2 · الكيانات الرئيسية والعلاقات (مبسّط)](diagrams/erd.png)
@@ -406,11 +407,12 @@ create policy kb_facts_worker_rw on app.kb_facts for all to hermes_worker
 50. `an operator settles an outbox row that waits for a human: only with aal2, only with a reason, only once; a`
 51. `a worker claims only the kinds it names; no list claims every kind, as before (0016)`
 52. `the competitor job (hermes_jobs): reads active competitors and their snapshots, writes a snapshot only for the`
+53. `one inquiry per inbound message: a re-run task inserts it once; another customer's same id is its own (0018)`
 46. `the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)`
 47. `the external monitor gets numbers, never rows: its role holds EXECUTE on one function and nothing else, and`
 48. `every table whose policies filter by customer_id has an index leading with customer_id (0013)`
 
-الملف db/tests/rls_isolation_test.sql ينفّذ 52 حالة داخل معاملة تُلغى في النهاية، ويطلب run_isolation.sh ظهور 63 إشعار نجاح (بعض الحالات تطلق أكثر من إشعار)، بعد تطبيق كل الترحيلات بدور مالك عادي. العناوين بلغة الملف نفسه لأنها الحالات كما تُنفَّذ.
+الملف db/tests/rls_isolation_test.sql ينفّذ 53 حالة داخل معاملة تُلغى في النهاية، ويطلب run_isolation.sh ظهور 64 إشعار نجاح (بعض الحالات تطلق أكثر من إشعار)، بعد تطبيق كل الترحيلات بدور مالك عادي. العناوين بلغة الملف نفسه لأنها الحالات كما تُنفَّذ.
 <!-- /gen:sql_cases -->
 
 ## 6. عقود الوكلاء
@@ -1764,7 +1766,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 
 السلسلة المفروضة الآن (tests/test_service_dispatcher.py): مهلة الإرسال 15 ث < انتظار الإيقاف 25 ث < تصريف Railway 30 ث، ومهلة الإرسال × 2 < إيجار الإرسال 120 ث وإيجار المهمة 120 ث. عميل WhatsApp الحقيقي كان يمرر 15 ث أصلًا؛ صارت ثابتًا واحدًا يمرره كل محوّل.
 
-0014: الأثر بلا موافقة هويته (العميل، الموضوع، الهدف): الإدراج الثاني يعيد الصف نفسه، وحمولة مختلفة للهدف نفسه تُرفض (OUTBOX_TARGET_CONFLICT)، وفهرس فريد يمنع السباق. الفهرس يبدأ بعد آخر معرّف صادر عند الترحيل، فالتكرارات القديمة تبقى سجلًا. الحالة 49 فشلت دون 0014 (ضابط) ونجحت معه. بقي: إدراج `inquiries` يتكرر أيضًا عند إعادة المهمة (عدّ لا أثر خارجي)؛ يُصلح مع بوابة المالك.
+0014: الأثر بلا موافقة هويته (العميل، الموضوع، الهدف): الإدراج الثاني يعيد الصف نفسه، وحمولة مختلفة للهدف نفسه تُرفض (OUTBOX_TARGET_CONFLICT)، وفهرس فريد يمنع السباق. الفهرس يبدأ بعد آخر معرّف صادر عند الترحيل، فالتكرارات القديمة تبقى سجلًا. الحالة 49 فشلت دون 0014 (ضابط) ونجحت معه. إدراج `inquiries` كان يتكرر أيضًا عند إعادة المهمة (عدّ لا أثر خارجي)؛ أُصلح في 0018: الاستفسار يحمل معرّف الرسالة (event_ref)، وفهرس فريد جزئي على (العميل، الرسالة) يبقي واحدًا، والعامل يُدرج بـ ON CONFLICT DO NOTHING. الصفوف القديمة بلا معرّف تبقى كما هي. الحالة 53، وفحص في المسار الكامل.
 
 **موعد المحو يتبع النجاح (مُثبت على staging).** بعد تشغيل 18:40:29 صار `retention_due_at` في ‎/deps‎ ‏2026-10-01 20:40:29، أي وقت النجاح + 26 ساعة بالضبط.
 

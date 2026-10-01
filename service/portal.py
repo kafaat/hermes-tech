@@ -234,8 +234,8 @@ def _when(ts) -> str:
 
 class Portal:
     def __init__(self, store: StorePort, secret: str, *, staging_login_code: str = "", staging_owner_id: str = "",
-                 staging_operator_id: str = "", simulate: bool = False, now=time.time, auth=None):
-        self.store, self.secret, self.now, self.auth = store, secret, now, auth
+                 staging_operator_id: str = "", simulate: bool = False, now=time.time, auth=None, keys=None):
+        self.store, self.secret, self.now, self.auth, self.keys = store, secret, now, auth, keys   # keys: jwks.Jwks (28.26)
         self.staging = bool(simulate and staging_login_code and staging_owner_id and secret)
         self.staging_code, self.staging_owner = staging_login_code, staging_owner_id
         self.staging_operator = staging_operator_id if self.staging else ""
@@ -259,7 +259,7 @@ class Portal:
         claims = None
         if token:
             try:
-                claims = verify_session_token(token, self.secret, self.now())
+                claims = verify_session_token(token, self.secret, self.now(), self.keys)
             except AuthError as exc:
                 log.info("portal session refused: %s", exc)
         if claims is not None and claims["exp"] - self.now() > RENEW_BEFORE_SECONDS:
@@ -268,7 +268,7 @@ class Portal:
             return (token, claims, []) if claims is not None else (None, None, [])
         try:
             new = self.auth.refresh(refresh)
-            new_claims = verify_session_token(new.access_token, self.secret, self.now())
+            new_claims = verify_session_token(new.access_token, self.secret, self.now(), self.keys)
         except (AuthFailed, AuthError) as exc:
             log.info("portal session renewal refused: %s", exc)
             if claims is not None:                         # still valid for a few minutes: keep it, try again next time
@@ -384,7 +384,7 @@ class Portal:
 
     def _sign_in(self, access_token: str):
         try:
-            claims = verify_session_token(access_token, self.secret, self.now())
+            claims = verify_session_token(access_token, self.secret, self.now(), self.keys)
         except AuthError as exc:
             log.info("portal sign-in refused: %s", exc)
             return self._page(401, _r(NONE, text="تعذّر تسجيل الدخول."))
@@ -404,7 +404,7 @@ class Portal:
     def _login_verify(self, email: str, code: str):
         try:
             session = self.auth.verify_code(email, code)
-            claims = verify_session_token(session.access_token, self.secret, self.now())
+            claims = verify_session_token(session.access_token, self.secret, self.now(), self.keys)
         except (AuthFailed, AuthError) as exc:
             log.info("portal sign-in refused: %s", exc)
             message = AUTH_FAILED.get(getattr(exc, "code", ""), AUTH_FAILED["invalid"])
@@ -441,7 +441,7 @@ class Portal:
     def _mfa_verify(self, token, factor: str, code: str):
         try:
             session = self.auth.mfa_verify(token, factor, code)
-            claims = verify_session_token(session.access_token, self.secret, self.now())
+            claims = verify_session_token(session.access_token, self.secret, self.now(), self.keys)
         except (AuthFailed, AuthError) as exc:
             log.info("portal second factor refused: %s", exc)
             return self._redirect("/portal/mfa?done=mfa")
@@ -455,7 +455,7 @@ class Portal:
         who, aal, where = (self.staging_operator, "aal2", "/portal/ops") if as_operator else (self.staging_owner, "aal1", "/portal")
         token = issue_staging_token(who, self.secret, now=self.now(), aal=aal)
         log.info("portal staging login as %s", "operator" if as_operator else "owner")
-        return self._redirect(where, [self._cookie(token, verify_session_token(token, self.secret, self.now()))])
+        return self._redirect(where, [self._cookie(token, verify_session_token(token, self.secret, self.now(), self.keys))])
 
     def _ops(self, token, claims, done: str):
         if claims is None:

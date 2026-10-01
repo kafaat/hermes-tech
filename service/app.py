@@ -8,7 +8,8 @@
   POST /webhook   webhook.Handler: size limit, HMAC on the raw bytes, then insert as hermes_ingest; 200 only after commit
   GET  /portal, POST /portal/...   the owner portal (service/portal.py): pending replies, inquiries, facts. Sign-in
                   through Supabase Auth when HERMES_SUPABASE_URL and HERMES_SUPABASE_ANON_KEY are set (the access
-                  tokens are verified with HERMES_JWT_SECRET, the project's JWT secret)
+                  tokens are verified with HERMES_JWT_SECRET, the project's legacy JWT secret, or with the project's
+                  published signing keys, ES256 / RS256, spec 28.26; HERMES_JWT_SECRET also keys the CSRF tokens)
   POST /forms/<site key>          the contact form of a customer's site (service/site_form.py, spec 28.24)
   POST /email/inbound             Postmark's inbound webhook (service/email_inbound.py, spec 28.25), basic auth with
                   HERMES_EMAIL_INBOUND_SECRETS ("user:password", comma-separated); unset: 404
@@ -181,7 +182,15 @@ def main():
     email_secrets = [s.strip() for s in os.environ.get("HERMES_EMAIL_INBOUND_SECRETS", "").split(",") if s.strip()]
     email = EmailHandler(email_secrets, ingest) if email_secrets else None
     secret = os.environ.get("HERMES_JWT_SECRET", "")          # Supabase project JWT secret; unset: the portal signs nobody in
-    portal = Portal(PortalDb(Database(url, "authenticated")), secret, auth=supabase_from_env(os.environ),
+    auth = supabase_from_env(os.environ)
+    keys = None
+    if auth is not None:                                       # signing keys: fetched only when such a token arrives
+        from service.crawler import ApiClient
+        from service.jwks import from_url
+        from service.supabase_auth import project_host
+        keys = from_url(os.environ["HERMES_SUPABASE_URL"], os.environ["HERMES_SUPABASE_ANON_KEY"],
+                        ApiClient({project_host(os.environ["HERMES_SUPABASE_URL"])}))
+    portal = Portal(PortalDb(Database(url, "authenticated")), secret, auth=auth, keys=keys,
                     staging_login_code=os.environ.get("HERMES_STAGING_LOGIN_CODE", ""),
                     staging_owner_id=os.environ.get("HERMES_STAGING_OWNER_ID", ""),
                     staging_operator_id=os.environ.get("HERMES_STAGING_OPERATOR_ID", ""),

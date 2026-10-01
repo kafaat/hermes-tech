@@ -2,9 +2,11 @@
 
     claims = verify_session_token(token, secret, now=time.time())      # raises AuthError
 
-Supabase signs its access tokens (JWT) with the project's JWT secret, HS256, audience "authenticated". The portal
-accepts exactly that and nothing looser:
-  - alg must be HS256 (no "none", no RS/ES swap: the header cannot choose how it is checked)
+Supabase signs its access tokens (JWT) with the project's JWT secret (HS256, legacy) or, in projects with JWT signing
+keys, with an asymmetric key whose public half it publishes (ES256 / RS256, checked by service/jwks.py, spec 28.26);
+audience "authenticated". The portal accepts exactly that and nothing looser:
+  - alg must be HS256 with a configured secret, or ES256 / RS256 with the project's keys, the key's own algorithm
+    (no "none", no swap: the header cannot choose how it is checked)
   - the signature is compared in constant time over the exact bytes received
   - exp is required and must be in the future (60 s leeway for clocks); nbf/iat, when present, not in the future
   - aud must be "authenticated", role "authenticated", sub a UUID
@@ -38,8 +40,9 @@ def _b64e(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
 
 
-def verify_session_token(token: str, secret: str, now: float | None = None) -> dict:
-    if not secret:
+def verify_session_token(token: str, secret: str, now: float | None = None, keys=None) -> dict:
+    """keys: a jwks.Jwks for asymmetric tokens (verify(kid, alg, signing_input, signature) raises AuthError), or None."""
+    if not secret and keys is None:
         raise AuthError("no secret configured")
     if not isinstance(token, str) or len(token) > MAX_TOKEN_BYTES or token.count(".") != 2:
         raise AuthError("malformed")
@@ -49,11 +52,17 @@ def verify_session_token(token: str, secret: str, now: float | None = None) -> d
         claims = json.loads(_b64d(body_b64))
     except ValueError:
         raise AuthError("malformed") from None
-    if not isinstance(header, dict) or header.get("alg") != "HS256":
+    if not isinstance(header, dict):
         raise AuthError("algorithm")
-    expected = hmac.new(secret.encode(), f"{head_b64}.{body_b64}".encode(), hashlib.sha256).digest()
-    if not hmac.compare_digest(expected, _b64d(sig_b64)):
-        raise AuthError("signature")
+    signing_input = f"{head_b64}.{body_b64}".encode()
+    if header.get("alg") == "HS256" and secret:
+        expected = hmac.new(secret.encode(), signing_input, hashlib.sha256).digest()
+        if not hmac.compare_digest(expected, _b64d(sig_b64)):
+            raise AuthError("signature")
+    elif header.get("alg") in ("ES256", "RS256") and keys is not None:
+        keys.verify(header.get("kid"), header["alg"], signing_input, _b64d(sig_b64))
+    else:
+        raise AuthError("algorithm")
     if not isinstance(claims, dict):
         raise AuthError("claims")
     now = time.time() if now is None else now

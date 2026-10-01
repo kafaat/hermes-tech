@@ -124,6 +124,7 @@ def from_env(env) -> SupabaseAuth | None:
     if not url and not key:
         return None
     if not (url and key and env.get("HERMES_JWT_SECRET")):
-        sys.exit("HERMES_SUPABASE_URL, HERMES_SUPABASE_ANON_KEY and HERMES_JWT_SECRET go together")
+        sys.exit("HERMES_SUPABASE_URL, HERMES_SUPABASE_ANON_KEY and HERMES_JWT_SECRET go together"
+                 " (with signing keys, HERMES_JWT_SECRET keys the CSRF tokens: 32 random characters or more)")
     from service.crawler import ApiClient                  # the one network path (spec 28.12)
     return SupabaseAuth(url, key, ApiClient({project_host(url)}))

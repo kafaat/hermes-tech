@@ -3,6 +3,7 @@
 | الفئة | المكوّنات | الأثر |
 |---|---|---|
 | متساهل (MIT / Apache-2.0 / PostgreSQL) | hermes-agent، litellm، chatwoot (النواة)، parlant، promptfoo، crawl4ai، camel_tools، coze-loop، pgmq | الاستخدام والتعديل التجاري مسموح مع الإبقاء على الإشعارات |
+| تبعيات الخدمة (LGPL-3.0 / Apache-2.0 أو BSD-3 / MIT / BSD-3) | psycopg (LGPL-3.0، مكتبة مرتبطة ديناميكيًا دون تعديل)، cryptography (Apache-2.0 أو BSD-3-Clause، للتحقق من مفاتيح توقيع Supabase، 28.26)، cffi (MIT)، pycparser (BSD-3-Clause) | الاستخدام التجاري مسموح؛ القفل بالبصمات في requirements-service.txt (ADR-0008) |
 | حقوق متبادلة شبكية (AGPL) | postiz، خادم Firecrawl المستضاف ذاتيًا | تعديل يُقدَّم عبر الشبكة يُلزم بنشر المصدر؛ مراجعة قانونية قبل الدمج |
 | حقوق متبادلة (GPL-3.0) | MaxKB | التوزيع يُلزم بالمصدر؛ غير مستخدم |
 | متاح المصدر بقيود | Dify، FastGPT (منع SaaS متعدد العملاء)، n8n (Sustainable Use) | غير صالح كنواة لهيرمس دون ترخيص تجاري |

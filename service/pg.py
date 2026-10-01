@@ -129,7 +129,15 @@ class PortalDb:
                         "   where s.competitor_id = c.id and s.customer_id = c.customer_id order by fetched_at desc limit 1) s on true"
                         " where c.customer_id = any(%s::uuid[]) and c.active order by c.label", (ids,))
             competitors = [{"label": r[0], "fetched_at": r[1], "status": r[2], "summary": r[3]} for r in cur.fetchall()]
+            cur.execute("select kind::text, external_id, coalesce(display_name, external_id), customer_id from app.channel_accounts"
+                        " where customer_id = any(%s::uuid[]) and status = 'active' and kind in ('facebook_page', 'instagram_business')"
+                        " order by kind, external_id", (ids,))
+            channels = [{"kind": r[0], "id": r[1], "name": r[2], "customer_id": str(r[3])} for r in cur.fetchall()]
+            cur.execute("select platform, body, status::text, created_at from app.content_items where customer_id = any(%s::uuid[])"
+                        " and kind = 'post' order by created_at desc limit 10", (ids,))
+            posts = [{"platform": r[0], "body": r[1], "status": r[2], "created_at": r[3]} for r in cur.fetchall()]
         return {"customers": customers, "approvals": approvals, "inquiries": inquiries, "facts": facts, "switches": switches,
+                "channels": channels, "posts": posts,
                 "competitors": competitors}
 
     def decide(self, claims: dict, approval_id: str, decision: str) -> bool:
@@ -159,6 +167,27 @@ class PortalDb:
                         " select customer_id, topic, app.fact_hash(fact), %s from app.kb_facts where id = %s and approved_by_owner",
                         (claims["sub"], fact_id))
             return cur.rowcount == 1
+
+    def draft_post(self, claims: dict, kind: str, account_id: str, body: str, image_url: str | None) -> bool:
+        """The owner's own draft (0023): the database refuses another business's account, an unlinked account, and an
+        Instagram post without an image; then the owner queues its proposal (content.propose)."""
+        platform = {"facebook_page": "facebook", "instagram_business": "instagram"}.get(kind)
+        if platform is None:
+            return False
+        with self.db.tx(claims=claims) as cur:
+            cur.execute("select customer_id from app.channel_accounts where kind = %s and external_id = %s and status = 'active'",
+                        (kind, account_id))
+            row = cur.fetchone()
+            if row is None:
+                return False
+            cur.execute("insert into app.content_items (customer_id, week_id, kind, body, platform, account_id, image_url)"
+                        " values (%s, to_char(now(), 'IYYY-\"W\"IW'), 'post', %s, %s, %s, %s) returning id",
+                        (row[0], body, platform, account_id, image_url))
+            content_id = cur.fetchone()[0]
+            cur.execute("insert into app.tasks (public_ref, customer_id, agent_id, kind, idempotency_key)"
+                        " values ('t_' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 16), %s, 'agent_triage',"
+                        " 'content.propose', %s)", (row[0], f"content:{content_id}"))
+            return True
 
     def set_standing_pause(self, claims: dict, customer_id: str, paused: bool) -> bool:
         """The one switch (0022): pause or resume every instant reply of one of the owner's businesses."""

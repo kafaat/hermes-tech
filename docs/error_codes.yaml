@@ -54,6 +54,8 @@ codes:
   CUSTOMER_APPROVAL_OWNER_ONLY:  {kind: error, since: "1.7", src: "0009", ar: "موافقة المنشأة لأحد مالكيها؛ المؤسس لا يوافق عنها"}
   PLATFORM_APPROVAL_OPERATOR_AAL2_ONLY: {kind: error, since: "1.7", src: "0009", ar: "موافقة المنصة لمشغّل بجلسة aal2"}
   KB_APPROVAL_OWNER_ONLY:        {kind: error, since: "1.7", src: "0009", ar: "اعتماد الحقيقة المعرفية لمالك المنشأة وحده"}
+  CONTENT_ACCOUNT_NOT_LINKED:    {kind: error, since: "1.8", src: "0023", ar: "المنشور لحساب غير مربوط بالمنشأة أو غير نشط"}
+  CONTENT_IMAGE_REQUIRED:        {kind: error, since: "1.8", src: "0023", ar: "منشور إنستغرام يحتاج صورة"}
   STANDING_OWNER_ONLY:           {kind: error, since: "1.8", src: "0020", ar: "الموافقة الدائمة يمنحها مالك المنشأة نفسه أو يلغيها"}
   STANDING_FACT_NOT_APPROVED:    {kind: error, since: "1.8", src: "0020", ar: "الموافقة الدائمة لنص معلومة اعتمدها المالك فقط"}
   STANDING_IMMUTABLE:            {kind: error, since: "1.8", src: "0020", ar: "الموافقة الدائمة لا تُعدَّل ولا تُستعاد بعد إلغائها؛ تُمنح من جديد"}

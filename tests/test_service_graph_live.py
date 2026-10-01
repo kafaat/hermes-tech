@@ -139,6 +139,51 @@ class TestMessengerAndInstagramSend(unittest.TestCase):
                 account_tokens(raw)
 
 
+class TestPublishing(unittest.TestCase):
+    def publish(self, payload, answers, tokens=None):
+        sent, answers = [], list(answers)
+
+        def connector(plan, request):
+            sent.append((plan["host"], request.split(b" ")[1].decode()))
+            a = answers.pop(0)
+            if isinstance(a, BaseException):
+                raise a
+            return a
+        api = ApiClient({"graph.facebook.com", "graph.instagram.com"}, lambda h: [PUBLIC], connector)
+        from service.dispatcher import MetaPublishAdapter
+        adapter = MetaPublishAdapter(graph_post(api), ({"1061234567": "PAGE-T", "178414000001": "IG-T"} if tokens is None else tokens).get)
+        db = Db()
+        db.row = lambda outbox_id: {"id": 11, "topic": "content.publish", "customer_id": "c1", "payload": payload}
+        return Dispatcher(db, {"content.publish": adapter}).run_once(11), db.finished, sent
+
+    def test_a_facebook_text_post_goes_to_the_feed_and_an_image_post_to_photos(self):
+        text = {"content_id": "c", "body": "عرض الجمعة", "platform": "facebook", "account_id": "1061234567", "image_url": None, "media_ids": []}
+        outcome, finished, sent = self.publish(text, [http(200, b'{"id":"106_1"}')])
+        self.assertEqual((outcome, finished[0][1], sent[0]), (SENT, "106_1", ("graph.facebook.com", "/v21.0/1061234567/feed")))
+        photo = {**text, "image_url": "https://cdn.example/offer.jpg"}
+        outcome, finished, sent = self.publish(photo, [http(200, b'{"id":"9","post_id":"106_2"}')])
+        self.assertEqual((outcome, finished[0][1], sent[0][1]), (SENT, "106_2", "/v21.0/1061234567/photos"))
+
+    def test_instagram_publishes_in_two_steps_and_a_failed_container_publishes_nothing(self):
+        post = {"content_id": "c", "body": "عرض", "platform": "instagram", "account_id": "178414000001",
+                "image_url": "https://cdn.example/offer.jpg", "media_ids": []}
+        outcome, finished, sent = self.publish(post, [http(200, b'{"id":"cont1"}'), http(200, b'{"id":"ig_media_1"}')])
+        self.assertEqual((outcome, finished[0][1], [p for _, p in sent]),
+                         (SENT, "ig_media_1", ["/v21.0/178414000001/media", "/v21.0/178414000001/media_publish"]))
+        outcome, finished, sent = self.publish(post, [TimeoutError("read")])
+        self.assertEqual((outcome, len(sent)), (FAILED_BEFORE_SEND, 1))              # only the container was attempted
+        outcome, finished, sent = self.publish(post, [http(200, b'{"id":"cont2"}'), TimeoutError("read")])
+        self.assertEqual(outcome, AMBIGUOUS)                                         # the publish itself: never retried
+
+    def test_bad_targets_missing_tokens_and_instagram_without_image_fail_before_sending(self):
+        base = {"content_id": "c", "body": "x", "platform": "facebook", "account_id": "1061234567", "image_url": None, "media_ids": []}
+        for bad, tokens in (({"account_id": "106/../me"}, None), ({"platform": "tiktok"}, None), ({"image_url": "http://x/a.jpg"}, None),
+                            ({"platform": "instagram", "account_id": "178414000001"}, None), ({}, {})):
+            with self.subTest(bad=bad, tokens=tokens):
+                outcome, _, sent = self.publish({**base, **bad}, [http(200)], tokens)
+                self.assertEqual((outcome, sent), (FAILED_BEFORE_SEND, []))
+
+
 class TestModes(unittest.TestCase):
     def test_live_needs_a_token_and_reaches_only_graph(self):
         with self.assertRaises(RuntimeError):

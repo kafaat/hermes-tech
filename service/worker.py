@@ -22,12 +22,13 @@ from complaints import Matcher, normalize  # noqa: E402
 from content_guard import ContentGuard  # noqa: E402
 
 from service.dispatcher import (SEND_TIMEOUT_SECONDS, SENT, BeforeSend, Dispatcher, MetaMessagingAdapter,  # noqa: E402
-                                ReplyRouter, WhatsAppCloudAdapter)
+                                MetaPublishAdapter, ReplyRouter, WhatsAppCloudAdapter)
 
 log = logging.getLogger("hermes.worker")
 AGENT = "agent_triage"
-KINDS = ("inbound.event", "outbox.resend")      # the task kinds this worker handles; claim_task leaves any other kind to a
+KINDS = ("inbound.event", "outbox.resend", "content.propose")      # the task kinds this worker handles; claim_task leaves any other kind to a
                                                 # worker that knows it (0016: an older instance took a new kind mid-deploy)
+POST_DECISION_DAYS = 7          # a post proposal waits a week for the owner, then lapses
 REPLY_WINDOW_HOURS = 19          # a reply:send proposal must be decidable inside the 20 h window (approvals_reply_window)
 
 # Questions answered only from owner-approved facts (kb_facts.topic). Keywords are normalised like complaints.
@@ -120,6 +121,13 @@ class SimulatedGraph:
         self.sent, self.delay = [], delay
 
     def __call__(self, url, body, headers, timeout):
+        if url.rsplit("/", 1)[-1] in ("feed", "photos", "media", "media_publish"):   # publishing (0023)
+            ref = "SIM_post_" + uuid.uuid4().hex
+            self.sent.append({"url": url, "to": None, "id": ref})
+            if url.endswith("/media"):
+                return 200, {"id": "SIM_container_" + uuid.uuid4().hex}
+            accepted(ref, self.delay, timeout=timeout)
+            return 200, {"id": ref, **({"post_id": ref} if url.endswith("/photos") else {})}
         if "recipient" in body:                         # Messenger / Instagram Direct answer with a message_id
             mid = "m_SIM." + uuid.uuid4().hex
             self.sent.append({"url": url, "to": body["recipient"].get("id"), "id": mid})
@@ -216,6 +224,8 @@ class Worker:
             key = cur.fetchone()[0]
         if key.startswith("resend:"):                     # an operator's resend (0015): 'resend:<outbox id>:<attempts>'
             return self._resend(t, int(key.split(":")[1]))
+        if key.startswith("content:"):                    # the owner's draft post (0023): 'content:<content id>'
+            return self._content(t, key[len("content:"):])
         with self.db.tx(t.bind) as cur:
             _, kind, ext = key.split(":", 2)                                   # 'wh:<kind>:<external id>'
             cur.execute("select id, payload, channel_external_id from app.webhook_events where kind = %s and external_event_id = %s",
@@ -229,6 +239,55 @@ class Worker:
         if proposal is not None:
             return self._after_proposal(t, event_id, ext, proposal)
         return self._message(t, event_id, ext, channel, payload.get("message") or {}, kind, payload.get("messaging"))
+
+    def _content(self, t: Task, content_id: str) -> str:
+        """A draft post: check the text, propose exactly what will be published (text, account, image), wait for the
+        owner, then publish through the outbox and mark it published under that approval (0009 guard, 0023)."""
+        with self.db.tx(t.bind) as cur:
+            cur.execute("select c.status::text, c.body, app.content_payload(c) from app.content_items c where c.id = %s", (content_id,))
+            row = cur.fetchone()
+            cur.execute("select id, decision::text, expires_at <= now() from app.approvals where proposal_action = 'content:publish'"
+                        " and target_id = %s order by requested_at desc limit 1", (content_id,))
+            proposal = cur.fetchone()
+        if row is None or row[0] in ("published", "rejected"):
+            self._complete(t, "succeeded" if row and row[0] == "published" else "cancelled", None if row and row[0] == "published"
+                           else "CONTENT_" + ("MISSING" if row is None else "REJECTED"))
+            return "closed"
+        status, body, payload = row
+        if proposal is None:
+            verdict = self.guard.verdict(body, "post")
+            if verdict == "block":                      # a health claim, a disparagement, a masked link: never proposed
+                with self.db.tx(t.bind) as cur:
+                    cur.execute("update app.content_items set status = 'rejected' where id = %s", (content_id,))
+                self._complete(t, "escalated", "guard_block")
+                return "blocked"
+            with self.db.tx(t.bind) as cur:
+                cur.execute("insert into app.approvals (customer_id, scope, proposal_action, payload, requested_by_agent, target_id, expires_at)"
+                            " values (%s, 'customer', 'content:publish', %s, 'agent_content', %s, now() + make_interval(days => %s))",
+                            (t.customer_id, _json(payload), content_id, POST_DECISION_DAYS))
+                cur.execute("update app.content_items set status = 'pending_approval' where id = %s", (content_id,))
+                cur.execute("select app.requeue_task(%s, %s, %s)", (t.id, t.token, self.poll))
+            return "proposed"
+        approval_id, decision, expired = proposal
+        if decision == "pending" and not expired:
+            with self.db.tx() as cur:
+                cur.execute("select app.requeue_task(%s, %s, %s)", (t.id, t.token, self.poll))
+            return "awaiting_approval"
+        if decision != "approved":
+            with self.db.tx(t.bind) as cur:
+                cur.execute("update app.content_items set status = 'rejected' where id = %s", (content_id,))
+            self._complete(t, "cancelled", "PROPOSAL_" + ("EXPIRED" if expired else str(decision).upper()))
+            return "closed"
+        with self.db.tx(t.bind) as cur:
+            cur.execute("select app.enqueue_outbox('content.publish', %s, %s, %s)", (_json(payload), approval_id, content_id))
+            outbox_id = cur.fetchone()[0]
+        outcome = self._dispatch(t, outbox_id)
+        if outcome == SENT:
+            with self.db.tx(t.bind) as cur:             # the 0009 guard checks this approval covers exactly this content
+                cur.execute("update app.content_items set status = 'published', approval_id = %s where id = %s",
+                            (approval_id, content_id))
+        self._complete(t, "succeeded" if outcome == SENT else "escalated", None if outcome == SENT else "SEND_" + outcome.upper())
+        return "published" if outcome == SENT else outcome
 
     def _resend(self, t: Task, outbox_id: int) -> str:
         """The same dispatcher and claim as any send: the database refuses a row that is not pending again, and a
@@ -335,11 +394,13 @@ def simulated_adapters(delay: float | None = None):
     graph, notice = SimulatedGraph(delay), SimulatedOwnerNotice(delay)
     return {"reply.send": ReplyRouter(WhatsAppCloudAdapter(graph, lambda customer_id: "staging-simulated-token"),
                                       MetaMessagingAdapter(graph, lambda account: "staging-simulated-account-token")),
+            "content.publish": MetaPublishAdapter(graph, lambda account: "staging-simulated-account-token"),
             "notify.owner": notice}
 
 
 GRAPH_HOSTS = ("graph.facebook.com", "graph.instagram.com")
-GRAPH_PATH = re.compile(r"^https://graph\.(facebook|instagram)\.com/v\d{1,2}\.\d/\d{5,25}/messages$")
+GRAPH_PATH = re.compile(r"^https://graph\.facebook\.com/v\d{1,2}\.\d/\d{5,25}/(messages|feed|photos)$"
+                        r"|^https://graph\.instagram\.com/v\d{1,2}\.\d/\d{5,25}/(messages|media|media_publish)$")
 
 
 def graph_post(api):
@@ -406,6 +467,7 @@ def live_adapters(env):
     post = graph_post(ApiClient(set(GRAPH_HOSTS)))
     return {"reply.send": ReplyRouter(WhatsAppCloudAdapter(post, lambda customer_id: token, version),
                                       MetaMessagingAdapter(post, accounts.get, version)),
+            "content.publish": MetaPublishAdapter(post, accounts.get, version),
             "notify.owner": PortalNotice()}
 
 

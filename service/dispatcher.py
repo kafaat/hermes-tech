@@ -171,3 +171,51 @@ class ReplyRouter:
         if row["payload"].get("channel") in MetaMessagingAdapter.HOSTS:
             return self.meta.send(row)
         return self.whatsapp.send(row)
+
+
+class MetaPublishAdapter:
+    """content.publish: exactly the approved payload (text, account, image) to a Facebook page or an Instagram account.
+
+    Facebook  text: POST graph.facebook.com/<page>/feed {message}; with an image: /<page>/photos {url, caption}
+    Instagram two steps: POST graph.instagram.com/<account>/media {image_url, caption} creates an unpublished container
+              (nothing is public yet, so any failure there is a clean failure), then /<account>/media_publish
+              {creation_id} publishes it; a failure after that request was written is ambiguous, as for every send."""
+
+    def __init__(self, post, token_for_account, api_version: str = "v21.0"):
+        self.post, self.token_for_account, self.api_version = post, token_for_account, api_version
+
+    def _call(self, url, body, token):
+        status, data = self.post(url, body, {"Authorization": f"Bearer {token}"}, SEND_TIMEOUT_SECONDS)
+        if 200 <= status < 300:
+            return data or {}
+        raise Rejected(status, str(((data or {}).get("error") or {}).get("code", "")))
+
+    def send(self, row: dict) -> str:
+        p = row["payload"]
+        platform, account, body, image = p.get("platform"), str(p.get("account_id") or ""), p.get("body") or "", p.get("image_url")
+        if platform not in ("facebook", "instagram") or not re.fullmatch(r"[0-9]{5,25}", account) \
+           or not re.fullmatch(r"v\d{1,2}\.\d", self.api_version) or not (body or image) or len(body) > 2200 \
+           or (image is not None and not re.fullmatch(r"https://[^\s\"<>\\]{8,2000}", str(image))):
+            raise BeforeSend("BAD_TARGET")
+        token = self.token_for_account(account)
+        if not token:
+            raise BeforeSend("NO_ACCOUNT_TOKEN")
+        if platform == "facebook":
+            base = f"https://graph.facebook.com/{self.api_version}/{account}"
+            data = self._call(f"{base}/photos", {"url": image, "caption": body}, token) if image \
+                else self._call(f"{base}/feed", {"message": body}, token)
+            ref = data.get("post_id") or data.get("id")
+        else:
+            if not image:
+                raise BeforeSend("CONTENT_IMAGE_REQUIRED")
+            base = f"https://graph.instagram.com/{self.api_version}/{account}"
+            try:
+                container = self._call(f"{base}/media", {"image_url": image, "caption": body}, token).get("id")
+            except Exception as exc:                    # noqa: BLE001 - only a container: nothing was published
+                raise BeforeSend(f"IG_CONTAINER:{type(exc).__name__}") from None
+            if not container:
+                raise BeforeSend("IG_CONTAINER:NO_ID")
+            ref = self._call(f"{base}/media_publish", {"creation_id": str(container)}, token).get("id")
+        if not ref:
+            raise RuntimeError("success without a post id")             # accepted but unidentifiable: ambiguous
+        return str(ref)

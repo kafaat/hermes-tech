@@ -1260,6 +1260,51 @@ end $$;
 reset role;
 select set_config('app.task_id', '', true), set_config('app.task_token', '', true);
 
+-- 56. posts (0023): the owner drafts only for an active linked account of their own business; Instagram needs an image;
+--     the owner queues the proposal of their own draft only, and cannot edit a draft afterwards
+insert into app.channel_accounts (customer_id, kind, external_id, status, verified_at) values
+  ('00000000-0000-0000-0000-00000000000a', 'facebook_page', '1069900000056', 'active', now()),
+  ('00000000-0000-0000-0000-00000000000a', 'instagram_business', '1784199000056', 'active', now()),
+  ('00000000-0000-0000-0000-00000000000b', 'facebook_page', '1069900000057', 'active', now());
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111', 'aal1');
+set local role authenticated;
+do $$ declare c uuid; n int; begin
+  insert into app.content_items (customer_id, week_id, kind, body, platform, account_id)
+  values ('00000000-0000-0000-0000-00000000000a', '2026-W40', 'post', 'عرض الجمعة', 'facebook', '1069900000056') returning id into c;
+  insert into app.tasks (public_ref, customer_id, agent_id, kind, idempotency_key)
+  values ('t_k56a', '00000000-0000-0000-0000-00000000000a', 'agent_triage', 'content.propose', 'content:' || c);
+  begin
+    insert into app.content_items (customer_id, week_id, kind, body, platform, account_id)
+    values ('00000000-0000-0000-0000-00000000000a', '2026-W40', 'post', 'x', 'facebook', '1069900000057');
+    raise exception 'FAIL a draft for another business''s page was accepted';
+  exception when raise_exception then if sqlerrm <> 'CONTENT_ACCOUNT_NOT_LINKED' then raise; end if;
+  end;
+  begin
+    insert into app.content_items (customer_id, week_id, kind, body, platform, account_id)
+    values ('00000000-0000-0000-0000-00000000000a', '2026-W40', 'post', 'x', 'instagram', '1784199000056');
+    raise exception 'FAIL an Instagram post without an image was accepted';
+  exception when raise_exception then if sqlerrm <> 'CONTENT_IMAGE_REQUIRED' then raise; end if;
+  end;
+  begin
+    insert into app.content_items (customer_id, week_id, kind, body, platform, account_id, status)
+    values ('00000000-0000-0000-0000-00000000000a', '2026-W40', 'post', 'x', 'facebook', '1069900000056', 'approved');
+    raise exception 'FAIL an owner inserted an approved post';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into app.tasks (public_ref, customer_id, agent_id, kind, idempotency_key)
+    values ('t_k56b', '00000000-0000-0000-0000-00000000000a', 'agent_triage', 'outbox.resend', 'resend:1:0');
+    raise exception 'FAIL an owner queued a task that is not their draft''s proposal';
+  exception when insufficient_privilege then null;
+  end;
+  update app.content_items set body = 'edited after the fact' where id = c;
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL the owner edited a draft after queueing it'; end if;
+  raise notice 'PASS posts: drafts only for the owner''s own linked accounts, Instagram with an image, proposal of their own draft only';
+end $$;
+reset role;
+select set_config('request.jwt.claim.sub', '', true), set_config('request.jwt.claims', '', true);
+
 -- 46. the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)
 do $$ declare got text; bad text; begin
   select string_agg(relname, ',' order by relname collate "C") into got from pg_class

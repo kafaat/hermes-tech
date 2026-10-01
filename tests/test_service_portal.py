@@ -260,6 +260,37 @@ class TestPortal(unittest.TestCase):
         self.assertIn("موافقاتك الدائمة محفوظة", page)
         self.assertEqual(portal(store).handle("POST", "/portal/standing/pause", cookie(token), b"customer=c1&paused=1&csrf=x")[0], 403)
 
+    def test_the_owner_drafts_a_post_and_approves_exactly_what_will_be_published(self):
+        store = FakeStore()
+        base = store.overview
+
+        def overview(claims):
+            d = base(claims)
+            d["channels"] = [{"kind": "facebook_page", "id": "1061234567", "name": "صفحة <b>النور</b>", "customer_id": "c1"}]
+            d["posts"] = [{"platform": "facebook", "body": "عرض <i>الجمعة</i>", "status": "pending_approval",
+                           "created_at": datetime(2026, 10, 1, tzinfo=timezone.utc)}]
+            d["approvals"] = [{"id": "a-post", "customer_id": "c1", "action": "content:publish", "expires_at": datetime(2026, 10, 8, tzinfo=timezone.utc),
+                               "payload": {"platform": "facebook", "body": "عرض <i>الجمعة</i>", "image_url": "https://x.example/a.jpg"}}]
+            return d
+        store.overview = overview
+        drafts = []
+        store.draft_post = lambda claims, kind, account, body, image: drafts.append((kind, account, body, image)) or True
+        token = sign(GOOD)
+        page = portal(store).handle("GET", "/portal", cookie(token), b"")[2].decode()
+        self.assertIn('<option value="facebook_page:1061234567">فيسبوك: صفحة &lt;b&gt;النور&lt;/b&gt;</option>', page)
+        self.assertIn("منشور على فيسبوك", page)
+        self.assertIn("مع الصورة: https://x.example/a.jpg", page)
+        self.assertIn("عرض &lt;i&gt;الجمعة&lt;/i&gt;", page)
+        self.assertIn("ينتظر موافقتك", page)
+        csrf = csrf_token(token, SECRET)
+        from urllib.parse import urlencode
+        form = lambda **f: urlencode({"csrf": csrf, "account": "facebook_page:1061234567", "body": "عرض", **f}).encode()
+        status, headers, _ = portal(store).handle("POST", "/portal/posts/new", cookie(token), form(image_url="https://x.example/a.jpg"))
+        self.assertEqual((dict(headers)["Location"], drafts[-1]), ("/portal?done=post", ("facebook_page", "1061234567", "عرض", "https://x.example/a.jpg")))
+        for bad in (form(body=""), form(image_url="http://x.example/a.jpg"), form(image_url='https://x.example/a".jpg'), form(body="x" * 2201)):
+            self.assertEqual(dict(portal(store).handle("POST", "/portal/posts/new", cookie(token), bad)[1])["Location"], "/portal?done=post_invalid")
+        self.assertEqual(len(drafts), 1)
+
     def test_fact_approval_and_logout(self):
         store, token = FakeStore(), sign(GOOD)
         csrf = csrf_token(token, SECRET)

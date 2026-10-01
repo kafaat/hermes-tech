@@ -256,6 +256,33 @@ def main():
             check(bool(fb_sent) and fb_sent[0][0].startswith("m_SIM."),
                   "Messenger: after the owner's approval the reply goes out through Messenger (message id m_...)")
 
+        # posts (0023): the owner writes, the platform checks and proposes, the owner approves, then it is published
+        owner_p = issue_staging_token(OWNER, JWT_SECRET)
+        for kind, acct, body, image in (("facebook_page", FB_PAGE, f"عرض نهاية الأسبوع {run}", None),
+                                        ("instagram_business", IG_ACCOUNT, f"منتج جديد {run}", "https://cdn.example.test/new.jpg")):
+            status, where, _ = portal(url, owner_p, "POST", {"_path": "/portal/posts/new", "account": f"{kind}:{acct}", "body": body,
+                                                             **({"image_url": image} if image else {}), "csrf": csrf_token(owner_p, JWT_SECRET)})
+            prop = wait(f"{kind} post proposal", lambda: q("select a.id, a.payload from app.approvals a join app.content_items c"
+                                                          " on a.target_id = c.id::text where c.body = %s and a.proposal_action = 'content:publish'",
+                                                          (body,)))
+            check(where == "/portal?done=post" and bool(prop) and prop[0][1].get("account_id") == acct
+                  and prop[0][1].get("image_url") == image,
+                  f"post on {kind}: the owner's draft is proposed with exactly its account and image")
+            if prop:
+                portal(url, owner_p, "POST", {"_path": "/portal/decide", "approval": str(prop[0][0]), "decision": "approved",
+                                              "csrf": csrf_token(owner_p, JWT_SECRET)})
+                done = wait(f"{kind} post published", lambda: q(
+                    "select c.status::text, o.provider_message_id from app.content_items c join app.outbox o on o.target_id = c.id::text"
+                    " where c.body = %s and o.topic = 'content.publish' and o.dispatched_at is not null and c.status = 'published'", (body,)))
+                check(bool(done) and done[0][1].startswith("SIM_post_"),
+                      f"post on {kind}: published only after the owner's approval, marked published under it")
+        blocked = f"هذا العسل يعالج السكر {run}"                 # a health claim: content_guard blocks it in posts
+        portal(url, owner_p, "POST", {"_path": "/portal/posts/new", "account": f"facebook_page:{FB_PAGE}", "body": blocked,
+                                      "csrf": csrf_token(owner_p, JWT_SECRET)})
+        check(bool(wait("blocked post rejected", lambda: q("select 1 from app.content_items where body = %s and status = 'rejected'", (blocked,))))
+              and not q("select 1 from app.approvals a join app.content_items c on a.target_id = c.id::text where c.body = %s", (blocked,)),
+              "post with a health claim: never proposed, never published")
+
         if ap:
             token = issue_staging_token(OWNER, JWT_SECRET)
             status, _, page = portal(url, token)

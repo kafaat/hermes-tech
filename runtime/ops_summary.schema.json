@@ -172,6 +172,8 @@
               "COMPETITOR_LIMIT_REACHED",
               "COMPLAINT_MATCH",
               "CONSUME_VIA_OUTBOX_ONLY",
+              "CONTENT_ACCOUNT_NOT_LINKED",
+              "CONTENT_IMAGE_REQUIRED",
               "CREDENTIALS_IN_URL",
               "CUSTOMER_APPROVAL_OWNER_ONLY",
               "DECIDER_MUST_BE_SESSION_USER",

@@ -22,6 +22,8 @@ An access token within five minutes of expiry, or expired, is replaced with the 
                                    refused unless HERMES_GRAPH=simulate and both are set
   POST /portal/decide              approval=<id> decision=approved|rejected csrf=<token>
   POST /portal/facts/approve       fact=<id> csrf=<token>
+  POST /portal/posts/new           account=<kind>:<id> body=<text> image_url=<https url> csrf=<token>   the owner's draft
+                                   post (0023); it is checked, proposed, and published only after the owner approves it
   POST /portal/standing/pause      customer=<id> paused=1|0 csrf=<token>   the one switch (0022): pause every instant reply
                                    of the business, or resume; the grants stay
   POST /portal/facts/standing      fact=<id> on=1|0 csrf=<token>   send this approved answer at once from now on (0020),
@@ -65,6 +67,7 @@ class StorePort(Protocol):
     def approve_fact(self, claims: dict, fact_id: str) -> bool: ...
     def set_standing(self, claims: dict, fact_id: str, on: bool) -> bool: ...
     def set_standing_pause(self, claims: dict, customer_id: str, paused: bool) -> bool: ...
+    def draft_post(self, claims: dict, kind: str, account_id: str, body: str, image_url: str | None) -> bool: ...
     def ops_overview(self, claims: dict) -> dict | None: ...                 # None: not an operator in this session
     def resolve(self, claims: dict, outbox_id: str, resolution: str, reason: str) -> None: ...
 
@@ -94,6 +97,25 @@ APPROVAL = """<div class="card"><div class="meta">إلى {{to}} · تنتهي ص
 <input type="hidden" name="decision" value="approved"><input type="hidden" name="csrf" value="{{csrf}}"><button class="ok">موافقة وإرسال</button></form>
 <form method="post" action="/portal/decide"><input type="hidden" name="approval" value="{{id}}">
 <input type="hidden" name="decision" value="rejected"><input type="hidden" name="csrf" value="{{csrf}}"><button class="no">رفض</button></form></div>"""
+APPROVAL_POST = """<div class="card"><div class="meta">منشور على {{where}} · تنتهي صلاحيته {{expires}}</div>
+<div class="body">{{body}}</div><div class="meta">{{image}}</div>
+<form method="post" action="/portal/decide"><input type="hidden" name="approval" value="{{id}}">
+<input type="hidden" name="decision" value="approved"><input type="hidden" name="csrf" value="{{csrf}}"><button class="ok">موافقة ونشر</button></form>
+<form method="post" action="/portal/decide"><input type="hidden" name="approval" value="{{id}}">
+<input type="hidden" name="decision" value="rejected"><input type="hidden" name="csrf" value="{{csrf}}"><button class="no">رفض</button></form></div>"""
+POSTS_H = """<h2>منشوراتك</h2><p class="meta">اكتب المنشور هنا؛ يُفحص ثم يظهر لك أعلاه لتوافق عليه، ولا يُنشر قبل موافقتك.
+صورة المنشور رابط https لصورتك أنت (إنستغرام لا ينشر نصًا بلا صورة).</p>"""
+POST_FORM_OPEN = """<div class="card"><form method="post" action="/portal/posts/new"><input type="hidden" name="csrf" value="{{csrf}}">
+<select name="account" aria-label="الحساب">"""
+POST_FORM_CLOSE = """</select>
+<textarea name="body" aria-label="نص المنشور" rows="4" maxlength="2200" required style="width:100%;box-sizing:border-box"></textarea>
+<input type="text" name="image_url" aria-label="رابط الصورة" placeholder="رابط الصورة (https)" dir="ltr">
+<button class="ok">اقترح المنشور</button></form></div>"""
+POST_OPTION = """<option value="{{value}}">{{label}}</option>"""
+POST_ROW = """<div class="card"><div class="meta">{{where}} · {{when}} · {{state}}</div><div class="body">{{body}}</div></div>"""
+POST_STATE = {"draft": "يُفحص", "pending_approval": "ينتظر موافقتك", "approved": "يُنشر الآن", "published": "نُشر",
+              "rejected": "لم يُنشر (رُفض أو لم يجتز الفحص)"}
+PLATFORM_AR = {"facebook": "فيسبوك", "instagram": "إنستغرام"}
 NONE = """<p class="meta">{{text}}</p>"""
 INQUIRIES_H = """<h2>رسائل الأيام السبعة الأخيرة ({{count}})</h2>"""
 INQUIRY = """<div class="card"><div class="meta">{{when}} · {{category}}{{flag}}</div><div class="body">{{body}}</div></div>"""
@@ -164,6 +186,8 @@ AUTH_FAILED = {"invalid": "الرمز غير صحيح أو انتهت صلاحي
 MESSAGES = {"approved": "تمت الموافقة. يُرسل الرد خلال دقيقة.", "rejected": "رُفض المقترح ولن يُرسل.",
             "fact": "اعتُمدت المعلومة.", "standing_on": "سيُرسل هذا الرد فورًا لكل من يسأل عنه، حتى توقفه.",
             "standing_off": "أُوقف الإرسال الفوري لهذا الموضوع: ستعود الردود إليك للموافقة.",
+            "post": "استلمنا المنشور: يُفحص الآن ثم يظهر أعلاه لتوافق عليه قبل نشره.",
+            "post_invalid": "لم يُقبل المنشور: النص مطلوب (حتى 2200 حرف)، ورابط الصورة إن وُجد يبدأ بـ https.",
             "paused": "أُوقف كل الإرسال الفوري: كل رد ينتظر موافقتك حتى تستأنفه. موافقاتك الدائمة محفوظة.",
             "resumed": "استُؤنف الإرسال الفوري للموضوعات التي وافقت عليها.", "resolved": "سُجّل القرار. «أعد الإرسال» يُرسل خلال دقيقة.",
             "reason": "لم يُنفّذ: السبب إلزامي (خمسة أحرف على الأقل).", "mfa": "لم يُقبل الرمز. أعد المحاولة.", "gone": "لم يُنفّذ: المقترح لم يعد معلقًا أو ليس لك.", "error": "تعذّر التنفيذ. أعد المحاولة."}
@@ -324,6 +348,14 @@ class Portal:
             if route == "/portal/decide" and form.get("decision") in ("approved", "rejected"):
                 ok = self.store.decide(claims, form.get("approval", ""), form["decision"])
                 return self._redirect("/portal?done=" + (form["decision"] if ok else "gone"))
+            if route == "/portal/posts/new":
+                kind, _, account = form.get("account", "").partition(":")
+                body, image = form.get("body", "").strip(), form.get("image_url", "").strip() or None
+                if not body or len(body) > 2200 or (image is not None and (not image.startswith("https://") or len(image) > 2000
+                                                                           or any(c in image for c in ' "<>\\'))):
+                    return self._redirect("/portal?done=post_invalid")
+                ok = self.store.draft_post(claims, kind, account, body, image)
+                return self._redirect("/portal?done=" + ("post" if ok else "gone"))
             if route == "/portal/standing/pause" and form.get("paused") in ("1", "0"):
                 ok = self.store.set_standing_pause(claims, form.get("customer", ""), form["paused"] == "1")
                 return self._redirect("/portal?done=" + (("paused" if form["paused"] == "1" else "resumed") if ok else "gone"))
@@ -479,11 +511,25 @@ class Portal:
         out.append(_r(APPROVALS_H, count=len(data["approvals"])))
         for a in data["approvals"]:
             p = a["payload"] if isinstance(a["payload"], dict) else {}
+            if a.get("action") == "content:publish":
+                out.append(_r(APPROVAL_POST, id=a["id"], where=PLATFORM_AR.get(p.get("platform"), "—"), expires=_when(a["expires_at"]),
+                              body=p.get("body", ""), image=("مع الصورة: " + p["image_url"]) if p.get("image_url") else "بلا صورة",
+                              csrf=csrf))
+                continue
             via = {"facebook_page": " عبر ماسنجر", "instagram_business": " عبر إنستغرام"}.get(p.get("channel"), "")
             out.append(_r(APPROVAL, id=a["id"], to=_mask(p.get("to")) + via, expires=_when(a["expires_at"]),
                           body=p.get("body", ""), csrf=csrf))
         if not data["approvals"]:
             out.append(_r(NONE, text="لا شيء ينتظر موافقتك."))
+        if data.get("channels"):                        # publishing needs a linked page or Instagram account (0023)
+            out.append(POSTS_H)
+            out.append(_r(POST_FORM_OPEN, csrf=csrf))
+            out += [_r(POST_OPTION, value=f"{c['kind']}:{c['id']}", label=("فيسبوك: " if c["kind"] == "facebook_page" else "إنستغرام: ")
+                       + c["name"]) for c in data["channels"]]
+            out.append(POST_FORM_CLOSE)
+            for post in data.get("posts", []):
+                out.append(_r(POST_ROW, where=PLATFORM_AR.get(post["platform"], "—"), when=_when(post["created_at"]),
+                              state=POST_STATE.get(post["status"], post["status"]), body=post["body"]))
         out.append(_r(INQUIRIES_H, count=len(data["inquiries"])))
         for q in data["inquiries"]:
             out.append(_r(INQUIRY, when=_when(q["received_at"]), category=CATEGORY_AR.get(q["category"] or "", "بلا تصنيف"),

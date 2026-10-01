@@ -163,7 +163,7 @@ hermes-tech/
 ├── contracts/            agent_contract.schema.json · registry(.schema).json · 8 × *.contract.json
 ├── runtime/              agent_runtime_state · agent_call · ops_summary (schemas) · examples
 ├── policies/             acceptance_policy.json · acceptance_policy.schema.json · complaint_keywords.json · complaint_keywords.schema.json · content_rules.json · content_rules.schema.json · fetch_policy.json
-├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018 · 0019 · 0020   (20 files)
+├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018 · 0019 · 0020 · 0021   (21 files)
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
 ├── db/tests/             concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
@@ -197,7 +197,7 @@ hermes-tech/
 المخطط في المساحة app على Supabase Postgres 15 أو أحدث. كل جدول يخص عميلًا يحمل customer_id غير فارغ.
 
 <!-- gen:migrations -->
-الترحيلات 20 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
+الترحيلات 21 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
 
 - `0001_core` — الأنواع والجداول والقيود
 - `0002_rls` — الأدوار ودوال الهوية وأمن الصف
@@ -219,6 +219,7 @@ hermes-tech/
 - `0018_inquiries_event_once` — استفسار واحد لكل رسالة واردة: المهمة المعادة لا تدرج الرسالة مرة ثانية
 - `0019_inquiries_message_type` — نوع الرسالة الواردة (نص، صوت، صورة…) في الاستفسار، فيعرف المالك أن عليه سماع الرسالة في واتساب
 - `0020_standing_approvals` — الموافقة الدائمة: المالك يعتمد ردًا لموضوع منخفض الخطر مرة واحدة فيُرسل فورًا، بنصه المعتمد وحده، ويلغيه متى شاء
+- `0021_standing_by_hash` — الموافقة الدائمة تطابق النص الممنوح ببصمته وإن تعددت معلومات الموضوع المعتمدة
 <!-- /gen:migrations -->
 
 ![الشكل 2 · الكيانات الرئيسية والعلاقات (مبسّط)](diagrams/erd.png)
@@ -1995,9 +1996,10 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 **القرار للمالك لا للعامل.** المنح صف في `standing_approvals` لا يكتبه إلا مالك المنشأة باسمه، لمعلومة معتمدة من منشأته، ومعه بصمة نصها. لا يُعدَّل، ويُلغى من البوابة متى شاء المالك، ولا يُستعاد بعد إلغائه بل يُمنح من جديد. العامل يقترح الرد كما كان، ثم يسأل القاعدة `app.approve_by_standing(المقترح)`. الدالة لا تقرر إلا إذا اجتمعت هذه الشروط:
 
 - منح حي للموضوع لعميل عقد العامل (لا عميل يختاره العامل).
-- معلومة معتمدة واحدة سارية لذلك الموضوع.
-- نص الرد مطابق لها حرفيًا.
+- معلومة معتمدة سارية لذلك الموضوع نصها هو نص الرد حرفيًا.
 - بصمتها مطابقة لبصمة المنح. المعلومة المعدَّلة معلومة جديدة: يُسقط اعتمادها، ولا تطابق بصمتها المنح القديم.
+
+اشترطت 0020 أولًا معلومة معتمدة واحدة للموضوع. على staging كان لعميل الاختبار أكثر من معلومة «ساعات» معتمدة، فانتظر الرد الممنوح المالك. 0021 يطابق النص الممنوح ببصمته أيًّا كان عدد المعلومات المعتمدة، والعامل يجيب بآخر معلومة معتمدة حُدِّثت لا بأيها اتفق. والحالة 54 تغطي معلومة ثانية للموضوع.
 
 القرار يُسجَّل باسم المالك المانح، و`decided_via = 'standing'`. مالك الدالة دور `hermes_standing` بلا دخول (نمط 0011): يقرأ المعلومات المعتمدة والمنح الحية ويقرر المقترحات المعلقة فقط، ومحفّز الموافقات يقبل قراره لذلك المقترح وحده.
 

@@ -1154,6 +1154,28 @@ do $$ declare v text[] := string_to_array(current_setting('test.k54'), ','); a a
   end if;
   if v[4] <> 'false' or b.decision <> 'pending' then raise exception 'FAIL a different text went out on a standing grant'; end if;
 end $$;
+-- a second approved fact for the same topic does not hide the granted one (0021, found on staging)
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+insert into app.kb_facts (customer_id, topic, fact, approved_by_owner) values ('00000000-0000-0000-0000-00000000000a', 'location', 'L54 old', true);
+select set_config('request.jwt.claim.sub', '', true);
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000a');
+set local role hermes_worker;
+do $$ declare p uuid; begin
+  insert into app.approvals (customer_id, scope, proposal_action, payload, requested_by_agent, target_id, expires_at)
+  values ('00000000-0000-0000-0000-00000000000a', 'customer', 'reply:send',
+          '{"phone_number_id":"pn","to":"9677","body":"L54","in_reply_to":"w54d","topic":"location"}', 'agent_replies', 'w54d',
+          now() + interval '1 hour') returning id into p;
+  if not app.approve_by_standing(p) then raise exception 'FAIL a second approved fact hid the granted one'; end if;
+  insert into app.approvals (customer_id, scope, proposal_action, payload, requested_by_agent, target_id, expires_at)
+  values ('00000000-0000-0000-0000-00000000000a', 'customer', 'reply:send',
+          '{"phone_number_id":"pn","to":"9677","body":"L54 old","in_reply_to":"w54e","topic":"location"}', 'agent_replies', 'w54e',
+          now() + interval '1 hour') returning id into p;
+  if app.approve_by_standing(p) then raise exception 'FAIL an approved fact the owner did not grant went out'; end if;
+end $$;
+reset role;
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+delete from app.kb_facts where customer_id = '00000000-0000-0000-0000-00000000000a' and fact = 'L54 old';
+select set_config('request.jwt.claim.sub', '', true);
 -- an edited fact is a new fact: the grant no longer matches; a revoked grant decides nothing
 select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
 update app.kb_facts set fact = 'L54b' where customer_id = '00000000-0000-0000-0000-00000000000a' and topic = 'location';

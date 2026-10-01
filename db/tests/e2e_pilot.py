@@ -70,6 +70,8 @@ def seed():
       " on conflict (customer_id, auth_user_id) do nothing", (CUSTOMER, OWNER))
     q("insert into app.channel_accounts (customer_id, kind, external_id, status, verified_at)"
       " values (%s, 'whatsapp_cloud', %s, 'active', now()) on conflict (kind, external_id) do nothing", (CUSTOMER, PHONE_ID))
+    q("update app.kb_facts set approved_by_owner = false where customer_id = %s and topic = 'hours' and fact <> %s"
+      " and approved_by_owner", (CUSTOMER, HOURS))           # one approved hours answer: earlier runs leave none behind
     if not q("select 1 from app.kb_facts where customer_id = %s and topic = 'hours' and approved_by_owner", (CUSTOMER,)):
         q("insert into app.kb_facts (customer_id, topic, fact, approved_by_owner) values (%s, 'hours', %s, true)",
           (CUSTOMER, HOURS), claims={"sub": OWNER, "aal": "aal1"})       # an approved fact is the owner's act (kb_facts_guard)
@@ -234,7 +236,8 @@ def main():
                 owner_claims = {"sub": OWNER, "role": "authenticated", "aal": "aal1"}
                 revoke = ("update app.standing_approvals set revoked_at = now(), revoked_by = %s"
                           " where customer_id = %s and revoked_at is null")
-                hours_id = str(q("select id from app.kb_facts where customer_id = %s and topic = 'hours' and approved_by_owner", (CUSTOMER,))[0][0])
+                hours_id = str(q("select id from app.kb_facts where customer_id = %s and topic = 'hours' and approved_by_owner"
+                                 " order by updated_at desc, id desc limit 1", (CUSTOMER,))[0][0])     # the one the worker answers with
                 try:
                     status, where, _ = portal(url, token, "POST", {"_path": "/portal/facts/standing", "fact": hours_id, "on": "1",
                                                                    "csrf": csrf_token(token, JWT_SECRET)})

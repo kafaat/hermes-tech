@@ -226,7 +226,7 @@ class Worker:
         route = self.matcher.route(text, "patron")
         with self.db.tx(t.bind) as cur:
             cur.execute("select topic, fact from app.kb_facts where approved_by_owner"
-                        " and (valid_until is null or valid_until >= current_date)")
+                        " and (valid_until is null or valid_until >= current_date) order by updated_at, id")   # the latest wins
             facts = dict(cur.fetchall())
             cats = route.get("categories") or []
             cur.execute("insert into app.inquiries (customer_id, source, body, matched_category, owner_inquiry, routed_to, event_ref,"

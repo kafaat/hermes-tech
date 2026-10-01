@@ -21,8 +21,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 from complaints import Matcher, normalize  # noqa: E402
 from content_guard import ContentGuard  # noqa: E402
 
-from service.dispatcher import (SEND_TIMEOUT_SECONDS, SENT, BeforeSend, Dispatcher, MetaMessagingAdapter,  # noqa: E402
-                                MetaPublishAdapter, PublishRouter, ReplyRouter, TikTokPublishAdapter, WhatsAppCloudAdapter)
+from service.dispatcher import (EMAIL_ADDRESS, SEND_TIMEOUT_SECONDS, SENT, BeforeSend, Dispatcher,  # noqa: E402
+                                MetaMessagingAdapter, MetaPublishAdapter, PostmarkEmailAdapter, PublishRouter, ReplyRouter,
+                                TikTokPublishAdapter, WhatsAppCloudAdapter)
 
 log = logging.getLogger("hermes.worker")
 AGENT = "agent_triage"
@@ -63,7 +64,7 @@ def message_content(msg: dict) -> tuple[str, str]:
 
 ATTACHMENT_TYPES = {"image": "image", "audio": "audio", "video": "video", "file": "document", "location": "location",
                     "ig_reel": "video", "reel": "video"}
-SOURCE = {"whatsapp_cloud": "whatsapp", "facebook_page": "facebook", "instagram_business": "instagram"}
+SOURCE = {"whatsapp_cloud": "whatsapp", "facebook_page": "facebook", "instagram_business": "instagram", "email": "email"}
 
 
 def messaging_content(m: dict) -> tuple[str, str, str]:
@@ -83,6 +84,22 @@ def messaging_content(m: dict) -> tuple[str, str, str]:
     if msg.get("quick_reply") and text:
         return "interactive", text, sender
     return ("text", text, sender) if text else ("unsupported", "", sender)
+
+
+def email_content(e: dict) -> tuple[str, str, str, str]:
+    """(type, text to route on, sender address, who wrote: name and address) for an inbound email (28.25): the
+    subject and the new text; attachments without text are a document for the owner to open in the mailbox."""
+    sender = str(e.get("from") or "")
+    text = "\n".join(x for x in (str(e.get("subject") or "").strip(), str(e.get("text") or "").strip()) if x)
+    contact = " · ".join(x for x in (str(e.get("name") or "").strip(), sender) if x)
+    if not str(e.get("text") or "").strip() and e.get("attachments"):
+        return "document", text, sender, contact
+    return ("text" if text else "unsupported"), text, sender, contact
+
+
+def reply_subject(subject: str) -> str:
+    s = " ".join(str(subject or "").split())[:190]
+    return s if re.match(r"(?i)^(re|رد)\s*:", s) else (f"Re: {s}" if s else "")
 
 
 def decide(text: str, route: dict, facts: dict, guard: ContentGuard, norm_rules: dict) -> dict:
@@ -121,6 +138,11 @@ class SimulatedGraph:
         self.sent, self.delay = [], delay
 
     def __call__(self, url, body, headers, timeout):
+        if url == "https://api.postmarkapp.com/email":                             # an email reply (28.25)
+            ref = "sim-email-" + uuid.uuid4().hex
+            self.sent.append({"url": url, "to": body.get("To"), "id": ref})
+            accepted(ref, self.delay, timeout=timeout)
+            return 200, {"To": body.get("To"), "MessageID": ref, "ErrorCode": 0, "Message": "OK"}
         if url.startswith("https://open.tiktokapis.com/"):                          # TikTok photo post (0024)
             ref = "SIM_tt_" + uuid.uuid4().hex
             self.sent.append({"url": url, "to": None, "id": ref})
@@ -245,7 +267,8 @@ class Worker:
             return self._form(t, event_id, ext, payload["form"])
         if proposal is not None:
             return self._after_proposal(t, event_id, ext, proposal)
-        return self._message(t, event_id, ext, channel, payload.get("message") or {}, kind, payload.get("messaging"))
+        return self._message(t, event_id, ext, channel, payload.get("message") or {}, kind, payload.get("messaging"),
+                             payload.get("email"))
 
     def _content(self, t: Task, content_id: str) -> str:
         """A draft post: check the text, propose exactly what will be published (text, account, image), wait for the
@@ -338,8 +361,11 @@ class Worker:
         return "receipt"
 
     def _message(self, t: Task, event_id: int, ext: str, channel: str, msg: dict, source_kind: str = "whatsapp_cloud",
-                 messaging: dict | None = None) -> str:
-        if source_kind in ("facebook_page", "instagram_business"):
+                 messaging: dict | None = None, email: dict | None = None) -> str:
+        contact = ""
+        if source_kind == "email":                      # the owner needs the address to answer by hand (28.25)
+            kind, text, sender, contact = email_content(email or {})
+        elif source_kind in ("facebook_page", "instagram_business"):
             kind, text, sender = messaging_content(messaging or {})
         else:
             kind, text = message_content(msg)
@@ -357,16 +383,24 @@ class Worker:
             cur.execute("insert into app.inquiries (customer_id, source, body, matched_category, owner_inquiry, routed_to, event_ref,"
                         " message_type) values (%s, %s, %s, %s, %s, %s, %s, %s)"
                         " on conflict (customer_id, event_ref) where event_ref is not null do nothing",   # a re-run task: once (0018)
-                        (t.customer_id, SOURCE.get(source_kind, "other"), text or None, cats[0] if cats else None,
+                        (t.customer_id, SOURCE.get(source_kind, "other"),
+                         (text + (f"\n— {contact}" if contact else "")).strip() or None, cats[0] if cats else None,
                          route["kind"] == "owner_inquiry",
                          route.get("routes", []), ext[:200] or None, kind))
         if not text and kind != "text":                 # a voice note, a sticker, a location: the owner opens it in WhatsApp
+            d = {"action": "escalate", "reason": f"non_text:{kind}", "categories": [], "sla_minutes": None}
+        elif source_kind == "email" and ((email or {}).get("spam") or not EMAIL_ADDRESS.fullmatch(sender)):
+            d = {"action": "escalate", "reason": "email_unverified", "categories": [], "sla_minutes": None}   # read, never answered
+        elif source_kind == "email" and kind != "text":  # attachments: the owner opens them in the mailbox
             d = {"action": "escalate", "reason": f"non_text:{kind}", "categories": [], "sla_minutes": None}
         else:
             d = decide(text, route, facts, self.guard, self.matcher.rules)
         if d["action"] == "propose":
             if source_kind == "whatsapp_cloud":
                 reply = {"phone_number_id": channel, "to": sender, "body": d["body"], "in_reply_to": ext, "topic": d["topic"]}
+            elif source_kind == "email":                # back to the sender, in the same thread
+                reply = {"channel": "email", "account_id": channel, "to": sender, "subject": reply_subject((email or {}).get("subject")),
+                         "body": d["body"], "in_reply_to": ext, "message_id": (email or {}).get("message_id"), "topic": d["topic"]}
             else:                                       # the same channel the customer wrote on (Messenger, Instagram Direct)
                 reply = {"channel": source_kind, "account_id": channel, "to": sender, "body": d["body"], "in_reply_to": ext,
                          "topic": d["topic"]}
@@ -424,16 +458,19 @@ def simulated_adapters(delay: float | None = None):
         raise RuntimeError("HERMES_SIM_SEND_DELAY_SECONDS needs HERMES_GRAPH=simulate")
     graph, notice = SimulatedGraph(delay), SimulatedOwnerNotice(delay)
     return {"reply.send": ReplyRouter(WhatsAppCloudAdapter(graph, lambda customer_id: "staging-simulated-token"),
-                                      MetaMessagingAdapter(graph, lambda account: "staging-simulated-account-token")),
+                                      MetaMessagingAdapter(graph, lambda account: "staging-simulated-account-token"),
+                                      PostmarkEmailAdapter(graph, "staging-simulated-postmark-token",
+                                                           lambda account: f"Staging <{account}>")),
             "content.publish": PublishRouter(MetaPublishAdapter(graph, lambda account: "staging-simulated-account-token"),
                                              TikTokPublishAdapter(graph, lambda account: "staging-simulated-tiktok-token")),
             "notify.owner": notice}
 
 
-GRAPH_HOSTS = ("graph.facebook.com", "graph.instagram.com", "open.tiktokapis.com")
+GRAPH_HOSTS = ("graph.facebook.com", "graph.instagram.com", "open.tiktokapis.com", "api.postmarkapp.com")
 GRAPH_PATH = re.compile(r"^https://graph\.facebook\.com/v\d{1,2}\.\d/\d{5,25}/(messages|feed|photos)$"
                         r"|^https://graph\.instagram\.com/v\d{1,2}\.\d/\d{5,25}/(messages|media|media_publish)$"
-                        r"|^https://open\.tiktokapis\.com/v2/post/publish/content/init/$")
+                        r"|^https://open\.tiktokapis\.com/v2/post/publish/content/init/$"
+                        r"|^https://api\.postmarkapp\.com/email$")
 
 
 def graph_post(api):
@@ -484,6 +521,24 @@ def account_tokens(raw: str, id_pattern: str = r"[0-9]{5,25}", name: str = "HERM
     return {str(k): v for k, v in data.items()}
 
 
+SENDER = re.compile(r"[^<>\x00-\x1f\x7f\"]{1,80} <[a-z0-9._%+-]{1,64}@[a-z0-9-]+(\.[a-z0-9-]+)+>|[a-z0-9._%+-]{1,64}@[a-z0-9-]+(\.[a-z0-9-]+)+")
+
+
+def email_senders(raw: str) -> dict:
+    """HERMES_EMAIL_SENDERS: a JSON object {"<inbound address>": "<Name> <sender address>"}; the sender must be a
+    signature or domain verified with Postmark. Empty means email replies fail before sending (NO_SENDER)."""
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        raise RuntimeError("HERMES_EMAIL_SENDERS must be a JSON object of inbound address -> sender") from None
+    if not isinstance(data, dict) or not all(EMAIL_ADDRESS.fullmatch(str(k)) and isinstance(v, str) and SENDER.fullmatch(v)
+                                             for k, v in data.items()):
+        raise RuntimeError("HERMES_EMAIL_SENDERS must be a JSON object of inbound address -> sender")
+    return {str(k): v for k, v in data.items()}
+
+
 def live_adapters(env):
     """HERMES_GRAPH=live: reply.send goes to the Graph API on the customer's channel, through crawler.ApiClient to
     graph.facebook.com and graph.instagram.com only. WhatsApp uses the system user token HERMES_GRAPH_TOKEN;
@@ -497,10 +552,15 @@ def live_adapters(env):
         raise RuntimeError("HERMES_SIM_SEND_DELAY_SECONDS needs HERMES_GRAPH=simulate")
     accounts = account_tokens(env.get("HERMES_GRAPH_ACCOUNT_TOKENS", ""))
     tiktok = account_tokens(env.get("HERMES_TIKTOK_TOKENS", ""), r"[A-Za-z0-9_.-]{5,64}", "HERMES_TIKTOK_TOKENS")
+    postmark = env.get("HERMES_POSTMARK_TOKEN", "")
+    if postmark and not _token_ok(postmark):
+        raise RuntimeError("HERMES_POSTMARK_TOKEN is not a token")
+    senders = email_senders(env.get("HERMES_EMAIL_SENDERS", ""))
     from service.crawler import ApiClient
     post = graph_post(ApiClient(set(GRAPH_HOSTS)))
     return {"reply.send": ReplyRouter(WhatsAppCloudAdapter(post, lambda customer_id: token, version),
-                                      MetaMessagingAdapter(post, accounts.get, version)),
+                                      MetaMessagingAdapter(post, accounts.get, version),
+                                      PostmarkEmailAdapter(post, postmark, senders.get)),
             "content.publish": PublishRouter(MetaPublishAdapter(post, accounts.get, version),
                                              TikTokPublishAdapter(post, tiktok.get, env.get("HERMES_TIKTOK_PRIVACY") or "SELF_ONLY")),
             "notify.owner": PortalNotice()}

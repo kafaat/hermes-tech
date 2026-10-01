@@ -206,8 +206,13 @@ def _mask(phone) -> str:
     return "•••" + digits[-3:] if digits else "—"
 
 
+def _mask_email(address) -> str:
+    local, _, domain = str(address or "").partition("@")
+    return f"{local[:1]}•••@{domain}" if local and domain else "—"
+
+
 CHANNEL_AR = {"whatsapp": "واتساب", "facebook": "ماسنجر", "instagram": "إنستغرام", "site_form": "نموذج الموقع",
-              "tiktok": "تيك توك"}
+              "tiktok": "تيك توك", "email": "البريد الإلكتروني"}
 MESSAGE_TYPE_AR = {"audio": "رسالة صوتية", "image": "صورة", "video": "فيديو", "document": "ملف", "sticker": "ملصق",
                    "location": "موقع على الخريطة", "contacts": "بطاقة جهة اتصال", "unsupported": "رسالة من نوع غير مدعوم"}
 
@@ -517,8 +522,9 @@ class Portal:
                               body=p.get("body", ""), image=("مع الصورة: " + p["image_url"]) if p.get("image_url") else "بلا صورة",
                               csrf=csrf))
                 continue
-            via = {"facebook_page": " عبر ماسنجر", "instagram_business": " عبر إنستغرام"}.get(p.get("channel"), "")
-            out.append(_r(APPROVAL, id=a["id"], to=_mask(p.get("to")) + via, expires=_when(a["expires_at"]),
+            via = {"facebook_page": " عبر ماسنجر", "instagram_business": " عبر إنستغرام", "email": " بالبريد"}.get(p.get("channel"), "")
+            to = _mask_email(p.get("to")) if p.get("channel") == "email" else _mask(p.get("to"))
+            out.append(_r(APPROVAL, id=a["id"], to=to + via, expires=_when(a["expires_at"]),
                           body=p.get("body", ""), csrf=csrf))
         if not data["approvals"]:
             out.append(_r(NONE, text="لا شيء ينتظر موافقتك."))

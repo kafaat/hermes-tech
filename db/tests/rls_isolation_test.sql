@@ -1314,6 +1314,42 @@ end $$;
 reset role;
 select set_config('request.jwt.claim.sub', '', true), set_config('request.jwt.claims', '', true);
 
+-- 57. email (0025): an inbound address has one spelling, routes a signed event to its business like a phone number id,
+--     and the worker records an email inquiry
+do $$ begin
+  begin
+    insert into app.channel_accounts (customer_id, kind, external_id, status, verified_at)
+    values ('00000000-0000-0000-0000-00000000000a', 'email', 'Shop <Shop-K57@Inbound.Example>', 'active', now());
+    raise exception 'FAIL an email channel with a display name and capitals was accepted';
+  exception when check_violation then null;
+  end;
+end $$;
+insert into app.channel_accounts (customer_id, kind, external_id, status, verified_at)
+values ('00000000-0000-0000-0000-00000000000a', 'email', 'shop-k57@inbound.example', 'active', now());
+set local role hermes_ingest;
+insert into app.webhook_events (kind, external_event_id, signature_valid, payload, channel_external_id)
+values ('email', 'k57-a8c1040e-db1f', true, '{"email": {}}', 'shop-k57@inbound.example'),
+       ('email', 'k57-b8c1040e-db1f', true, '{"email": {}}', 'Shop-K57@inbound.example');
+reset role;
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000a');
+set local role hermes_worker;
+do $$ begin
+  insert into app.inquiries (customer_id, source, body, event_ref)
+  values ('00000000-0000-0000-0000-00000000000a', 'email', 'k57', 'k57-a8c1040e-db1f');
+end $$;
+reset role;
+select set_config('app.task_id', '', true), set_config('app.task_token', '', true), set_config('app.customer_id', '', true);
+do $$ begin
+  if (select customer_id from app.webhook_events where external_event_id = 'k57-a8c1040e-db1f') is distinct from '00000000-0000-0000-0000-00000000000a'
+     or (select customer_id from app.webhook_events where external_event_id = 'k57-b8c1040e-db1f') is not null then
+    raise exception 'FAIL an email event was not routed by its exact inbound address';
+  end if;
+  if (select count(*) from app.inquiries where event_ref = 'k57-a8c1040e-db1f' and source = 'email') <> 1 then
+    raise exception 'FAIL the email inquiry was not recorded';
+  end if;
+  raise notice 'PASS email: one spelling per inbound address, routed by it exactly, recorded as an email inquiry';
+end $$;
+
 -- 46. the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)
 do $$ declare got text; bad text; begin
   select string_agg(relname, ',' order by relname collate "C") into got from pg_class

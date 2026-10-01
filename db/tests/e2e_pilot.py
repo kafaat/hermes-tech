@@ -27,7 +27,7 @@ check each step. Seeding is idempotent and uses a fixed staging tenant; every ru
      nothing failing after this run (a purge not yet due is not stale: the database knows when it is due)
 """
 from __future__ import annotations
-import hashlib, hmac, json, os, socket, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+import base64, hashlib, hmac, json, os, socket, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 from pathlib import Path
 
 import psycopg
@@ -42,6 +42,8 @@ OPERATOR = "00000000-0000-0000-0000-0000000e2e0b"
 PHONE_ID = "pn-e2e-staging"
 FB_PAGE, IG_ACCOUNT, TT_ACCOUNT = "1069900000001", "178419900000001", "_000e2eTikTok01"
 SITE_KEY = "e2esiteKEYAAAAAAAAAAAAAAAA01"
+EMAIL_INBOX = "e2e-shop@inbound.hermes.example"
+EMAIL_SECRET = (os.environ.get("HERMES_EMAIL_INBOUND_SECRETS") or "").split(",")[0].strip() or f"postmark:{uuid.uuid4().hex}"
 HOURS = "نفتح يوميًا من ٩ صباحًا إلى ١١ مساءً"
 MONITOR_TOKEN = os.environ.get("HERMES_MONITOR_TOKEN") or uuid.uuid4().hex   # staging: the service's own (shared var)
 JWT_SECRET = os.environ.get("HERMES_JWT_SECRET") or uuid.uuid4().hex * 2       # staging: the service's own (shared var)
@@ -73,7 +75,7 @@ def seed():
     q("insert into app.channel_accounts (customer_id, kind, external_id, status, verified_at)"
       " values (%s, 'whatsapp_cloud', %s, 'active', now()) on conflict (kind, external_id) do nothing", (CUSTOMER, PHONE_ID))
     for kind, ext_id in (("facebook_page", FB_PAGE), ("instagram_business", IG_ACCOUNT), ("tiktok_business", TT_ACCOUNT),
-                         ("site_form", SITE_KEY)):
+                         ("site_form", SITE_KEY), ("email", EMAIL_INBOX)):
         q("insert into app.channel_accounts (customer_id, kind, external_id, status, verified_at)"
           " values (%s, %s, %s, 'active', now()) on conflict (kind, external_id) do nothing", (CUSTOMER, kind, ext_id))
     q("update app.kb_facts set approved_by_owner = false where customer_id = %s and topic = 'hours' and fact <> %s"
@@ -144,7 +146,7 @@ def start_app():
     secret = uuid.uuid4().hex
     env = {**os.environ, "HERMES_WEBHOOK_SECRETS": secret, "HERMES_GRAPH": "simulate", "PORT": str(port),
            "HERMES_MONITOR_TOKEN": MONITOR_TOKEN, "HERMES_JWT_SECRET": JWT_SECRET,
-           "HERMES_APPROVAL_POLL_SECONDS": "1", "HERMES_VERIFY_TOKEN": "e2e"}
+           "HERMES_APPROVAL_POLL_SECONDS": "1", "HERMES_VERIFY_TOKEN": "e2e", "HERMES_EMAIL_INBOUND_SECRETS": EMAIL_SECRET}
     proc = subprocess.Popen([sys.executable, "-m", "service.app"], cwd=ROOT, env=env)
     return f"http://127.0.0.1:{port}", secret, proc
 
@@ -303,6 +305,52 @@ def main():
         status_unknown, _ = form_post("unknownKEYBBBBBBBBBBBBBBBBBB01", {"message": "x"})
         check((status_trap, status_unknown) == (200, 404) and q("select count(*) from app.webhook_events where kind = 'site_form'")[0][0] == before,
               "site form: a bot (trap field) and an unknown site key store nothing")
+
+        # email (28.25): a customer's question becomes a reply proposal in the same thread; automated mail is never stored
+        def email_post(payload, secret_=EMAIL_SECRET):
+            req = urllib.request.Request(f"{url}/email/inbound", data=json.dumps(payload).encode(), method="POST",
+                                         headers={"Content-Type": "application/json",
+                                                  "Authorization": "Basic " + base64.b64encode(secret_.encode()).decode()})
+            try:
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    return r.status
+            except urllib.error.HTTPError as e:
+                return e.code
+
+        def email(mid, subject, text, sender="salem@customer.example", headers=(), to=EMAIL_INBOX):
+            return {"MessageID": mid, "OriginalRecipient": to, "FromFull": {"Email": sender, "Name": "سالم"}, "Subject": subject,
+                    "TextBody": text, "StrippedTextReply": "", "Attachments": [],
+                    "Headers": [{"Name": "Message-ID", "Value": f"<{mid}@mail.customer.example>"}, *headers]}
+        e_mid = f"e2e-mail-{run}-hours"
+        check(email_post(email(e_mid, f"الدوام {run}", "متى تفتحون يوم الجمعة؟")) == 200, "email: the provider's delivery is accepted (200)")
+        e_prop = wait("email proposal", lambda: q("select id, payload from app.approvals where target_id = %s and proposal_action = 'reply:send'",
+                                                  (e_mid,)))
+        check(bool(e_prop) and e_prop[0][1].get("channel") == "email" and e_prop[0][1].get("to") == "salem@customer.example"
+              and e_prop[0][1].get("account_id") == EMAIL_INBOX and e_prop[0][1].get("subject") == f"Re: الدوام {run}"
+              and e_prop[0][1].get("message_id") == f"<{e_mid}@mail.customer.example>" and e_prop[0][1].get("body") == HOURS,
+              "email: an hours question is proposed as a reply to the sender, in the same thread, with the approved answer")
+        check(bool(q("select 1 from app.inquiries where event_ref = %s and source = 'email' and body like %s", (e_mid, "%سالم · salem@customer.example"))),
+              "email: the owner sees the email with the sender's name and address")
+        if e_prop:
+            _, _, page = portal(url, owner_p)
+            check("s•••@customer.example بالبريد" in page, "email: the portal shows the proposal as a reply by email, the address masked")
+            portal(url, owner_p, "POST", {"_path": "/portal/decide", "approval": str(e_prop[0][0]), "decision": "approved",
+                                          "csrf": csrf_token(owner_p, JWT_SECRET)})
+            e_sent = wait("email reply sent", lambda: q("select provider_message_id from app.outbox where topic = 'reply.send'"
+                                                         " and target_id = %s and dispatched_at is not null", (e_mid,)))
+            check(bool(e_sent) and e_sent[0][0].startswith("sim-email-"), "email: sent once through the outbox after the owner's approval")
+        before = q("select count(*) from app.webhook_events where kind = 'email'")[0][0]
+        auto = email_post(email(f"e2e-mail-{run}-auto", "Out of office", "I am away", headers=[{"Name": "Auto-Submitted", "Value": "auto-replied"}]))
+        wrong = email_post(email(f"e2e-mail-{run}-wrong", "x", "x"), "postmark:wrong")
+        unknown = email_post(email(f"e2e-mail-{run}-unknown", "x", "x", to="nobody@inbound.hermes.example"))
+        check((auto, wrong, unknown) == (200, 401, 403) and q("select count(*) from app.webhook_events where kind = 'email'")[0][0] == before,
+              f"email: an auto-reply, a wrong secret and an unknown inbox store nothing ({auto}, {wrong}, {unknown})")
+        s_mid = f"e2e-mail-{run}-spam"
+        email_post(email(s_mid, "Win", "متى تفتحون؟", headers=[{"Name": "X-Spam-Status", "Value": "Yes, score=9"}]))
+        check(bool(wait("spam email notice", lambda: q("select 1 from app.outbox where topic = 'notify.owner' and target_id = %s"
+                                                        " and dispatched_at is not null", (s_mid,))))
+              and not q("select 1 from app.approvals where target_id = %s", (s_mid,)),
+              "email: mail marked as spam reaches the owner and is never answered automatically")
 
         blocked = f"هذا العسل يعالج السكر {run}"                 # a health claim: content_guard blocks it in posts
         portal(url, owner_p, "POST", {"_path": "/portal/posts/new", "account": f"facebook_page:{FB_PAGE}", "body": blocked,

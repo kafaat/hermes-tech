@@ -10,6 +10,8 @@
                   through Supabase Auth when HERMES_SUPABASE_URL and HERMES_SUPABASE_ANON_KEY are set (the access
                   tokens are verified with HERMES_JWT_SECRET, the project's JWT secret)
   POST /forms/<site key>          the contact form of a customer's site (service/site_form.py, spec 28.24)
+  POST /email/inbound             Postmark's inbound webhook (service/email_inbound.py, spec 28.25), basic auth with
+                  HERMES_EMAIL_INBOUND_SECRETS ("user:password", comma-separated); unset: 404
   GET  /healthz   database reachable (as hermes_ingest), the deployed commit and the handler counters (numbers only)
   GET  /deps      what must stay true between deploys, for an external uptime monitor: app.health_signals() as
                   hermes_monitor (numbers, never rows); 503 when a signal fails. The numbers and the failing names
@@ -31,6 +33,7 @@ from service.health import SIGNALS, assess, authorized
 from service.pg import Database, Ingest, PortalDb
 from service.portal import Portal
 from service.supabase_auth import from_env as supabase_from_env
+from service.email_inbound import EMAIL_MAX_BYTES, EmailHandler
 from service.site_form import FORM_MAX_BYTES, FormHandler
 from service.webhook import MAX_BODY_BYTES, Handler, verify_subscription
 from service.worker import Worker, adapters_for, worker_name
@@ -41,7 +44,7 @@ SHUTDOWN_WAIT_SECONDS = 25        # for the task in hand after SIGTERM: above a 
 
 
 def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | None = None, monitor_token: str = "",
-                      portal: Portal | None = None, forms: FormHandler | None = None):
+                      portal: Portal | None = None, forms: FormHandler | None = None, email: EmailHandler | None = None):
     class H(BaseHTTPRequestHandler):
         def _reply(self, status: int, body: str, ctype: str = "text/plain; charset=utf-8"):
             data = body.encode("utf-8") if isinstance(body, str) else body
@@ -71,8 +74,10 @@ def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | N
                 except Exception as exc:               # noqa: BLE001
                     return self._reply(503, json.dumps({"status": "db_unreachable", "error": type(exc).__name__}),
                                        "application/json")
-                return self._reply(200, json.dumps({"status": "ok", "commit": COMMIT, "webhook": asdict(webhook.counters)}),
-                                   "application/json")
+                counters = {"webhook": asdict(webhook.counters)}
+                if email is not None:
+                    counters["email"] = asdict(email.counters)
+                return self._reply(200, json.dumps({"status": "ok", "commit": COMMIT, **counters}), "application/json")
             if u.path == "/deps" and monitor is not None:
                 full = authorized(self.headers.get("X-Monitor-Token"), monitor_token)
                 try:
@@ -117,6 +122,19 @@ def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | N
                 self.end_headers()
                 self.wfile.write(data)
                 return
+            if email is not None and path == "/email/inbound":
+                try:
+                    length = int(self.headers.get("Content-Length") or 0)
+                except ValueError:
+                    return self._reply(400, "bad length")
+                if length > EMAIL_MAX_BYTES:
+                    return self._reply(403, "too large")      # never read; 403 stops the provider's retries
+                try:
+                    status, body = email.handle(dict(self.headers.items()), self.rfile.read(length))
+                except Exception as exc:                      # noqa: BLE001 - not committed: the provider retries
+                    log.error("email ingest failed: %s", type(exc).__name__)
+                    status, body = 500, "retry"
+                return self._reply(status, body)
             if path != "/webhook":
                 return self._reply(404, "not found")
             try:
@@ -160,6 +178,8 @@ def main():
     worker_thread = threading.Thread(target=worker.loop, kwargs={"stop": stop}, name="worker", daemon=True)
     worker_thread.start()
     port = int(os.environ.get("PORT", "8080"))
+    email_secrets = [s.strip() for s in os.environ.get("HERMES_EMAIL_INBOUND_SECRETS", "").split(",") if s.strip()]
+    email = EmailHandler(email_secrets, ingest) if email_secrets else None
     secret = os.environ.get("HERMES_JWT_SECRET", "")          # Supabase project JWT secret; unset: the portal signs nobody in
     portal = Portal(PortalDb(Database(url, "authenticated")), secret, auth=supabase_from_env(os.environ),
                     staging_login_code=os.environ.get("HERMES_STAGING_LOGIN_CODE", ""),
@@ -168,7 +188,7 @@ def main():
                     simulate=os.environ.get("HERMES_GRAPH") == "simulate")
     server = ThreadingHTTPServer(("0.0.0.0", port), make_http_handler(
         webhook, os.environ.get("HERMES_VERIFY_TOKEN", ""), Database(url, "hermes_monitor"),
-        os.environ.get("HERMES_MONITOR_TOKEN", ""), portal, FormHandler(ingest)))
+        os.environ.get("HERMES_MONITOR_TOKEN", ""), portal, FormHandler(ingest), email))
 
     def on_term(signum, frame):                    # Railway sends SIGTERM, then SIGKILL after drainingSeconds: stop taking
         log.info("SIGTERM: draining")               # requests, let the current task finish (its lease covers a kill anyway)

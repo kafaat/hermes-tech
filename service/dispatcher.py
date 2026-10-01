@@ -161,15 +161,61 @@ class MetaMessagingAdapter:
         raise Rejected(status, code)
 
 
-class ReplyRouter:
-    """reply.send goes back on the channel the customer wrote on: WhatsApp, or Messenger / Instagram Direct."""
+EMAIL_ADDRESS = re.compile(r"[a-z0-9._%+-]{1,64}@[a-z0-9-]+(\.[a-z0-9-]+)+")
 
-    def __init__(self, whatsapp, meta):
-        self.whatsapp, self.meta = whatsapp, meta
+
+class PostmarkEmailAdapter:
+    """reply.send by email (spec 28.25): POST api.postmarkapp.com/email with the server token, From the business's
+    verified sender, Reply-To its inbound address (the customer's answer comes back through the platform), and
+    In-Reply-To / References so the reply joins the customer's thread. The sender per inbound address is
+    configuration (HERMES_EMAIL_SENDERS), never the payload; a missing one is a clean failure before sending."""
+
+    URL = "https://api.postmarkapp.com/email"
+
+    def __init__(self, post, token: str, sender_for_account):
+        self.post, self.token, self.sender_for_account = post, token, sender_for_account
 
     def send(self, row: dict) -> str:
-        if row["payload"].get("channel") in MetaMessagingAdapter.HOSTS:
+        p = row["payload"]
+        account, to, body = str(p.get("account_id") or ""), str(p.get("to") or ""), str(p.get("body") or "")
+        subject, message_id = str(p.get("subject") or ""), p.get("message_id")
+        if not EMAIL_ADDRESS.fullmatch(account) or not EMAIL_ADDRESS.fullmatch(to) or not body or len(body) > 10000 \
+           or len(subject) > 200 or not subject.isprintable() \
+           or (message_id is not None and not re.fullmatch(r"<[^<>\s]{3,250}>", str(message_id))):
+            raise BeforeSend("BAD_TARGET")
+        sender = self.sender_for_account(account)
+        if not sender:
+            raise BeforeSend("NO_SENDER")
+        if not self.token:
+            raise BeforeSend("NO_ACCOUNT_TOKEN")
+        request = {"From": sender, "To": to, "ReplyTo": account, "Subject": subject or "رد", "TextBody": body,
+                   "MessageStream": "outbound"}
+        if message_id:
+            request["Headers"] = [{"Name": "In-Reply-To", "Value": message_id}, {"Name": "References", "Value": message_id}]
+        status, data = self.post(self.URL, request, {"X-Postmark-Server-Token": self.token}, SEND_TIMEOUT_SECONDS)
+        code = (data or {}).get("ErrorCode")
+        if 200 <= status < 300 and code in (0, None):
+            ref = (data or {}).get("MessageID")
+            if not ref:
+                raise RuntimeError("success without a message id")      # accepted but unidentifiable: ambiguous
+            return str(ref)
+        raise Rejected(status if status >= 400 else 422, str(code or ""))
+
+
+class ReplyRouter:
+    """reply.send goes back on the channel the customer wrote on: WhatsApp, Messenger / Instagram Direct, or email."""
+
+    def __init__(self, whatsapp, meta, email=None):
+        self.whatsapp, self.meta, self.email = whatsapp, meta, email
+
+    def send(self, row: dict) -> str:
+        channel = row["payload"].get("channel")
+        if channel in MetaMessagingAdapter.HOSTS:
             return self.meta.send(row)
+        if channel == "email":
+            if self.email is None:
+                raise BeforeSend("NO_ADAPTER")
+            return self.email.send(row)
         return self.whatsapp.send(row)
 
 

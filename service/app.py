@@ -5,15 +5,17 @@
 
   GET  /webhook   Meta subscription handshake (webhook.verify_subscription)
   POST /webhook   webhook.Handler: size limit, HMAC on the raw bytes, then insert as hermes_ingest; 200 only after commit
-  GET  /portal, POST /portal/...   the owner portal (service/portal.py): pending replies, inquiries, facts
+  GET  /portal, POST /portal/...   the owner portal (service/portal.py): pending replies, inquiries, facts. Sign-in
+                  through Supabase Auth when HERMES_SUPABASE_URL and HERMES_SUPABASE_ANON_KEY are set (the access
+                  tokens are verified with HERMES_JWT_SECRET, the project's JWT secret)
   GET  /healthz   database reachable (as hermes_ingest), the deployed commit and the handler counters (numbers only)
   GET  /deps      what must stay true between deploys, for an external uptime monitor: app.health_signals() as
                   hermes_monitor (numbers, never rows); 503 when a signal fails. The numbers and the failing names
                   only with X-Monitor-Token = HERMES_MONITOR_TOKEN; otherwise the code and "ok" / "degraded".
                   Railway checks /healthz at deploy time only and never reports a skipped or hung cron run, so this
                   is read from outside.
-The worker runs in a thread as hermes_worker. It accepts connections; it opens none (the Graph API is simulated:
-HERMES_GRAPH must be "simulate" until a real client exists, and anything else refuses to start).
+The worker runs in a thread as hermes_worker. The only outbound connections are the portal's calls to the Supabase
+project host, through crawler.ApiClient (spec 28.12); the Graph API is simulated unless HERMES_GRAPH says otherwise.
 """
 from __future__ import annotations
 import json, logging, os, signal, sys, threading
@@ -25,6 +27,7 @@ from service import redact
 from service.health import SIGNALS, assess, authorized
 from service.pg import Database, Ingest, PortalDb
 from service.portal import Portal
+from service.supabase_auth import SupabaseAuth, project_host
 from service.webhook import MAX_BODY_BYTES, Handler, verify_subscription
 from service.worker import Worker, simulated_adapters, worker_name
 
@@ -136,7 +139,7 @@ def main():
     worker_thread.start()
     port = int(os.environ.get("PORT", "8080"))
     secret = os.environ.get("HERMES_JWT_SECRET", "")          # Supabase project JWT secret; unset: the portal signs nobody in
-    portal = Portal(PortalDb(Database(url, "authenticated")), secret,
+    portal = Portal(PortalDb(Database(url, "authenticated")), secret, auth=supabase_from_env(os.environ),
                     staging_login_code=os.environ.get("HERMES_STAGING_LOGIN_CODE", ""),
                     staging_owner_id=os.environ.get("HERMES_STAGING_OWNER_ID", ""),
                     staging_operator_id=os.environ.get("HERMES_STAGING_OPERATOR_ID", ""),
@@ -155,6 +158,17 @@ def main():
     server.server_close()
     worker_thread.join(SHUTDOWN_WAIT_SECONDS)
     log.info("stopped%s", " (worker still busy)" if worker_thread.is_alive() else "")
+
+
+def supabase_from_env(env) -> SupabaseAuth | None:
+    """None when sign-in is not configured; a half configuration refuses to start rather than run without it."""
+    url, key = env.get("HERMES_SUPABASE_URL", ""), env.get("HERMES_SUPABASE_ANON_KEY", "")
+    if not url and not key:
+        return None
+    if not (url and key and env.get("HERMES_JWT_SECRET")):
+        sys.exit("HERMES_SUPABASE_URL, HERMES_SUPABASE_ANON_KEY and HERMES_JWT_SECRET go together")
+    from service.crawler import ApiClient                  # the one network path (spec 28.12)
+    return SupabaseAuth(url, key, ApiClient({project_host(url)}))
 
 
 if __name__ == "__main__":

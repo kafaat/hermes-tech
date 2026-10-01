@@ -40,13 +40,13 @@
 | مخططات JSON والعقود والفهرس والسياسات | 34 فحصًا ناجحًا من 34 | tools/validate.py · الطبقة 1 |
 | قواعد الاتساق المنطقي والسياسة الإحصائية ومعجم الإخفاقات | 136 فحصًا ناجحًا من 136 | tools/validate.py · الطبقة 2 |
 | الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 250 فحصًا ناجحًا من 250 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
-| الاختبارات الآلية | 273 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
+| الاختبارات الآلية | 282 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
 | حالات SQL على Postgres فعلي | 53 حالة و64 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
-المجموع: 420/420 فحصًا ناجحًا في أداة التحقق، و273 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
+المجموع: 420/420 فحصًا ناجحًا في أداة التحقق، و282 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
 
 ### وسوم المصدر
@@ -167,8 +167,8 @@ hermes-tech/
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
 ├── db/tests/             concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
-├── service/              __init__.py · app.py · auth.py · competitor.py · crawler.py · dispatcher.py · health.py · jobs.py · outbox_model.py · pg.py · portal.py · redact.py · render.py · structured.py · supabase_auth.py · telemetry.py · webhook.py · worker.py
-├── tests/                34 modules (inventory in §15.2)
+├── service/              __init__.py · app.py · auth.py · competitor.py · crawler.py · dispatcher.py · health.py · jobs.py · outbox_model.py · pg.py · portal.py · redact.py · render.py · site_seo.py · structured.py · supabase_auth.py · telemetry.py · webhook.py · worker.py
+├── tests/                35 modules (inventory in §15.2)
 ├── evals/                complaints_seed.jsonl · content_guard_golden.jsonl · model_admission.json
 ├── docs/                 18 documents · adr/ (11 decisions)
 ├── derived/              policy_matrix.md · agent_capabilities.json · alerts.yaml   (generated)
@@ -999,7 +999,8 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_service_portal | بوابة المالك: رمز الجلسة يُتحقق بصرامة، الإجراء مربوط بالجلسة (CSRF والأصل)، لا سكربت، كل قيمة مُهرَّبة | 19 |
 | test_service_redact | حجب السجلات: الهواتف بالأرقام العربية، حقول المحتوى، الرموز، نص الاستثناءات | 6 |
 | test_service_render | القوالب: التهريب، روابط javascript: بكل تمويه، مواضع القالب الخطرة | 6 |
-| test_service_structured | حقائق المنافس المنظمة (JSON-LD): إعادة التصميم لا تغيّر شيئًا، تغيّر السعر يُكتشف ويُقال بالعربية، والمدخل العدائي محدود | 9 |
+| test_service_site_seo | بيانات موقع العميل المنظمة: JSON-LD من الحقائق المعتمدة وحدها، لا يكسر وسم السكربت، وقارئنا يقرؤه كاملًا؛ وsitemap وrobots | 8 |
+| test_service_structured | حقائق المنافس المنظمة (JSON-LD): إعادة التصميم لا تغيّر شيئًا، تغيّر السعر يُكتشف ويُقال بالعربية، والمدخل العدائي محدود | 10 |
 | test_service_supabase_auth | دخول المالك عبر Supabase Auth: رمز لمرة واحدة بالبريد، الجلسة من الخادم لا المتصفح، وتجديدها قبل انتهائها | 12 |
 | test_service_telemetry | المراقبة: قائمة سماح للسمات، لا أحداث محتوى، لا بيانات شخصية في القيم المسموحة | 8 |
 | test_service_webhook | معالج webhook: HMAC على البايتات الخام قبل التحليل، 401 بلا تخزين، إعادة التسليم نجاح، القناة المخاطَبة | 9 |
@@ -1008,7 +1009,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_supply_chain | غياب CODEOWNERS فشل، pull_request_target فشل، والتعليقات لا تُعدّ إجراءات | 4 |
 | test_triage | المرحلة الثانية تضيف ولا تلغي، العتبة، استفسارات المالك | 5 |
 | test_validator_negative | اختبارات طفرات: يُدخل كل عيب وُجد في المراجعات ويتأكد أن المتحقق يرفضه | 13 |
-| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **273** |
+| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **282** |
 <!-- /gen:tests -->
 
 ### 15.3 العيوب التي تمنعها اختبارات الطفرات
@@ -1934,6 +1935,20 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 محتوى الوسائط لا يُجلب ولا يُخزَّن هنا. تحويل الصوت إلى نص قرار لاحق، لأنه يحتاج مزوّدًا ونموذجًا وموافقة على نقل صوت الزبون.
 
 الاختبارات: نوع كل رسالة وصياغة البوابة في tests/test_service_worker.py، وفي المسار الكامل رسالة صوتية (تصعيد `non_text:audio`، واستفسار من نوع audio بلا محتوى) وتفاعل (لا استفسار ولا تنبيه).
+
+### 28.17 مواقع عملائنا تنشر بياناتها المنظمة
+
+فحص المنافسين وجد أن موقع مطعم يمني حقيقي لا ينشر JSON-LD (28.11: 0 من 1). المواقع التي يبنيها `agent_site_builder` تنشره، فيصبح العميل مقروءًا لمحركات البحث بينما منافسه ليس كذلك. البناء في `service/site_seo.py`:
+
+- **JSON-LD من الحقائق المعتمدة وحدها.** المصدر الملف التعريفي للمنشأة وكل صنف، وكلٌّ منها يحمل `approved: true`. ما لم يعتمده المالك يُرفض صراحة، لا يُسقط بصمت.
+- **النوع حسب القطاع:** المطعم Restaurant بقائمة وأقسام وأصناف، والمتجر Store بكتالوج عروض.
+- **ما يُكتب:** الاسم، والمدينة، والشارع، والهاتف، ومستوى الأسعار، وساعات العمل، والأسعار بالعملة.
+- **قيم ملتبسة تُرفض لا تُخمَّن:** سعر بفاصلة أوروبية، أو عملة ليست 3 أحرف لاتينية، أو هاتف بنص، أو ساعة غير HH:MM.
+- **الكتلة لا تكسر الصفحة.** `render.py` يمنع أي حقل داخل `<script>`، فالكتلة تُبنى بمسلسل JSON يهرّب `<` و`>` و`&` (`\u003c` …)، فلا يغلق نص المالك وسم السكربت. تُدرج عند علامة واحدة داخل `<head>` في القالب: `<!--hermes:structured-data-->`.
+- **ما ننشره نقرؤه كاملًا:** الاختبار يقرأ كل كتلة بـ`structured.extract`، قارئ فحص المنافسين نفسه، ويطابق الاسم والنوع والساعات والأصناف والأسعار. وتعلّم القارئ في الطريق كتالوج العروض (`Offer.itemOffered`)، وهي صيغة شائعة عند المتاجر المنافسة أيضًا.
+- **sitemap.xml وrobots.txt:** صفحات الموقع (5 كحد أقصى، حد الباقة)، روابط https من المضيف نفسه، ومسارات بلا `..`.
+
+الاختبارات: tests/test_service_site_seo.py (8)، واختبار الكتالوج في tests/test_service_structured.py.
 
 ## الملحق أ · رموز الأخطاء
 

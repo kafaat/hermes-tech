@@ -165,7 +165,12 @@ def extract(body: bytes | str) -> dict:
         if t & ITEM_TYPES - {"offer"}:
             name = _s(n.get("name"))
             price, currency = _offer(n)
-            if name and len(items) < MAX_ITEMS and name not in items:
+            if name and len(items) < MAX_ITEMS and (name not in items or (items[name]["price"] is None and price is not None)):
+                items[name] = {"name": name, "price": price, "currency": currency}
+        if "offer" in t and isinstance(n.get("itemOffered"), dict) and _types(n["itemOffered"]) & ITEM_TYPES:
+            name = _s(n["itemOffered"].get("name"))       # a catalog: Offer{price, itemOffered: Product|Service{name}}
+            price, currency = _offer({"offers": n})
+            if name and price is not None and len(items) < MAX_ITEMS and (items.get(name) or {}).get("price") is None:
                 items[name] = {"name": name, "price": price, "currency": currency}
     facts = {}
     if business:

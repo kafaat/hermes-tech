@@ -67,6 +67,13 @@ class TestExtract(unittest.TestCase):
         huge = b"<script type='application/ld+json'>{\"@type\":\"Product\",\"name\":\"" + b"x" * 300_000 + b"\"}</script>"
         self.assertEqual(extract(huge), {})                                   # over the block limit: not parsed
 
+    def test_a_catalog_of_offers_gives_each_product_its_price(self):
+        catalog = {"@type": "Store", "name": "متجر", "hasOfferCatalog": {"@type": "OfferCatalog", "itemListElement": [
+            {"@type": "Offer", "price": "2500", "priceCurrency": "YER", "itemOffered": {"@type": "Product", "name": "عسل"}},
+            {"@type": "Offer", "price": "900", "priceCurrency": "YER", "itemOffered": {"@type": "Service", "name": "توصيل"}}]}}
+        self.assertEqual(extract(page(catalog))["items"], [{"name": "توصيل", "price": "900", "currency": "YER"},
+                                                         {"name": "عسل", "price": "2500", "currency": "YER"}])
+
     def test_scripts_that_are_not_json_ld_are_ignored(self):
         body = b"<script type='text/javascript'>{\"@type\":\"Product\",\"name\":\"trap\"}</script>"
         self.assertEqual(extract(body), {})

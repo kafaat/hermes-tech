@@ -258,6 +258,10 @@ def main():
                     status, body = 200, (ROOT / "tests/fixtures/competitor_restaurant_ar.html").read_bytes()
                 return P()
         comp_id = str(uuid.uuid4())
+        # earlier runs' fixture snapshots count toward the customer's 10 a month (0017) and would refuse this one;
+        # they are this test's own leftovers (never a real page's), so they go first
+        q("delete from app.competitor_snapshots where customer_id = %s and competitor_id in"
+          " (select id from app.competitors where customer_id = %s and url like 'https://e2e-%%.example.test/')", (CUSTOMER, CUSTOMER))
         q("insert into app.competitors (id, customer_id, url, label, active) values (%s, %s, %s, %s, true)",
           (comp_id, CUSTOMER, f"https://e2e-{run}.example.test/", f"e2e {run}"))
         jobs = CompetitorDb(Database(DB, "hermes_jobs"))
@@ -270,7 +274,7 @@ def main():
                      " where competitor_id = %s", (comp_id,))
             check(counts["ok"] == 1 and len(snap) == 1 and snap[0][0] == "ok" and snap[0][2] == "restaurant"
                   and snap[0][1].startswith("أول لقطة: 9 صنفًا") and snap[0][3] is not None,
-                  "competitor job: an 'ok' snapshot with the inventory, facts and page hash, filed as hermes_jobs")
+                  f"competitor job: an 'ok' snapshot with the inventory, facts and page hash, filed as hermes_jobs {counts}")
             check(not [c for c in jobs.due(200) if c["id"] == comp_id], "competitor job: not due again the same week")
             status, _, page = portal(url, issue_staging_token(OWNER, JWT_SECRET))
             check(status == 200 and f"e2e {run}" in page and "أول لقطة" in page, "portal: the owner sees the competitor snapshot")

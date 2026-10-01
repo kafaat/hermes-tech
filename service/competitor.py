@@ -73,7 +73,7 @@ def text_hash(body: bytes) -> str:
 
 def _first(facts: dict) -> str:
     items, rating = facts.get("items", []), facts.get("rating")
-    parts = [f"أول لقطة: {len(items)} صنفًا" + (" بأسعار" if any(i["price"] for i in items) else "")]
+    parts = [f"أول لقطة: {len(items)} من المنتجات والخدمات" + ("، بأسعارها" if any(i["price"] for i in items) else "")]
     if facts.get("business", {}).get("hours"):
         parts.append("ساعات العمل: " + "، ".join(facts["business"]["hours"]))
     if rating:

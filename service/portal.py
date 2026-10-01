@@ -22,6 +22,8 @@ An access token within five minutes of expiry, or expired, is replaced with the 
                                    refused unless HERMES_GRAPH=simulate and both are set
   POST /portal/decide              approval=<id> decision=approved|rejected csrf=<token>
   POST /portal/facts/approve       fact=<id> csrf=<token>
+  POST /portal/facts/standing      fact=<id> on=1|0 csrf=<token>   send this approved answer at once from now on (0020),
+                                   for hours, location and payment only; prices, offers and complaints always wait
   POST /portal/logout
   GET  /portal/ops                 operator console: outbox rows waiting for a human, retention, unrouted events
   POST /portal/ops/resolve         outbox=<id> resolution=confirmed_sent|resend|abandon reason=<text> csrf=<token>
@@ -59,6 +61,7 @@ class StorePort(Protocol):
     def overview(self, claims: dict) -> dict: ...
     def decide(self, claims: dict, approval_id: str, decision: str) -> bool: ...
     def approve_fact(self, claims: dict, fact_id: str) -> bool: ...
+    def set_standing(self, claims: dict, fact_id: str, on: bool) -> bool: ...
     def ops_overview(self, claims: dict) -> dict | None: ...                 # None: not an operator in this session
     def resolve(self, claims: dict, outbox_id: str, resolution: str, reason: str) -> None: ...
 
@@ -96,6 +99,10 @@ COMPETITOR = """<div class="card"><div class="meta">{{label}} · {{when}} · {{s
 SNAPSHOT_STATE = {"ok": "تمت المتابعة", "unverifiable": "لا متابعة آلية", "blocked": "الموقع يمنع الفحص", None: "لم يُفحص بعد"}
 FACTS_H = """<h2>معلومات منشأتك ({{count}})</h2><p class="meta">لا يُرد على عميل إلا بمعلومة اعتمدتها أنت.</p>"""
 FACT = """<div class="card"><div class="meta">{{topic}} · {{state}}</div><div class="body">{{fact}}</div></div>"""
+FACT_STANDING = """<div class="card"><div class="meta">{{topic}} · معتمدة · {{state}}</div><div class="body">{{fact}}</div>
+<form method="post" action="/portal/facts/standing"><input type="hidden" name="fact" value="{{id}}">
+<input type="hidden" name="on" value="{{on}}"><input type="hidden" name="csrf" value="{{csrf}}"><button class="{{cls}}">{{label}}</button></form></div>"""
+STANDING_TOPICS = ("hours", "location", "payment")
 FACT_PENDING = """<div class="card"><div class="meta">{{topic}} · تنتظر اعتمادك</div><div class="body">{{fact}}</div>
 <form method="post" action="/portal/facts/approve"><input type="hidden" name="fact" value="{{id}}">
 <input type="hidden" name="csrf" value="{{csrf}}"><button class="ok">اعتماد</button></form></div>"""
@@ -149,7 +156,8 @@ STAGING_OPERATOR = """<div class="card"><p class="meta">مشغّل بيئة ال
 AUTH_FAILED = {"invalid": "الرمز غير صحيح أو انتهت صلاحيته.", "rate_limited": "محاولات كثيرة. انتظر دقيقة ثم أعد المحاولة.",
                "unavailable": "خدمة الدخول لا تستجيب الآن. أعد المحاولة بعد قليل."}
 MESSAGES = {"approved": "تمت الموافقة. يُرسل الرد خلال دقيقة.", "rejected": "رُفض المقترح ولن يُرسل.",
-            "fact": "اعتُمدت المعلومة.", "resolved": "سُجّل القرار. «أعد الإرسال» يُرسل خلال دقيقة.",
+            "fact": "اعتُمدت المعلومة.", "standing_on": "سيُرسل هذا الرد فورًا لكل من يسأل عنه، حتى توقفه.",
+            "standing_off": "أُوقف الإرسال الفوري لهذا الموضوع: ستعود الردود إليك للموافقة.", "resolved": "سُجّل القرار. «أعد الإرسال» يُرسل خلال دقيقة.",
             "reason": "لم يُنفّذ: السبب إلزامي (خمسة أحرف على الأقل).", "mfa": "لم يُقبل الرمز. أعد المحاولة.", "gone": "لم يُنفّذ: المقترح لم يعد معلقًا أو ليس لك.", "error": "تعذّر التنفيذ. أعد المحاولة."}
 
 
@@ -306,6 +314,9 @@ class Portal:
             if route == "/portal/decide" and form.get("decision") in ("approved", "rejected"):
                 ok = self.store.decide(claims, form.get("approval", ""), form["decision"])
                 return self._redirect("/portal?done=" + (form["decision"] if ok else "gone"))
+            if route == "/portal/facts/standing" and form.get("on") in ("1", "0"):
+                ok = self.store.set_standing(claims, form.get("fact", ""), form["on"] == "1")
+                return self._redirect("/portal?done=" + (("standing_on" if form["on"] == "1" else "standing_off") if ok else "gone"))
             if route == "/portal/facts/approve":
                 ok = self.store.approve_fact(claims, form.get("fact", ""))
                 return self._redirect("/portal?done=" + ("fact" if ok else "gone"))
@@ -472,7 +483,12 @@ class Portal:
                               summary=c["summary"] or "يُفحص خلال الأيام القادمة."))
         out.append(_r(FACTS_H, count=len(data["facts"])))
         for f in data["facts"]:
-            if f["approved"]:
+            if f["approved"] and f["topic"] in STANDING_TOPICS:
+                on = bool(f.get("standing"))
+                out.append(_r(FACT_STANDING, topic=f["topic"], fact=f["fact"], id=f["id"], csrf=csrf, on="0" if on else "1",
+                              state="تُرسل فورًا بموافقتك الدائمة" if on else "كل رد ينتظر موافقتك",
+                              label="أوقف الإرسال الفوري" if on else "أرسلها فورًا دون انتظاري", cls="no" if on else "ok"))
+            elif f["approved"]:
                 out.append(_r(FACT, topic=f["topic"], state="معتمدة", fact=f["fact"]))
             else:
                 out.append(_r(FACT_PENDING, topic=f["topic"], fact=f["fact"], id=f["id"], csrf=csrf))

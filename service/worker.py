@@ -239,13 +239,20 @@ class Worker:
         else:
             d = decide(text, route, facts, self.guard, self.matcher.rules)
         if d["action"] == "propose":
-            reply = {"phone_number_id": channel, "to": str(msg.get("from", "")), "body": d["body"], "in_reply_to": ext}
+            reply = {"phone_number_id": channel, "to": str(msg.get("from", "")), "body": d["body"], "in_reply_to": ext,
+                     "topic": d["topic"]}
             with self.db.tx(t.bind) as cur:
                 cur.execute("insert into app.approvals (customer_id, scope, proposal_action, payload, requested_by_agent, target_id, expires_at)"
-                            " values (%s, 'customer', 'reply:send', %s, 'agent_replies', %s, now() + make_interval(hours => %s))",
-                            (t.customer_id, _json(reply), ext, REPLY_WINDOW_HOURS))
-                cur.execute("select app.requeue_task(%s, %s, %s)", (t.id, t.token, self.poll))
-            return "proposed"
+                            " values (%s, 'customer', 'reply:send', %s, 'agent_replies', %s, now() + make_interval(hours => %s))"
+                            " returning id", (t.customer_id, _json(reply), ext, REPLY_WINDOW_HOURS))
+                approval_id = cur.fetchone()[0]
+                cur.execute("select app.approve_by_standing(%s)", (approval_id,))   # the database decides, never the worker (0020)
+                standing = cur.fetchone()[0]
+                if not standing:
+                    cur.execute("select app.requeue_task(%s, %s, %s)", (t.id, t.token, self.poll))
+            if not standing:
+                return "proposed"
+            return self._after_proposal(t, event_id, ext, (approval_id, "approved", reply, False))
         notice = {"event": ext, "reason": d["reason"], "categories": d["categories"], "sla_minutes": d["sla_minutes"]}
         with self.db.tx(t.bind) as cur:                  # a reference, never the message text: the owner reads it in the portal
             cur.execute("select app.enqueue_outbox('notify.owner', %s, null, %s)", (_json(notice), ext))

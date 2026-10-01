@@ -112,6 +112,14 @@ class PortalDb:
             cur.execute("select id, topic, fact, approved_by_owner from app.kb_facts where customer_id = any(%s::uuid[])"
                         " order by approved_by_owner, topic limit 200", (ids,))
             facts = [{"id": str(r[0]), "topic": r[1], "fact": r[2], "approved": r[3]} for r in cur.fetchall()]
+            cur.execute("select customer_id, topic, fact_hash from app.standing_approvals"
+                        " where customer_id = any(%s::uuid[]) and revoked_at is null", (ids,))
+            standing = {(str(r[0]), r[1]): r[2] for r in cur.fetchall()}
+            cur.execute("select id, app.fact_hash(fact), customer_id from app.kb_facts where customer_id = any(%s::uuid[])", (ids,))
+            hashes = {str(r[0]): (r[1], str(r[2])) for r in cur.fetchall()}
+            for f in facts:                                  # on: a live grant for this topic and this exact text (0020)
+                h, cust = hashes.get(f["id"], (None, None))
+                f["standing"] = f["approved"] and standing.get((cust, f["topic"])) == h
             cur.execute("select c.label, s.fetched_at, s.status::text, s.diff_summary from app.competitors c"
                         " left join lateral (select fetched_at, status, diff_summary from app.competitor_snapshots s"
                         "   where s.competitor_id = c.id and s.customer_id = c.customer_id order by fetched_at desc limit 1) s on true"
@@ -129,6 +137,23 @@ class PortalDb:
     def approve_fact(self, claims: dict, fact_id: str) -> bool:
         with self.db.tx(claims=claims) as cur:
             cur.execute("update app.kb_facts set approved_by_owner = true where id = %s and not approved_by_owner", (fact_id,))
+            return cur.rowcount == 1
+
+    def set_standing(self, claims: dict, fact_id: str, on: bool) -> bool:
+        """Grant (on) or revoke a standing approval for this approved fact's topic, as the owner. The database refuses
+        a topic outside hours, location and payment, a fact that is not approved, and another business (0020)."""
+        with self.db.tx(claims=claims) as cur:
+            cur.execute("select customer_id, topic from app.kb_facts where id = %s", (fact_id,))
+            row = cur.fetchone()
+            if row is None:
+                return False
+            cur.execute("update app.standing_approvals set revoked_at = now(), revoked_by = %s"
+                        " where customer_id = %s and topic = %s and revoked_at is null", (claims["sub"], row[0], row[1]))
+            if not on:
+                return cur.rowcount == 1
+            cur.execute("insert into app.standing_approvals (customer_id, topic, fact_hash, granted_by)"
+                        " select customer_id, topic, app.fact_hash(fact), %s from app.kb_facts where id = %s and approved_by_owner",
+                        (claims["sub"], fact_id))
             return cur.rowcount == 1
 
     def ops_overview(self, claims: dict) -> dict | None:

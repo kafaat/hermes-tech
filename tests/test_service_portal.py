@@ -207,6 +207,32 @@ class TestPortal(unittest.TestCase):
         self.assertIn("تغيّر سعر مندي: 4500 ← 5000 YER", page)
         self.assertIn("لم يُفحص بعد", page)
 
+    def test_a_standing_approval_is_offered_for_low_risk_topics_only_and_toggles(self):
+        store = FakeStore()
+        base = store.overview
+
+        def facts(claims):
+            d = base(claims)
+            d["facts"] = [{"id": "f-h", "topic": "hours", "fact": "9-11", "approved": True, "standing": False},
+                          {"id": "f-l", "topic": "location", "fact": "شارع <b>الستين</b>", "approved": True, "standing": True},
+                          {"id": "f-p", "topic": "prices", "fact": "مندي 7000", "approved": True, "standing": False}]
+            return d
+        store.overview = facts
+        calls = []
+        store.set_standing = lambda claims, fact_id, on: calls.append((fact_id, on)) or True
+        token = sign(GOOD)
+        page = portal(store).handle("GET", "/portal", cookie(token), b"")[2].decode()
+        self.assertIn('name="fact" value="f-h"', page.split("/portal/facts/standing")[1][:200])
+        self.assertIn("أرسلها فورًا دون انتظاري", page)
+        self.assertIn("تُرسل فورًا بموافقتك الدائمة", page)
+        self.assertIn("شارع &lt;b&gt;الستين&lt;/b&gt;", page)
+        self.assertNotIn('value="f-p"', page)                     # prices never get a standing approval
+        status, headers, _ = portal(store).handle("POST", "/portal/facts/standing", cookie(token),
+                                                  f"fact=f-h&on=1&csrf={csrf_token(token, SECRET)}".encode())
+        self.assertEqual((status, dict(headers)["Location"], calls), (303, "/portal?done=standing_on", [("f-h", True)]))
+        status, _, _ = portal(store).handle("POST", "/portal/facts/standing", cookie(token), b"fact=f-h&on=1&csrf=bad")
+        self.assertEqual((status, len(calls)), (403, 1))
+
     def test_fact_approval_and_logout(self):
         store, token = FakeStore(), sign(GOOD)
         csrf = csrf_token(token, SECRET)

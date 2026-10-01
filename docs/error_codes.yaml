@@ -54,6 +54,10 @@ codes:
   CUSTOMER_APPROVAL_OWNER_ONLY:  {kind: error, since: "1.7", src: "0009", ar: "موافقة المنشأة لأحد مالكيها؛ المؤسس لا يوافق عنها"}
   PLATFORM_APPROVAL_OPERATOR_AAL2_ONLY: {kind: error, since: "1.7", src: "0009", ar: "موافقة المنصة لمشغّل بجلسة aal2"}
   KB_APPROVAL_OWNER_ONLY:        {kind: error, since: "1.7", src: "0009", ar: "اعتماد الحقيقة المعرفية لمالك المنشأة وحده"}
+  STANDING_OWNER_ONLY:           {kind: error, since: "1.8", src: "0020", ar: "الموافقة الدائمة يمنحها مالك المنشأة نفسه أو يلغيها"}
+  STANDING_FACT_NOT_APPROVED:    {kind: error, since: "1.8", src: "0020", ar: "الموافقة الدائمة لنص معلومة اعتمدها المالك فقط"}
+  STANDING_IMMUTABLE:            {kind: error, since: "1.8", src: "0020", ar: "الموافقة الدائمة لا تُعدَّل ولا تُستعاد بعد إلغائها؛ تُمنح من جديد"}
+  STANDING_SCOPE:                {kind: error, since: "1.8", src: "0020", ar: "دور الموافقة الدائمة يقرر مقترحًا واحدًا بالموافقة فقط، من دالته"}
   PUBLISHED_CONTENT_IMMUTABLE:   {kind: error, since: "1.7", src: "0009", ar: "المحتوى المنشور لا يتغير"}
   DEPLOYMENT_IMMUTABLE:          {kind: error, since: "1.7", src: "0009", ar: "صف النشر لا يتغير بعد إنشائه"}
   ROLLBACK_OPERATOR_AAL2_ONLY:   {kind: error, since: "1.7", src: "0009", ar: "الرجوع لمشغّل بجلسة aal2"}

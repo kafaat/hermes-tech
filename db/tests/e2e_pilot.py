@@ -73,6 +73,8 @@ def seed():
     if not q("select 1 from app.kb_facts where customer_id = %s and topic = 'hours' and approved_by_owner", (CUSTOMER,)):
         q("insert into app.kb_facts (customer_id, topic, fact, approved_by_owner) values (%s, 'hours', %s, true)",
           (CUSTOMER, HOURS), claims={"sub": OWNER, "aal": "aal1"})       # an approved fact is the owner's act (kb_facts_guard)
+    q("update app.standing_approvals set revoked_at = now(), revoked_by = %s where customer_id = %s and revoked_at is null",
+      (OWNER, CUSTOMER), claims={"sub": OWNER, "aal": "aal1"})    # a run that died mid-way leaves no standing approval behind
 
 
 def message_payload(items):
@@ -227,6 +229,38 @@ def main():
                 cons = q("select consumed_by_ref from app.approvals where id = %s", (ap_id,))[0][0]
                 check(cons == f"outbox:{ob_id}", "approval consumed by exactly that outbox row")
                 check(bool(wait("question task done", lambda: (task_status(q_ext) or ("",))[0] == "succeeded")), "question task succeeded")
+
+                # standing approval (0020): the owner lets the hours answer go out at once, then takes it back
+                owner_claims = {"sub": OWNER, "role": "authenticated", "aal": "aal1"}
+                revoke = ("update app.standing_approvals set revoked_at = now(), revoked_by = %s"
+                          " where customer_id = %s and revoked_at is null")
+                hours_id = str(q("select id from app.kb_facts where customer_id = %s and topic = 'hours' and approved_by_owner", (CUSTOMER,))[0][0])
+                try:
+                    status, where, _ = portal(url, token, "POST", {"_path": "/portal/facts/standing", "fact": hours_id, "on": "1",
+                                                                   "csrf": csrf_token(token, JWT_SECRET)})
+                    check(status == 303 and where == "/portal?done=standing_on", "standing approval: the owner grants it for hours")
+                    s_ext = f"wamid.E2E.{run}.standing"
+                    post(url, secret, message_payload({"messages": [
+                        {"from": "967700000005", "id": s_ext, "type": "text", "text": {"body": "متى تفتحون بكرة؟"}}]}))
+                    auto = wait("standing reply sent", lambda: q(
+                        "select a.decided_via, a.decided_by, o.provider_message_id from app.outbox o join app.approvals a on a.id = o.approval_id"
+                        " where o.target_id = %s and o.dispatched_at is not null", (s_ext,)))
+                    check(bool(auto) and auto[0][0] == "standing" and str(auto[0][1]) == OWNER,
+                          "standing approval: the next hours question is answered at once, decided as the owner's standing approval")
+                    status, where, _ = portal(url, token, "POST", {"_path": "/portal/facts/standing", "fact": hours_id, "on": "0",
+                                                                   "csrf": csrf_token(token, JWT_SECRET)})
+                    check(status == 303 and where == "/portal?done=standing_off", "standing approval: the owner revokes it")
+                    r_ext = f"wamid.E2E.{run}.after_revoke"
+                    post(url, secret, message_payload({"messages": [
+                        {"from": "967700000005", "id": r_ext, "type": "text", "text": {"body": "متى تفتحون اليوم؟"}}]}))
+                    back = wait("proposal after revoke", lambda: q("select decision::text from app.approvals where target_id = %s", (r_ext,)))
+                    check(bool(back) and back[0][0] == "pending" and not q("select 1 from app.outbox where target_id = %s", (r_ext,)),
+                          "standing approval: after revoking, the answer waits for the owner again")
+                    pending_id = q("select id from app.approvals where target_id = %s", (r_ext,))[0][0]
+                    portal(url, token, "POST", {"_path": "/portal/decide", "approval": str(pending_id), "decision": "rejected",
+                                                "csrf": csrf_token(token, JWT_SECRET)})     # closes that task before the end checks
+                finally:
+                    q(revoke, (OWNER, CUSTOMER), claims=owner_claims)
                 receipt = message_payload({"statuses": [{"id": wamid, "status": "delivered", "recipient_id": "967700000001",
                                                          "timestamp": str(int(time.time()))}]})
                 check(post(url, secret, receipt) == 200, "delivery receipt accepted (200)")
@@ -291,7 +325,7 @@ def main():
             snap = q("select status::text, diff_summary, structured_facts->'business'->>'type', page_hash from app.competitor_snapshots"
                      " where competitor_id = %s", (comp_id,))
             check(counts["ok"] == 1 and len(snap) == 1 and snap[0][0] == "ok" and snap[0][2] == "restaurant"
-                  and snap[0][1].startswith("أول لقطة: 9 صنفًا") and snap[0][3] is not None,
+                  and snap[0][1].startswith("أول لقطة: 9 من المنتجات والخدمات") and snap[0][3] is not None,
                   f"competitor job: an 'ok' snapshot with the inventory, facts and page hash, filed as hermes_jobs {counts}")
             check(not [c for c in jobs.due(200) if c["id"] == comp_id], "competitor job: not due again the same week")
             status, _, page = portal(url, issue_staging_token(OWNER, JWT_SECRET))

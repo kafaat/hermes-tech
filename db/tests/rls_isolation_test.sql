@@ -1092,6 +1092,99 @@ end $$;
 reset role;
 select set_config('app.task_id', '', true), set_config('app.task_token', '', true), set_config('app.customer_id', '', true);
 
+-- 54. standing approval (0020): the owner grants a low-risk topic once; the database, never the worker, decides a
+--     reply that carries exactly the approved fact; an edited fact, a revoked grant or a different text waits for the owner
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+insert into app.kb_facts (customer_id, topic, fact, approved_by_owner) values ('00000000-0000-0000-0000-00000000000a', 'location', 'L54', true),
+  ('00000000-0000-0000-0000-00000000000a', 'prices', 'P54', true);
+select set_config('request.jwt.claim.sub', '', true);
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111', 'aal1');
+set local role authenticated;
+do $$ begin
+  begin
+    insert into app.standing_approvals (customer_id, topic, fact_hash, granted_by)
+    values ('00000000-0000-0000-0000-00000000000a', 'location', app.fact_hash('not the approved text'), '11111111-1111-1111-1111-111111111111');
+    raise exception 'FAIL a grant for a text the owner never approved was accepted';
+  exception when raise_exception then if sqlerrm <> 'STANDING_FACT_NOT_APPROVED' then raise; end if;
+  end;
+  begin
+    insert into app.standing_approvals (customer_id, topic, fact_hash, granted_by)
+    values ('00000000-0000-0000-0000-00000000000b', 'location', app.fact_hash('B'), '11111111-1111-1111-1111-111111111111');
+    raise exception 'FAIL an owner granted for another business';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into app.standing_approvals (customer_id, topic, fact_hash, granted_by)
+    values ('00000000-0000-0000-0000-00000000000a', 'prices', app.fact_hash('P54'), '11111111-1111-1111-1111-111111111111');
+    raise exception 'FAIL a standing grant for prices was accepted';
+  exception when check_violation then null;
+  end;
+  insert into app.standing_approvals (customer_id, topic, fact_hash, granted_by)
+  values ('00000000-0000-0000-0000-00000000000a', 'location', app.fact_hash('L54'), '11111111-1111-1111-1111-111111111111');
+end $$;
+reset role;
+select pg_temp.as_user('00000000-0000-0000-0000-000000000000', 'aal1'), set_config('request.jwt.claim.sub', '', true);
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000a');
+set local role hermes_worker;
+do $$ declare ok uuid; other uuid; ok_done boolean; other_done boolean; begin
+  insert into app.approvals (customer_id, scope, proposal_action, payload, requested_by_agent, target_id, expires_at)
+  values ('00000000-0000-0000-0000-00000000000a', 'customer', 'reply:send',
+          '{"phone_number_id":"pn","to":"9677","body":"L54","in_reply_to":"w54a","topic":"location"}', 'agent_replies', 'w54a',
+          now() + interval '1 hour') returning id into ok;
+  insert into app.approvals (customer_id, scope, proposal_action, payload, requested_by_agent, target_id, expires_at)
+  values ('00000000-0000-0000-0000-00000000000a', 'customer', 'reply:send',
+          '{"phone_number_id":"pn","to":"9677","body":"L54, and 20% off today","in_reply_to":"w54b","topic":"location"}',
+          'agent_replies', 'w54b', now() + interval '1 hour') returning id into other;
+  begin
+    update app.approvals set decision = 'approved' where id = ok;
+    raise exception 'FAIL the worker decided a proposal itself';
+  exception when insufficient_privilege then null;
+  end;
+  ok_done := app.approve_by_standing(ok);
+  other_done := app.approve_by_standing(other);
+  perform set_config('test.k54', ok::text || ',' || other::text || ',' || ok_done || ',' || other_done, true);
+end $$;
+reset role;
+do $$ declare v text[] := string_to_array(current_setting('test.k54'), ','); a app.approvals; b app.approvals; begin
+  select * into a from app.approvals where id = v[1]::uuid;
+  select * into b from app.approvals where id = v[2]::uuid;
+  if v[3] <> 'true' or a.decision <> 'approved' or a.decided_via <> 'standing'
+     or a.decided_by <> '11111111-1111-1111-1111-111111111111' then
+    raise exception 'FAIL the exact approved fact was not decided as the granting owner: % %', v[3], row_to_json(a);
+  end if;
+  if v[4] <> 'false' or b.decision <> 'pending' then raise exception 'FAIL a different text went out on a standing grant'; end if;
+end $$;
+-- an edited fact is a new fact: the grant no longer matches; a revoked grant decides nothing
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+update app.kb_facts set fact = 'L54b' where customer_id = '00000000-0000-0000-0000-00000000000a' and topic = 'location';
+update app.kb_facts set approved_by_owner = true where customer_id = '00000000-0000-0000-0000-00000000000a' and topic = 'location';
+select set_config('request.jwt.claim.sub', '', true);
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000a');
+set local role hermes_worker;
+do $$ declare p uuid; begin
+  insert into app.approvals (customer_id, scope, proposal_action, payload, requested_by_agent, target_id, expires_at)
+  values ('00000000-0000-0000-0000-00000000000a', 'customer', 'reply:send',
+          '{"phone_number_id":"pn","to":"9677","body":"L54b","in_reply_to":"w54c","topic":"location"}', 'agent_replies', 'w54c',
+          now() + interval '1 hour') returning id into p;
+  if app.approve_by_standing(p) then raise exception 'FAIL an edited fact went out on the old grant'; end if;
+end $$;
+reset role;
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111', 'aal1');
+set local role authenticated;
+do $$ begin
+  update app.standing_approvals set revoked_at = now(), revoked_by = '11111111-1111-1111-1111-111111111111'
+   where customer_id = '00000000-0000-0000-0000-00000000000a' and topic = 'location' and revoked_at is null;
+  begin
+    update app.standing_approvals set revoked_at = null, revoked_by = null where topic = 'location' and customer_id = '00000000-0000-0000-0000-00000000000a';
+    raise exception 'FAIL a revoked grant was revived';
+  exception when raise_exception then if sqlerrm <> 'STANDING_IMMUTABLE' then raise; end if;
+  end;
+  raise notice 'PASS a standing approval decides only the exact approved fact, as its owner; edited or revoked, nothing';
+end $$;
+reset role;
+select set_config('app.task_id', '', true), set_config('app.task_token', '', true), set_config('request.jwt.claim.sub', '', true),
+       set_config('request.jwt.claims', '', true);
+
 -- 46. the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)
 do $$ declare got text; bad text; begin
   select string_agg(relname, ',' order by relname collate "C") into got from pg_class
@@ -1109,7 +1202,7 @@ do $$ declare got text; bad text; begin
   if bad is not null then raise exception 'FAIL app functions executable by PUBLIC: %', bad; end if;
   select string_agg(p.proname, ',' order by p.proname collate "C") into got from pg_proc p
    where p.pronamespace = 'app'::regnamespace and p.prosecdef;
-  if got is distinct from 'audit_chain,audit_effect,audit_head,audit_verify,bind_task,claim_task,complete_task,current_user_customer_ids,extend_task_lease,health_signals,is_operator,jwt_aal,outbox_before_write,requeue_task,worker_context,worker_customer_id' then raise exception 'FAIL definer functions differ from the inventory: %', got; end if;
+  if got is distinct from 'approve_by_standing,audit_chain,audit_effect,audit_head,audit_verify,bind_task,claim_task,complete_task,current_user_customer_ids,extend_task_lease,health_signals,is_operator,jwt_aal,outbox_before_write,requeue_task,worker_context,worker_customer_id' then raise exception 'FAIL definer functions differ from the inventory: %', got; end if;
   select string_agg(p.proname, ',') into bad from pg_proc p where p.pronamespace = 'app'::regnamespace and p.prosecdef
      and not exists (select 1 from unnest(coalesce(p.proconfig, '{}'::text[])) c where c like 'search_path=%');
   if bad is not null then raise exception 'FAIL definer functions without a pinned search_path: %', bad; end if;

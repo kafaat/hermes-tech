@@ -42,7 +42,7 @@ class TestCheck(unittest.TestCase):
     def test_first_check_takes_an_inventory(self):
         s = check(Fetcher(P(200, PAGE)), COMP)
         self.assertEqual(s["status"], "ok")
-        self.assertIn("أول لقطة: 9 صنفًا بأسعار", s["diff_summary"])
+        self.assertIn("أول لقطة: 9 من المنتجات والخدمات، بأسعارها", s["diff_summary"])
         self.assertIn("التقييم 4.4 (212 تقييمًا)", s["diff_summary"])
         self.assertEqual(s["structured_facts"]["business"]["type"], "restaurant")
         self.assertRegex(s["content_hash"], r"^[0-9a-f]{64}$")
@@ -75,6 +75,21 @@ class TestCheck(unittest.TestCase):
                 s = check(Fetcher(result), COMP)
                 self.assertEqual((s["status"], s["structured_facts"], s["page_hash"]), ("unverifiable", None, None))
                 self.assertIn("يُعاد الفحص", s["diff_summary"])
+
+    def test_any_sector_works_a_dental_clinic_with_priced_services(self):
+        import json
+        clinic = {"@context": "https://schema.org", "@type": "Dentist", "name": "عيادة الابتسامة",
+                  "address": {"@type": "PostalAddress", "addressLocality": "عدن"},
+                  "openingHoursSpecification": [{"dayOfWeek": ["Saturday", "Sunday"], "opens": "16:00", "closes": "21:00"}],
+                  "makesOffer": [{"@type": "Offer", "price": "15000", "priceCurrency": "YER", "itemOffered": {"@type": "Service", "name": "تنظيف الأسنان"}},
+                                 {"@type": "Offer", "price": "40000", "priceCurrency": "YER", "itemOffered": {"@type": "Service", "name": "حشوة تجميلية"}}]}
+        body = f'<html><head><script type="application/ld+json">{json.dumps(clinic, ensure_ascii=False)}</script></head><body>x</body></html>'.encode()
+        first = check(Fetcher(P(200, body)), COMP)
+        self.assertEqual((first["status"], first["structured_facts"]["business"]["type"]), ("ok", "dentist"))
+        self.assertIn("أول لقطة: 2 من المنتجات والخدمات، بأسعارها", first["diff_summary"])
+        moved = check(Fetcher(P(200, body.replace(b'"40000"', b'"45000"'))),
+                      {**COMP, "last_facts": first["structured_facts"], "last_page_hash": first["page_hash"]})
+        self.assertIn("تغيّر سعر حشوة تجميلية: 40000 ← 45000 YER", moved["diff_summary"])
 
     def test_the_text_hash_ignores_scripts_markup_and_whitespace(self):
         self.assertEqual(text_hash(b"<p>a  b</p><script>x=1</script>"), text_hash(b"<div>a\nb</div><script>x=2</script>"))

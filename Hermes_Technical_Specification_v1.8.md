@@ -170,7 +170,7 @@ hermes-tech/
 ├── service/              __init__.py · app.py · auth.py · competitor.py · crawler.py · dispatcher.py · health.py · jobs.py · media_policy.py · outbox_model.py · pg.py · portal.py · qr.py · redact.py · render.py · site_seo.py · structured.py · supabase_auth.py · telemetry.py · webhook.py · worker.py
 ├── tests/                37 modules (inventory in §15.2)
 ├── evals/                complaints_seed.jsonl · content_guard_golden.jsonl · model_admission.json
-├── docs/                 18 documents · adr/ (11 decisions)
+├── docs/                 19 documents · adr/ (11 decisions)
 ├── derived/              policy_matrix.md · agent_capabilities.json · alerts.yaml   (generated)
 ├── ops/                  runbook · incident_template · slo.yaml · otel_genai_mapping.yaml · restore_drill.md
 │                         redteam/ · load/k6_webhook.js · hermes_agent/ (compose · squid · check_container · host_watch)

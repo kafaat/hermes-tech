@@ -1,7 +1,7 @@
 {
  "package_version": "1.8",
  "registry_version": "1.8.0",
- "source_id": "6229cc7a6e26478f272a7bf546ef2770f03712de3e9d7d27a35c197d1bb5edd4",
+ "source_id": "9ee1be2815a918b9d1a74c64b8411d0e3eb122b2c1eb894dac9dc983784eccc4",
  "file_count": 228,
  "files": {
   ".dockerignore": "51acffa125b3d041889f51bdfe771d46303571b7407c6cc29621dbc9d2c1ce38",
@@ -9,7 +9,7 @@
   ".github/workflows/monitor.yml": "7fd82e8b2d443919eb0539c652d0f8daf5cc9089131e05632e4a5197001a4d4c",
   ".github/workflows/validate.yml": "3786f7634df8d3b5188eef271769820c6f3e98d1961d5d76d9cd43ffc1b0828d",
   ".gitignore": "862263fa1f46c20f0d1e4dac5ffcc75abd55c08211b2c3864c5f8764b9d87793",
-  "Hermes_Technical_Specification_v1.8.md": "efbddabab03659a35f3e240e15b42bfb780431d296eb202d2b9c18e0770bcab4",
+  "Hermes_Technical_Specification_v1.8.md": "fb7751b200b642260993087109a814ec816b847ca6f5c52f239a7bd4c62c9b61",
   "README.md": "df2a4ccef8b2a560de2309bd859648aaa5804927a6b2c4b9e42e1ce98a5dc3b0",
   "VERSION": "d2e181481b9515797bc42f282b122d2529d24ea985125bd5c95ded5004e0c7c9",
   "cli/hermes_cli_spec.md": "fff3ace5ee8d389fa56bd288c2a8cac2123bcd6bef0c0eebd67d4c9e1e529202",
@@ -96,7 +96,7 @@
   "docs/licensing_matrix.md": "d50c00c95c5a577f3159ead8cd48408dbe0a14286ce4f5f30112f292f660f7b1",
   "docs/load_targets.md": "59b2a33baba331085d54e252b2219aeec9d3614407e873a47aebff9a7517cae3",
   "docs/lock_order.md": "d9c5083038916b6896cc332d3a754aafe0e472c09e2a42f927df8f643bed7412",
-  "docs/reference_projects.md": "c67caa3e52e89112a5d8726479a45cd5138ea26719e3fe0a0597d6f6e6dc9e79",
+  "docs/reference_projects.md": "3e9149cdf719a6802edf244b7ad6d83d5ab95767ed4d526bc5c797c1330aca25",
   "docs/review_response_independent.md": "e0cdfbe41f3a247d04288fa2635ccfd7a5cf198f99def75add0788b980ae3815",
   "docs/review_response_v11.md": "78eae9b215e02e28940c61aa971675467ab8080647664fe567a91192754d9821",
   "docs/review_response_v13.md": "775a9eed55215cf78d1a4b758161d4b849eba82635f5cc1c189ebfa482fc43d4",

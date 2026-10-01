@@ -41,6 +41,7 @@ OWNER = "00000000-0000-0000-0000-0000000e2e0a"
 OPERATOR = "00000000-0000-0000-0000-0000000e2e0b"
 PHONE_ID = "pn-e2e-staging"
 FB_PAGE, IG_ACCOUNT, TT_ACCOUNT = "1069900000001", "178419900000001", "_000e2eTikTok01"
+SITE_KEY = "e2esiteKEYAAAAAAAAAAAAAAAA01"
 HOURS = "نفتح يوميًا من ٩ صباحًا إلى ١١ مساءً"
 MONITOR_TOKEN = os.environ.get("HERMES_MONITOR_TOKEN") or uuid.uuid4().hex   # staging: the service's own (shared var)
 JWT_SECRET = os.environ.get("HERMES_JWT_SECRET") or uuid.uuid4().hex * 2       # staging: the service's own (shared var)
@@ -71,7 +72,8 @@ def seed():
       " on conflict (customer_id, auth_user_id) do nothing", (CUSTOMER, OWNER))
     q("insert into app.channel_accounts (customer_id, kind, external_id, status, verified_at)"
       " values (%s, 'whatsapp_cloud', %s, 'active', now()) on conflict (kind, external_id) do nothing", (CUSTOMER, PHONE_ID))
-    for kind, ext_id in (("facebook_page", FB_PAGE), ("instagram_business", IG_ACCOUNT), ("tiktok_business", TT_ACCOUNT)):
+    for kind, ext_id in (("facebook_page", FB_PAGE), ("instagram_business", IG_ACCOUNT), ("tiktok_business", TT_ACCOUNT),
+                         ("site_form", SITE_KEY)):
         q("insert into app.channel_accounts (customer_id, kind, external_id, status, verified_at)"
           " values (%s, %s, %s, 'active', now()) on conflict (kind, external_id) do nothing", (CUSTOMER, kind, ext_id))
     q("update app.kb_facts set approved_by_owner = false where customer_id = %s and topic = 'hours' and fact <> %s"
@@ -277,6 +279,31 @@ def main():
                     " where c.body = %s and o.topic = 'content.publish' and o.dispatched_at is not null and c.status = 'published'", (body,)))
                 check(bool(done) and done[0][1].startswith("SIM_tt_" if kind == "tiktok_business" else "SIM_post_"),
                       f"post on {kind}: published only after the owner's approval, marked published under it")
+        # the contact form of the customer's site (28.24): stored for the owner, never answered automatically
+        def form_post(key, fields):
+            req = urllib.request.Request(f"{url}/forms/{key}", data=urllib.parse.urlencode(fields).encode(), method="POST",
+                                         headers={"Content-Type": "application/x-www-form-urlencoded", "X-Forwarded-For": f"198.51.100.{run[:2]}"})
+            try:
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    return r.status, r.read().decode()
+            except urllib.error.HTTPError as e:
+                return e.code, e.read().decode()
+        f_msg = f"عندكم توصيل لعدن؟ {run}"
+        status, page = form_post(SITE_KEY, {"message": f_msg, "name": "سالم", "phone": "+967 712 345 678"})
+        check(status == 200 and "وصلت رسالتك" in page, "site form: the visitor gets the thank-you page")
+        f_inq = wait("site form inquiry", lambda: q("select event_ref, body from app.inquiries where source = 'site_form' and body like %s",
+                                                    (f_msg + "%",)))
+        check(bool(f_inq) and "سالم · +967 712 345 678" in f_inq[0][1], "site form: the owner gets the message with the visitor's name and number")
+        check(bool(f_inq) and bool(wait("site form notice", lambda: q("select 1 from app.outbox where topic = 'notify.owner' and target_id = %s"
+                                                                       " and dispatched_at is not null", (f_inq[0][0],))))
+              and not q("select 1 from app.approvals where target_id = %s", (f_inq[0][0],)),
+              "site form: the owner is notified; nothing is proposed or sent to the visitor")
+        before = q("select count(*) from app.webhook_events where kind = 'site_form'")[0][0]
+        status_trap, _ = form_post(SITE_KEY, {"message": "spam", "website": "http://spam.example"})
+        status_unknown, _ = form_post("unknownKEYBBBBBBBBBBBBBBBBBB01", {"message": "x"})
+        check((status_trap, status_unknown) == (200, 404) and q("select count(*) from app.webhook_events where kind = 'site_form'")[0][0] == before,
+              "site form: a bot (trap field) and an unknown site key store nothing")
+
         blocked = f"هذا العسل يعالج السكر {run}"                 # a health claim: content_guard blocks it in posts
         portal(url, owner_p, "POST", {"_path": "/portal/posts/new", "account": f"facebook_page:{FB_PAGE}", "body": blocked,
                                       "csrf": csrf_token(owner_p, JWT_SECRET)})

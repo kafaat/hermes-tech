@@ -9,6 +9,7 @@
   GET  /portal, POST /portal/...   the owner portal (service/portal.py): pending replies, inquiries, facts. Sign-in
                   through Supabase Auth when HERMES_SUPABASE_URL and HERMES_SUPABASE_ANON_KEY are set (the access
                   tokens are verified with HERMES_JWT_SECRET, the project's JWT secret)
+  POST /forms/<site key>          the contact form of a customer's site (service/site_form.py, spec 28.24)
   GET  /healthz   database reachable (as hermes_ingest), the deployed commit and the handler counters (numbers only)
   GET  /deps      what must stay true between deploys, for an external uptime monitor: app.health_signals() as
                   hermes_monitor (numbers, never rows); 503 when a signal fails. The numbers and the failing names
@@ -30,6 +31,7 @@ from service.health import SIGNALS, assess, authorized
 from service.pg import Database, Ingest, PortalDb
 from service.portal import Portal
 from service.supabase_auth import from_env as supabase_from_env
+from service.site_form import FORM_MAX_BYTES, FormHandler
 from service.webhook import MAX_BODY_BYTES, Handler, verify_subscription
 from service.worker import Worker, adapters_for, worker_name
 
@@ -39,7 +41,7 @@ SHUTDOWN_WAIT_SECONDS = 25        # for the task in hand after SIGTERM: above a 
 
 
 def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | None = None, monitor_token: str = "",
-                      portal: Portal | None = None):
+                      portal: Portal | None = None, forms: FormHandler | None = None):
     class H(BaseHTTPRequestHandler):
         def _reply(self, status: int, body: str, ctype: str = "text/plain; charset=utf-8"):
             data = body.encode("utf-8") if isinstance(body, str) else body
@@ -100,6 +102,21 @@ def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | N
                 if length > 4096:
                     return self._reply(413, "too large")
                 return self._portal(self.rfile.read(length))
+            if forms is not None and path.startswith("/forms/"):
+                try:
+                    length = int(self.headers.get("Content-Length") or 0)
+                except ValueError:
+                    return self._reply(400, "bad length")
+                if length > FORM_MAX_BYTES:
+                    return self._reply(413, "too large")      # never read an oversize body
+                status, headers, data = forms.handle(path[len("/forms/"):], dict(self.headers.items()), self.rfile.read(length))
+                self.send_response(status)
+                for k, v in headers:
+                    self.send_header(k, v)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
             if path != "/webhook":
                 return self._reply(404, "not found")
             try:
@@ -135,7 +152,8 @@ def main():
     secrets = [s.strip().encode() for s in os.environ["HERMES_WEBHOOK_SECRETS"].split(",") if s.strip()]
     if not secrets:
         sys.exit("HERMES_WEBHOOK_SECRETS is empty")
-    webhook = Handler(secrets, Ingest(Database(url, "hermes_ingest")))
+    ingest = Ingest(Database(url, "hermes_ingest"))
+    webhook = Handler(secrets, ingest)
     worker = Worker(Database(url, "hermes_worker"), worker_name(), adapters,
                     approval_poll_seconds=int(os.environ.get("HERMES_APPROVAL_POLL_SECONDS", "60")))
     stop = threading.Event()
@@ -150,7 +168,7 @@ def main():
                     simulate=os.environ.get("HERMES_GRAPH") == "simulate")
     server = ThreadingHTTPServer(("0.0.0.0", port), make_http_handler(
         webhook, os.environ.get("HERMES_VERIFY_TOKEN", ""), Database(url, "hermes_monitor"),
-        os.environ.get("HERMES_MONITOR_TOKEN", ""), portal))
+        os.environ.get("HERMES_MONITOR_TOKEN", ""), portal, FormHandler(ingest)))
 
     def on_term(signum, frame):                    # Railway sends SIGTERM, then SIGKILL after drainingSeconds: stop taking
         log.info("SIGTERM: draining")               # requests, let the current task finish (its lease covers a kill anyway)

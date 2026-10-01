@@ -241,6 +241,8 @@ class Worker:
             proposal = cur.fetchone()
         if "status" in payload:
             return self._receipt(t, event_id, payload["status"])
+        if "form" in payload:                             # the contact form of the customer's site (28.24)
+            return self._form(t, event_id, ext, payload["form"])
         if proposal is not None:
             return self._after_proposal(t, event_id, ext, proposal)
         return self._message(t, event_id, ext, channel, payload.get("message") or {}, kind, payload.get("messaging"))
@@ -293,6 +295,30 @@ class Worker:
                             (approval_id, content_id))
         self._complete(t, "succeeded" if outcome == SENT else "escalated", None if outcome == SENT else "SEND_" + outcome.upper())
         return "published" if outcome == SENT else outcome
+
+    def _form(self, t: Task, event_id: int, ext: str, form: dict) -> str:
+        """A site visitor's message: recorded (with the name and number the visitor gave, purged after 30 days like
+        every inquiry body) and always escalated to the owner, who answers the visitor; WhatsApp allows no business-
+        initiated message without an approved template, so nothing is sent to the visitor automatically."""
+        text = str(form.get("message") or "").strip()
+        contact = " · ".join(x for x in (str(form.get("name") or "").strip(), str(form.get("phone") or "").strip()) if x)
+        route = self.matcher.route(text, "patron")
+        cats = route.get("categories") or []
+        with self.db.tx(t.bind) as cur:
+            cur.execute("insert into app.inquiries (customer_id, source, body, matched_category, owner_inquiry, routed_to, event_ref,"
+                        " message_type) values (%s, 'site_form', %s, %s, %s, %s, %s, 'text')"
+                        " on conflict (customer_id, event_ref) where event_ref is not null do nothing",
+                        (t.customer_id, text + (f"\n— {contact}" if contact else ""), cats[0] if cats else None,
+                         route["kind"] == "owner_inquiry", route.get("routes", []), ext[:200]))
+        notice = {"event": ext, "reason": route["kind"] if route["action"] == "escalate" else "site_form", "categories": cats,
+                  "sla_minutes": route.get("sla_minutes")}
+        with self.db.tx(t.bind) as cur:
+            cur.execute("select app.enqueue_outbox('notify.owner', %s, null, %s)", (_json(notice), ext))
+            outbox_id = cur.fetchone()[0]
+        self._dispatch(t, outbox_id)
+        self._processed(t, event_id)
+        self._complete(t, "escalated", notice["reason"][:60])
+        return "escalated"
 
     def _resend(self, t: Task, outbox_id: int) -> str:
         """The same dispatcher and claim as any send: the database refuses a row that is not pending again, and a

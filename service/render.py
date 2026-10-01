@@ -4,7 +4,7 @@
 
 Placeholders are the only way owner data enters a page:
   {{field}}       HTML text or a QUOTED attribute value: escaped with html.escape(quote=True)
-  {{url:field}}   inside href/src only: must pass safe_url(); otherwise "#" is written and the field is reported
+  {{url:field}}   inside href/src/action only: must pass safe_url(); otherwise "#" is written and the field is reported
 There is no raw/unescaped form. check_template() refuses a template that places a placeholder inside
 <script>/<style>, in an event-handler or style attribute, or in an unquoted attribute, because escaping is
 not enough in those contexts. Every site template passes check_template() in CI.
@@ -56,8 +56,8 @@ def check_template(template: str) -> None:
                 raise TemplateError(f"placeholder {m.group(0)} in an unquoted attribute")
             if name.startswith("on") or name in ("style", "srcdoc", "formaction"):
                 raise TemplateError(f"placeholder {m.group(0)} in the {name} attribute")
-            if m.group(1) and name not in ("href", "src"):
-                raise TemplateError(f"url placeholder {m.group(0)} outside href/src")
+            if m.group(1) and name not in ("href", "src", "action"):
+                raise TemplateError(f"url placeholder {m.group(0)} outside href/src/action")
             if not m.group(1) and name in ("href", "src", "action"):
                 raise TemplateError(f"text placeholder {m.group(0)} in {name}: use {{{{url:...}}}}")
         elif m.group(1):

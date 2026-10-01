@@ -56,6 +56,13 @@ class Ingest:
         except psycopg.errors.UniqueViolation:
             return "duplicate"
 
+    def channel_active(self, kind: str, external_id: str) -> bool:
+        """An active channel of that kind and id (hermes_ingest reads only kind, id and status, 0010)."""
+        with self.db.tx() as cur:
+            cur.execute("select 1 from app.channel_accounts where kind = %s and external_id = %s and status = 'active'",
+                        (kind, external_id))
+            return cur.fetchone() is not None
+
 
 class OutboxPort:
     """dispatcher.DbPort, bound to the lease of the task that owns the effect."""

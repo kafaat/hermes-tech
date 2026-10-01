@@ -47,5 +47,15 @@ class TestRender(unittest.TestCase):
             render("<p>{{about}}</p>", {})
 
 
+class TestFormAction(unittest.TestCase):
+    def test_a_form_action_takes_only_a_validated_url(self):
+        tpl = '<form method="post" action="{{url:a}}"></form>'
+        self.assertEqual(render(tpl, {"a": "https://app.example/forms/k"})[0], '<form method="post" action="https://app.example/forms/k"></form>')
+        html, refused = render(tpl, {"a": "javascript:alert(1)"})
+        self.assertEqual((html, refused), ('<form method="post" action="#"></form>', ["a"]))
+        with self.assertRaises(TemplateError):
+            check_template('<form action="{{a}}"></form>')              # a text placeholder in action stays refused
+
+
 if __name__ == "__main__":
     unittest.main()

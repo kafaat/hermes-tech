@@ -90,5 +90,28 @@ class TestWebhook(unittest.TestCase):
         self.assertFalse(signature_ok(b"x", sign(b"x")[:-1] + "0" if sign(b"x")[-1] != "0" else sign(b"x")[:-1] + "1", [SECRET]))
 
 
+class TestMessengerAndInstagram(unittest.TestCase):
+    def test_messenger_and_instagram_direct_are_stored_per_account_and_echoes_skipped(self):
+        page = {"object": "page", "entry": [{"id": "1061234567", "messaging": [
+            {"sender": {"id": "2551234567"}, "recipient": {"id": "1061234567"}, "message": {"mid": "m_A", "text": "متى تفتحون؟"}},
+            {"sender": {"id": "1061234567"}, "recipient": {"id": "2551234567"}, "message": {"mid": "m_ECHO", "is_echo": True, "text": "x"}},
+            {"sender": {"id": "2551234567"}, "delivery": {"mids": ["m_OUT"]}}]}]}
+        ig = {"object": "instagram", "entry": [{"id": "178414000001", "messaging": [
+            {"sender": {"id": "9912345678"}, "recipient": {"id": "178414000001"}, "message": {"mid": "aWdf1", "text": "السعر؟"}}]}]}
+        self.assertEqual([e[:3] for e in events_from(page)], [("facebook_page", "m_A", "1061234567")])
+        self.assertEqual([e[:3] for e in events_from(ig)], [("instagram_business", "aWdf1", "178414000001")])
+        ingest = FakeIngest()
+        body = json.dumps(ig).encode()
+        self.assertEqual(Handler([SECRET], ingest).handle({"X-Hub-Signature-256": sign(body)}, body), (200, "ok"))
+        self.assertIn(("instagram_business", "aWdf1"), ingest.rows)
+
+    def test_an_unrecognised_instagram_payload_is_kept_unrouted_as_instagram(self):
+        ingest = FakeIngest()
+        body = json.dumps({"object": "instagram", "entry": [{"id": "1", "changes": []}]}).encode()
+        Handler([SECRET], ingest).handle({"X-Hub-Signature-256": sign(body)}, body)
+        (kind, _), = ingest.rows
+        self.assertEqual(kind, "instagram_business")
+
+
 if __name__ == "__main__":
     unittest.main()

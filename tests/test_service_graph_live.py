@@ -93,6 +93,52 @@ class TestLiveSend(unittest.TestCase):
             self.assertEqual(str(e.exception), "BAD_TARGET")
 
 
+class TestMessengerAndInstagramSend(unittest.TestCase):
+    def run_row(self, payload, connector, tokens=None):
+        sent = []
+
+        def recording(plan, request):
+            sent.append((plan["host"], request))
+            return connector(plan, request)
+        api = ApiClient({"graph.facebook.com", "graph.instagram.com"}, lambda h: [PUBLIC], recording)
+        from service.dispatcher import MetaMessagingAdapter
+        adapter = MetaMessagingAdapter(graph_post(api), ({"1061234567": "PAGE-T", "178414000001": "IG-T"} if tokens is None else tokens).get)
+        db = Db()
+        db.row = lambda outbox_id: {"id": 9, "topic": "reply.send", "customer_id": "c1", "payload": payload}
+        return Dispatcher(db, {"reply.send": adapter}).run_once(9), db.finished, sent
+
+    def test_messenger_reply_goes_to_the_page_with_its_token(self):
+        payload = {"channel": "facebook_page", "account_id": "1061234567", "to": "2551234567", "body": "نفتح 9", "in_reply_to": "m_A"}
+        outcome, finished, sent = self.run_row(payload, lambda p, r: http(200, b'{"recipient_id":"2551234567","message_id":"m_OUT1"}'))
+        self.assertEqual((outcome, finished[0][1]), (SENT, "m_OUT1"))
+        host, req = sent[0]
+        self.assertEqual(host, "graph.facebook.com")
+        self.assertTrue(req.startswith(b"POST /v21.0/1061234567/messages HTTP/1.0"))
+        self.assertIn(b"Authorization: Bearer PAGE-T", req)
+        self.assertIn('"recipient":{"id":"2551234567"}'.encode(), req)
+        self.assertIn(b'"messaging_type":"RESPONSE"', req)
+
+    def test_instagram_reply_goes_to_graph_instagram_and_a_missing_token_is_a_clean_failure(self):
+        payload = {"channel": "instagram_business", "account_id": "178414000001", "to": "9912345678", "body": "x", "in_reply_to": "a"}
+        outcome, _, sent = self.run_row(payload, lambda p, r: http(200, b'{"message_id":"ig_1"}'))
+        self.assertEqual((outcome, sent[0][0]), (SENT, "graph.instagram.com"))
+        outcome, finished, sent = self.run_row(payload, lambda p, r: http(200), tokens={})
+        self.assertEqual((outcome, finished[0][2], sent), (FAILED_BEFORE_SEND, "BeforeSend: NO_ACCOUNT_TOKEN", []))
+
+    def test_ids_from_the_payload_cannot_shape_the_url(self):
+        for bad in ({"account_id": "106/../me"}, {"to": "25?x=1"}, {"channel": "telegram"}):
+            payload = {"channel": "facebook_page", "account_id": "1061234567", "to": "2551234567", "body": "x", **bad}
+            outcome, finished, sent = self.run_row(payload, lambda p, r: http(200))
+            self.assertEqual((outcome, sent), (FAILED_BEFORE_SEND, []), bad)
+
+    def test_account_tokens_are_validated_at_start(self):
+        from service.worker import account_tokens
+        self.assertEqual(account_tokens('{"1061234567": "EAAG-page"}'), {"1061234567": "EAAG-page"})
+        for raw in ("[1]", '{"page": "t"}', '{"1061234567": "a b"}', "not json"):
+            with self.subTest(raw), self.assertRaises(RuntimeError):
+                account_tokens(raw)
+
+
 class TestModes(unittest.TestCase):
     def test_live_needs_a_token_and_reaches_only_graph(self):
         with self.assertRaises(RuntimeError):
@@ -103,7 +149,7 @@ class TestModes(unittest.TestCase):
             live_adapters({"HERMES_GRAPH": "live", "HERMES_GRAPH_TOKEN": TOKEN, "HERMES_SIM_SEND_DELAY_SECONDS": "5"})
         a = live_adapters({"HERMES_GRAPH": "live", "HERMES_GRAPH_TOKEN": TOKEN})
         self.assertEqual(a["notify.owner"].send({"id": 7}), "portal.7")             # the owner reads it in the portal
-        self.assertEqual(a["reply.send"].token_for_customer("any"), TOKEN)
+        self.assertEqual(a["reply.send"].whatsapp.token_for_customer("any"), TOKEN)
 
     def test_only_simulate_or_live_and_the_staging_login_stays_simulate_only(self):
         for mode in (None, "", "Live", "real"):

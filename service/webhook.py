@@ -7,7 +7,8 @@ Order is part of the contract and is tested:
   2. X-Hub-Signature-256 must equal "sha256=" + hex(HMAC-SHA256(app_secret, raw_body)), compared in
      constant time, BEFORE any JSON parsing (a parser bug is unreachable by an unsigned request); several
      secrets are accepted only during a rotation window;
-  3. parse; one event per message / status / page item, keyed by the provider's own id;
+  3. parse; one event per message / status / Messenger or Instagram Direct message (echoes of our own replies are
+     skipped), keyed by the provider's own id;
   4. insert through the ingest role (hermes_ingest) with the ADDRESSED channel id; the database routes the
      tenant from channel_accounts (0010 webhook_route) and enqueues the task. The handler never chooses a tenant;
   5. 200 only after every insert committed; a duplicate delivery is a success, not an error.
@@ -72,12 +73,15 @@ def events_from(payload: dict) -> list[tuple[str, str, str | None, dict]]:
                 for st in v.get("statuses") or []:          # delivery receipts reconcile the outbox by wamid
                     if st.get("id") and st.get("status"):
                         out.append(("whatsapp_cloud", f"status:{st['id']}:{st['status']}", pn, {"status": st}))
-        elif obj == "page":
-            page = entry.get("id")
+        elif obj in ("page", "instagram"):                 # Messenger and Instagram Direct share the messaging shape
+            kind = "facebook_page" if obj == "page" else "instagram_business"
+            account = entry.get("id")                        # the page id, or the Instagram professional account id
             for m in entry.get("messaging") or []:
-                mid = (m.get("message") or {}).get("mid")
-                if mid:
-                    out.append(("facebook_page", str(mid), str(page) if page else None, {"messaging": m}))
+                msg = m.get("message") or {}
+                if msg.get("is_echo"):                       # our own reply coming back: not a customer message
+                    continue
+                if msg.get("mid"):
+                    out.append((kind, str(msg["mid"]), str(account) if account else None, {"messaging": m}))
     return out
 
 
@@ -104,7 +108,7 @@ class Handler:
             return 400, "unparseable"
         items = events_from(payload)
         if not items:                            # signed but nothing we route: keep it for an operator, unrouted
-            items = [("whatsapp_cloud" if payload.get("object") == "whatsapp_business_account" else "facebook_page",
+            items = [({"whatsapp_business_account": "whatsapp_cloud", "instagram": "instagram_business"}.get(payload.get("object"), "facebook_page"),
                       "raw:" + hashlib.sha256(raw_body).hexdigest(), None, {"unrecognised": True})]
         for kind, ext_id, channel, item in items:
             r = self.ingest.insert_event(kind, ext_id, True, item, channel)

@@ -127,3 +127,47 @@ class WhatsAppCloudAdapter:
                 raise RuntimeError("success without a message id")    # accepted but unidentifiable: ambiguous
         code = str(((data or {}).get("error") or {}).get("code", ""))
         raise Rejected(status, code)
+
+
+class MetaMessagingAdapter:
+    """reply.send over Messenger (graph.facebook.com/<page id>/messages) or Instagram Direct (graph.instagram.com/
+    <Instagram account id>/messages), standard messaging inside the 24-hour window that every reply proposal already
+    respects (approvals_reply_window). The token is the account's own (a page or Instagram access token); a missing
+    one is a clean failure before sending."""
+
+    HOSTS = {"facebook_page": "graph.facebook.com", "instagram_business": "graph.instagram.com"}
+
+    def __init__(self, post, token_for_account, api_version: str = "v21.0"):
+        self.post, self.token_for_account, self.api_version = post, token_for_account, api_version
+
+    def send(self, row: dict) -> str:
+        p = row["payload"]
+        host, account, to = self.HOSTS.get(p.get("channel")), str(p.get("account_id", "")), str(p.get("to", ""))
+        if host is None or not re.fullmatch(r"[0-9]{5,25}", account) or not re.fullmatch(r"[0-9]{5,40}", to) \
+           or not re.fullmatch(r"v\d{1,2}\.\d", self.api_version):
+            raise BeforeSend("BAD_TARGET")
+        token = self.token_for_account(account)
+        if not token:
+            raise BeforeSend("NO_ACCOUNT_TOKEN")
+        url = f"https://{host}/{self.api_version}/{account}/messages"
+        body = {"recipient": {"id": to}, "messaging_type": "RESPONSE", "message": {"text": p["body"]}}
+        status, data = self.post(url, body, {"Authorization": f"Bearer {token}"}, SEND_TIMEOUT_SECONDS)
+        if 200 <= status < 300:
+            mid = (data or {}).get("message_id")
+            if not mid:
+                raise RuntimeError("success without a message id")      # accepted but unidentifiable: ambiguous
+            return str(mid)
+        code = str(((data or {}).get("error") or {}).get("code", ""))
+        raise Rejected(status, code)
+
+
+class ReplyRouter:
+    """reply.send goes back on the channel the customer wrote on: WhatsApp, or Messenger / Instagram Direct."""
+
+    def __init__(self, whatsapp, meta):
+        self.whatsapp, self.meta = whatsapp, meta
+
+    def send(self, row: dict) -> str:
+        if row["payload"].get("channel") in MetaMessagingAdapter.HOSTS:
+            return self.meta.send(row)
+        return self.whatsapp.send(row)

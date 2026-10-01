@@ -40,6 +40,7 @@ CUSTOMER = "00000000-0000-0000-0000-0000000e2e01"
 OWNER = "00000000-0000-0000-0000-0000000e2e0a"
 OPERATOR = "00000000-0000-0000-0000-0000000e2e0b"
 PHONE_ID = "pn-e2e-staging"
+FB_PAGE, IG_ACCOUNT = "1069900000001", "178419900000001"
 HOURS = "نفتح يوميًا من ٩ صباحًا إلى ١١ مساءً"
 MONITOR_TOKEN = os.environ.get("HERMES_MONITOR_TOKEN") or uuid.uuid4().hex   # staging: the service's own (shared var)
 JWT_SECRET = os.environ.get("HERMES_JWT_SECRET") or uuid.uuid4().hex * 2       # staging: the service's own (shared var)
@@ -70,6 +71,9 @@ def seed():
       " on conflict (customer_id, auth_user_id) do nothing", (CUSTOMER, OWNER))
     q("insert into app.channel_accounts (customer_id, kind, external_id, status, verified_at)"
       " values (%s, 'whatsapp_cloud', %s, 'active', now()) on conflict (kind, external_id) do nothing", (CUSTOMER, PHONE_ID))
+    for kind, ext_id in (("facebook_page", FB_PAGE), ("instagram_business", IG_ACCOUNT)):    # Messenger, Instagram Direct
+        q("insert into app.channel_accounts (customer_id, kind, external_id, status, verified_at)"
+          " values (%s, %s, %s, 'active', now()) on conflict (kind, external_id) do nothing", (CUSTOMER, kind, ext_id))
     q("update app.kb_facts set approved_by_owner = false where customer_id = %s and topic = 'hours' and fact <> %s"
       " and approved_by_owner", (CUSTOMER, HOURS))           # one approved hours answer: earlier runs leave none behind
     if not q("select 1 from app.kb_facts where customer_id = %s and topic = 'hours' and approved_by_owner", (CUSTOMER,)):
@@ -221,6 +225,36 @@ def main():
         check(bool(wait("reaction done", lambda: (task_status(r_ext0) or ("",))[0] == "succeeded"))
               and not q("select 1 from app.inquiries where event_ref = %s", (r_ext0,))
               and not q("select 1 from app.outbox where target_id = %s", (r_ext0,)), "reaction -> ignored: no inquiry, no notice")
+
+        # Messenger and Instagram Direct: the same rules, the answer goes back on the channel the customer used
+        fb_ext, ig_ext = f"m_E2E.{run}.fb", f"aWdf.E2E.{run}.ig"
+        check(post(url, secret, {"object": "page", "entry": [{"id": FB_PAGE, "messaging": [
+            {"sender": {"id": "2559900000001"}, "recipient": {"id": FB_PAGE}, "message": {"mid": fb_ext, "text": "متى تفتحون اليوم؟"}},
+            {"sender": {"id": FB_PAGE}, "recipient": {"id": "2559900000001"},
+             "message": {"mid": f"m_E2E.{run}.echo", "is_echo": True, "text": "x"}}]}]}) == 200
+              and post(url, secret, {"object": "instagram", "entry": [{"id": IG_ACCOUNT, "messaging": [
+                  {"sender": {"id": "9919900000001"}, "recipient": {"id": IG_ACCOUNT},
+                   "message": {"mid": ig_ext, "text": "الفاتورة غلط ودفعت مرتين"}}]}]}) == 200,
+              "Messenger and Instagram Direct messages accepted (200)")
+        check(not q("select 1 from app.webhook_events where external_event_id = %s", (f"m_E2E.{run}.echo",)),
+              "Messenger: the echo of our own message is not stored")
+        fb_ap = wait("Messenger proposal", lambda: q("select id, payload from app.approvals where target_id = %s", (fb_ext,)))
+        check(bool(fb_ap) and fb_ap[0][1].get("channel") == "facebook_page" and fb_ap[0][1].get("account_id") == FB_PAGE
+              and fb_ap[0][1].get("to") == "2559900000001" and fb_ap[0][1].get("body") == HOURS,
+              "Messenger question -> a reply proposal addressed back to the page conversation")
+        check(bool(wait("Instagram complaint escalated", lambda: q(
+            "select 1 from app.outbox where topic = 'notify.owner' and target_id = %s and dispatched_at is not null", (ig_ext,))))
+              and q("select source::text from app.inquiries where event_ref = %s", (ig_ext,)) == [("instagram",)]
+              and not q("select 1 from app.approvals where target_id = %s", (ig_ext,)),
+              "Instagram complaint -> owner notified, recorded as instagram, never auto-answered")
+        if fb_ap:
+            owner_t = issue_staging_token(OWNER, JWT_SECRET)
+            portal(url, owner_t, "POST", {"_path": "/portal/decide", "approval": str(fb_ap[0][0]), "decision": "approved",
+                                          "csrf": csrf_token(owner_t, JWT_SECRET)})
+            fb_sent = wait("Messenger reply sent", lambda: q("select provider_message_id from app.outbox where target_id = %s"
+                                                            " and topic = 'reply.send' and dispatched_at is not null", (fb_ext,)))
+            check(bool(fb_sent) and fb_sent[0][0].startswith("m_SIM."),
+                  "Messenger: after the owner's approval the reply goes out through Messenger (message id m_...)")
 
         if ap:
             token = issue_staging_token(OWNER, JWT_SECRET)

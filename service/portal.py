@@ -181,6 +181,8 @@ def _mask(phone) -> str:
     return "•••" + digits[-3:] if digits else "—"
 
 
+CHANNEL_AR = {"whatsapp": "واتساب", "facebook": "ماسنجر", "instagram": "إنستغرام", "site_form": "نموذج الموقع",
+              "tiktok": "تيك توك"}
 MESSAGE_TYPE_AR = {"audio": "رسالة صوتية", "image": "صورة", "video": "فيديو", "document": "ملف", "sticker": "ملصق",
                    "location": "موقع على الخريطة", "contacts": "بطاقة جهة اتصال", "unsupported": "رسالة من نوع غير مدعوم"}
 
@@ -192,7 +194,7 @@ def _inquiry_body(q: dict) -> str:
     if label and q["body"]:
         return f"[{label}] {q['body']}"
     if label:
-        return f"[{label}] افتحها في واتساب للرد."
+        return f"[{label}] افتحها في {CHANNEL_AR.get(q.get('source') or 'whatsapp', 'واتساب')} للرد."
     return q["body"] if q["body"] is not None else "(حُذف النص بعد 30 يومًا)"
 
 
@@ -477,7 +479,8 @@ class Portal:
         out.append(_r(APPROVALS_H, count=len(data["approvals"])))
         for a in data["approvals"]:
             p = a["payload"] if isinstance(a["payload"], dict) else {}
-            out.append(_r(APPROVAL, id=a["id"], to=_mask(p.get("to")), expires=_when(a["expires_at"]),
+            via = {"facebook_page": " عبر ماسنجر", "instagram_business": " عبر إنستغرام"}.get(p.get("channel"), "")
+            out.append(_r(APPROVAL, id=a["id"], to=_mask(p.get("to")) + via, expires=_when(a["expires_at"]),
                           body=p.get("body", ""), csrf=csrf))
         if not data["approvals"]:
             out.append(_r(NONE, text="لا شيء ينتظر موافقتك."))

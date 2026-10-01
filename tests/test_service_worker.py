@@ -106,6 +106,23 @@ class TestMessageContent(unittest.TestCase):
         self.assertEqual(_inquiry_body({"type": "image", "body": "كم السعر؟"}), "[صورة] كم السعر؟")
         self.assertEqual(_inquiry_body({"type": "text", "body": None}), "(حُذف النص بعد 30 يومًا)")
         self.assertEqual(_inquiry_body({"type": "text", "body": "مرحبا"}), "مرحبا")
+        self.assertEqual(_inquiry_body({"type": "audio", "body": None, "source": "instagram"}), "[رسالة صوتية] افتحها في إنستغرام للرد.")
+
+
+class TestMessagingContent(unittest.TestCase):
+    def test_messenger_and_instagram_events_give_type_text_and_sender(self):
+        from service.worker import messaging_content
+        cases = [
+            ({"sender": {"id": "25"}, "message": {"mid": "m", "text": " متى تفتحون؟ "}}, ("text", "متى تفتحون؟", "25")),
+            ({"sender": {"id": "25"}, "message": {"mid": "m", "text": "المنيو", "quick_reply": {"payload": "MENU"}}}, ("interactive", "المنيو", "25")),
+            ({"sender": {"id": "25"}, "message": {"mid": "m", "attachments": [{"type": "audio"}]}}, ("audio", "", "25")),
+            ({"sender": {"id": "25"}, "message": {"mid": "m", "text": "كم هذا؟", "attachments": [{"type": "image"}]}}, ("image", "كم هذا؟", "25")),
+            ({"sender": {"id": "25"}, "message": {"mid": "m", "sticker_id": 369239263222822}}, ("sticker", "", "25")),
+            ({"sender": {"id": "25"}, "message": {"mid": "m", "attachments": [{"type": "story_mention"}]}}, ("unsupported", "", "25")),
+            ({"sender": {"id": "25"}, "reaction": {"reaction": "love"}}, ("reaction", "", "25"))]
+        for m, want in cases:
+            with self.subTest(want[0]):
+                self.assertEqual(messaging_content(m), want)
 
 
 if __name__ == "__main__":

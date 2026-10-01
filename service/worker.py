@@ -13,7 +13,7 @@ The reply text is an owner-approved fact (canned answer, §8.3): no model call o
 task is not caught into a status: the lease expires, recovery re-queues it, and the third expiry dead-letters it.
 """
 from __future__ import annotations
-import logging, os, re, sys, time, uuid
+import json, logging, os, re, sys, time, uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,7 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 from complaints import Matcher, normalize  # noqa: E402
 from content_guard import ContentGuard  # noqa: E402
 
-from service.dispatcher import SEND_TIMEOUT_SECONDS, SENT, BeforeSend, Dispatcher, WhatsAppCloudAdapter  # noqa: E402
+from service.dispatcher import (SEND_TIMEOUT_SECONDS, SENT, BeforeSend, Dispatcher, MetaMessagingAdapter,  # noqa: E402
+                                ReplyRouter, WhatsAppCloudAdapter)
 
 log = logging.getLogger("hermes.worker")
 AGENT = "agent_triage"
@@ -57,6 +58,30 @@ def message_content(msg: dict) -> tuple[str, str]:
     if kind in MEDIA_TYPES:
         return kind, str((msg.get(kind) or {}).get("caption") or "").strip() if kind in ("image", "video", "document") else ""
     return "unsupported", ""
+
+
+ATTACHMENT_TYPES = {"image": "image", "audio": "audio", "video": "video", "file": "document", "location": "location",
+                    "ig_reel": "video", "reel": "video"}
+SOURCE = {"whatsapp_cloud": "whatsapp", "facebook_page": "facebook", "instagram_business": "instagram"}
+
+
+def messaging_content(m: dict) -> tuple[str, str, str]:
+    """(type, text, sender id) for a Messenger or Instagram Direct event: text, a quick reply's text, or an
+    attachment (its type; a caption-like text when the customer wrote one); a sticker or a reaction has no text."""
+    sender = str((m.get("sender") or {}).get("id") or "")
+    msg = m.get("message")
+    if not isinstance(msg, dict):
+        return ("reaction" if m.get("reaction") else "unsupported"), "", sender
+    text = str(msg.get("text") or "").strip()
+    if msg.get("sticker_id"):
+        return "sticker", "", sender
+    attachments = msg.get("attachments") or []
+    if attachments:
+        kind = ATTACHMENT_TYPES.get(str((attachments[0] or {}).get("type")), "unsupported")
+        return kind, text, sender
+    if msg.get("quick_reply") and text:
+        return "interactive", text, sender
+    return ("text", text, sender) if text else ("unsupported", "", sender)
 
 
 def decide(text: str, route: dict, facts: dict, guard: ContentGuard, norm_rules: dict) -> dict:
@@ -95,6 +120,11 @@ class SimulatedGraph:
         self.sent, self.delay = [], delay
 
     def __call__(self, url, body, headers, timeout):
+        if "recipient" in body:                         # Messenger / Instagram Direct answer with a message_id
+            mid = "m_SIM." + uuid.uuid4().hex
+            self.sent.append({"url": url, "to": body["recipient"].get("id"), "id": mid})
+            accepted(mid, self.delay, timeout=timeout)
+            return 200, {"recipient_id": body["recipient"].get("id"), "message_id": mid}
         wamid = "wamid.SIM." + uuid.uuid4().hex
         self.sent.append({"url": url, "to": body.get("to"), "id": wamid})
         accepted(wamid, self.delay, timeout=timeout)
@@ -198,7 +228,7 @@ class Worker:
             return self._receipt(t, event_id, payload["status"])
         if proposal is not None:
             return self._after_proposal(t, event_id, ext, proposal)
-        return self._message(t, event_id, ext, channel, payload.get("message") or {})
+        return self._message(t, event_id, ext, channel, payload.get("message") or {}, kind, payload.get("messaging"))
 
     def _resend(self, t: Task, outbox_id: int) -> str:
         """The same dispatcher and claim as any send: the database refuses a row that is not pending again, and a
@@ -217,8 +247,13 @@ class Worker:
         self._complete(t, "succeeded")
         return "receipt"
 
-    def _message(self, t: Task, event_id: int, ext: str, channel: str, msg: dict) -> str:
-        kind, text = message_content(msg)
+    def _message(self, t: Task, event_id: int, ext: str, channel: str, msg: dict, source_kind: str = "whatsapp_cloud",
+                 messaging: dict | None = None) -> str:
+        if source_kind in ("facebook_page", "instagram_business"):
+            kind, text, sender = messaging_content(messaging or {})
+        else:
+            kind, text = message_content(msg)
+            sender = str(msg.get("from", ""))
         if kind == "reaction":                          # an emoji on one of our messages: nothing to answer, nobody to page
             self._processed(t, event_id)
             self._complete(t, "succeeded")
@@ -230,17 +265,21 @@ class Worker:
             facts = dict(cur.fetchall())
             cats = route.get("categories") or []
             cur.execute("insert into app.inquiries (customer_id, source, body, matched_category, owner_inquiry, routed_to, event_ref,"
-                        " message_type) values (%s, 'whatsapp', %s, %s, %s, %s, %s, %s)"
+                        " message_type) values (%s, %s, %s, %s, %s, %s, %s, %s)"
                         " on conflict (customer_id, event_ref) where event_ref is not null do nothing",   # a re-run task: once (0018)
-                        (t.customer_id, text or None, cats[0] if cats else None, route["kind"] == "owner_inquiry",
+                        (t.customer_id, SOURCE.get(source_kind, "other"), text or None, cats[0] if cats else None,
+                         route["kind"] == "owner_inquiry",
                          route.get("routes", []), ext[:200] or None, kind))
         if not text and kind != "text":                 # a voice note, a sticker, a location: the owner opens it in WhatsApp
             d = {"action": "escalate", "reason": f"non_text:{kind}", "categories": [], "sla_minutes": None}
         else:
             d = decide(text, route, facts, self.guard, self.matcher.rules)
         if d["action"] == "propose":
-            reply = {"phone_number_id": channel, "to": str(msg.get("from", "")), "body": d["body"], "in_reply_to": ext,
-                     "topic": d["topic"]}
+            if source_kind == "whatsapp_cloud":
+                reply = {"phone_number_id": channel, "to": sender, "body": d["body"], "in_reply_to": ext, "topic": d["topic"]}
+            else:                                       # the same channel the customer wrote on (Messenger, Instagram Direct)
+                reply = {"channel": source_kind, "account_id": channel, "to": sender, "body": d["body"], "in_reply_to": ext,
+                         "topic": d["topic"]}
             with self.db.tx(t.bind) as cur:
                 cur.execute("insert into app.approvals (customer_id, scope, proposal_action, payload, requested_by_agent, target_id, expires_at)"
                             " values (%s, 'customer', 'reply:send', %s, 'agent_replies', %s, now() + make_interval(hours => %s))"
@@ -294,11 +333,13 @@ def simulated_adapters(delay: float | None = None):
     if delay and os.environ.get("HERMES_GRAPH") != "simulate":
         raise RuntimeError("HERMES_SIM_SEND_DELAY_SECONDS needs HERMES_GRAPH=simulate")
     graph, notice = SimulatedGraph(delay), SimulatedOwnerNotice(delay)
-    return {"reply.send": WhatsAppCloudAdapter(graph, lambda customer_id: "staging-simulated-token"), "notify.owner": notice}
+    return {"reply.send": ReplyRouter(WhatsAppCloudAdapter(graph, lambda customer_id: "staging-simulated-token"),
+                                      MetaMessagingAdapter(graph, lambda account: "staging-simulated-account-token")),
+            "notify.owner": notice}
 
 
-GRAPH_HOST = "graph.facebook.com"
-GRAPH_PATH = re.compile(r"^https://graph\.facebook\.com/v\d{1,2}\.\d/\d{5,20}/messages$")
+GRAPH_HOSTS = ("graph.facebook.com", "graph.instagram.com")
+GRAPH_PATH = re.compile(r"^https://graph\.(facebook|instagram)\.com/v\d{1,2}\.\d/\d{5,25}/messages$")
 
 
 def graph_post(api):
@@ -330,18 +371,42 @@ class PortalNotice:
         return f"portal.{row.get('id')}"
 
 
+def _token_ok(token: str) -> bool:
+    return bool(token) and len(token) <= 1024 and token.isascii() and token.isprintable() and " " not in token
+
+
+def account_tokens(raw: str) -> dict:
+    """HERMES_GRAPH_ACCOUNT_TOKENS: a JSON object {"<page id or Instagram account id>": "<its access token>"}; empty
+    means Messenger and Instagram replies fail before sending (NO_ACCOUNT_TOKEN), WhatsApp is unaffected."""
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        raise RuntimeError("HERMES_GRAPH_ACCOUNT_TOKENS must be a JSON object of account id -> token") from None
+    if not isinstance(data, dict) or not all(re.fullmatch(r"[0-9]{5,25}", str(k)) and isinstance(v, str) and _token_ok(v)
+                                             for k, v in data.items()):
+        raise RuntimeError("HERMES_GRAPH_ACCOUNT_TOKENS must be a JSON object of account id -> token")
+    return {str(k): v for k, v in data.items()}
+
+
 def live_adapters(env):
-    """HERMES_GRAPH=live: reply.send goes to the Graph API with the system user token HERMES_GRAPH_TOKEN, to
-    graph.facebook.com only (crawler.ApiClient). Missing configuration refuses to start."""
+    """HERMES_GRAPH=live: reply.send goes to the Graph API on the customer's channel, through crawler.ApiClient to
+    graph.facebook.com and graph.instagram.com only. WhatsApp uses the system user token HERMES_GRAPH_TOKEN;
+    Messenger and Instagram Direct the account's own token (HERMES_GRAPH_ACCOUNT_TOKENS). Missing WhatsApp
+    configuration refuses to start."""
     token = env.get("HERMES_GRAPH_TOKEN", "")
     version = env.get("HERMES_GRAPH_API_VERSION", "v21.0")
-    if not token or len(token) > 1024 or not token.isascii() or not token.isprintable() or " " in token:
+    if not _token_ok(token):
         raise RuntimeError("HERMES_GRAPH=live needs HERMES_GRAPH_TOKEN (a Meta system user token)")
     if env.get("HERMES_SIM_SEND_DELAY_SECONDS"):
         raise RuntimeError("HERMES_SIM_SEND_DELAY_SECONDS needs HERMES_GRAPH=simulate")
+    accounts = account_tokens(env.get("HERMES_GRAPH_ACCOUNT_TOKENS", ""))
     from service.crawler import ApiClient
-    post = graph_post(ApiClient({GRAPH_HOST}))
-    return {"reply.send": WhatsAppCloudAdapter(post, lambda customer_id: token, version), "notify.owner": PortalNotice()}
+    post = graph_post(ApiClient(set(GRAPH_HOSTS)))
+    return {"reply.send": ReplyRouter(WhatsAppCloudAdapter(post, lambda customer_id: token, version),
+                                      MetaMessagingAdapter(post, accounts.get, version)),
+            "notify.owner": PortalNotice()}
 
 
 def adapters_for(env):

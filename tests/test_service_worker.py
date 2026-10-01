@@ -82,5 +82,31 @@ class TestSimulatedSendDelay(unittest.TestCase):
                 simulated_adapters()
 
 
+class TestMessageContent(unittest.TestCase):
+    def test_each_whatsapp_type_gives_its_text_or_none(self):
+        from service.worker import message_content
+        cases = [
+            ({"type": "text", "text": {"body": " متى تفتحون؟ "}}, ("text", "متى تفتحون؟")),
+            ({"text": {"body": "بلا نوع"}}, ("text", "بلا نوع")),
+            ({"type": "audio", "audio": {"id": "m1", "voice": True}}, ("audio", "")),
+            ({"type": "image", "image": {"id": "m2", "caption": "كم سعر هذا؟"}}, ("image", "كم سعر هذا؟")),
+            ({"type": "sticker", "sticker": {"id": "m3"}}, ("sticker", "")),
+            ({"type": "location", "location": {"latitude": 15.3}}, ("location", "")),
+            ({"type": "button", "button": {"text": "نعم"}}, ("button", "نعم")),
+            ({"type": "interactive", "interactive": {"list_reply": {"title": "المنيو"}}}, ("interactive", "المنيو")),
+            ({"type": "reaction", "reaction": {"emoji": "👍"}}, ("reaction", "")),
+            ({"type": "order"}, ("unsupported", ""))]
+        for msg, want in cases:
+            with self.subTest(msg.get("type")):
+                self.assertEqual(message_content(msg), want)
+
+    def test_the_owner_sees_what_a_message_was_and_where_to_open_it(self):
+        from service.portal import _inquiry_body
+        self.assertEqual(_inquiry_body({"type": "audio", "body": None}), "[رسالة صوتية] افتحها في واتساب للرد.")
+        self.assertEqual(_inquiry_body({"type": "image", "body": "كم السعر؟"}), "[صورة] كم السعر؟")
+        self.assertEqual(_inquiry_body({"type": "text", "body": None}), "(حُذف النص بعد 30 يومًا)")
+        self.assertEqual(_inquiry_body({"type": "text", "body": "مرحبا"}), "مرحبا")
+
+
 if __name__ == "__main__":
     unittest.main()

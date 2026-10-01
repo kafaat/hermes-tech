@@ -165,6 +165,21 @@ def _mask(phone) -> str:
     return "•••" + digits[-3:] if digits else "—"
 
 
+MESSAGE_TYPE_AR = {"audio": "رسالة صوتية", "image": "صورة", "video": "فيديو", "document": "ملف", "sticker": "ملصق",
+                   "location": "موقع على الخريطة", "contacts": "بطاقة جهة اتصال", "unsupported": "رسالة من نوع غير مدعوم"}
+
+
+def _inquiry_body(q: dict) -> str:
+    """The text, or for a voice note, photo or location what it is and where to open it (0019); the media itself is
+    never fetched or stored."""
+    label = MESSAGE_TYPE_AR.get(q.get("type") or "text")
+    if label and q["body"]:
+        return f"[{label}] {q['body']}"
+    if label:
+        return f"[{label}] افتحها في واتساب للرد."
+    return q["body"] if q["body"] is not None else "(حُذف النص بعد 30 يومًا)"
+
+
 def _when(ts) -> str:
     return ts.strftime("%Y-%m-%d %H:%M") + " UTC" if hasattr(ts, "strftime") else "—"
 
@@ -448,7 +463,7 @@ class Portal:
         for q in data["inquiries"]:
             out.append(_r(INQUIRY, when=_when(q["received_at"]), category=CATEGORY_AR.get(q["category"] or "", "بلا تصنيف"),
                           flag=" · سؤال لك" if q["owner_inquiry"] else "",
-                          body=q["body"] if q["body"] is not None else "(حُذف النص بعد 30 يومًا)"))
+                          body=_inquiry_body(q)))
         comps = data.get("competitors", [])
         if comps:
             out.append(_r(COMPETITORS_H, count=len(comps)))

@@ -40,13 +40,13 @@
 | مخططات JSON والعقود والفهرس والسياسات | 34 فحصًا ناجحًا من 34 | tools/validate.py · الطبقة 1 |
 | قواعد الاتساق المنطقي والسياسة الإحصائية ومعجم الإخفاقات | 136 فحصًا ناجحًا من 136 | tools/validate.py · الطبقة 2 |
 | الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 250 فحصًا ناجحًا من 250 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
-| الاختبارات الآلية | 271 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
+| الاختبارات الآلية | 273 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
 | حالات SQL على Postgres فعلي | 53 حالة و64 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
-المجموع: 420/420 فحصًا ناجحًا في أداة التحقق، و271 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
+المجموع: 420/420 فحصًا ناجحًا في أداة التحقق، و273 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
 
 ### وسوم المصدر
@@ -163,7 +163,7 @@ hermes-tech/
 ├── contracts/            agent_contract.schema.json · registry(.schema).json · 8 × *.contract.json
 ├── runtime/              agent_runtime_state · agent_call · ops_summary (schemas) · examples
 ├── policies/             acceptance_policy.json · acceptance_policy.schema.json · complaint_keywords.json · complaint_keywords.schema.json · content_rules.json · content_rules.schema.json · fetch_policy.json
-├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018   (18 files)
+├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018 · 0019   (19 files)
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
 ├── db/tests/             concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
@@ -197,7 +197,7 @@ hermes-tech/
 المخطط في المساحة app على Supabase Postgres 15 أو أحدث. كل جدول يخص عميلًا يحمل customer_id غير فارغ.
 
 <!-- gen:migrations -->
-الترحيلات 18 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
+الترحيلات 19 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
 
 - `0001_core` — الأنواع والجداول والقيود
 - `0002_rls` — الأدوار ودوال الهوية وأمن الصف
@@ -217,6 +217,7 @@ hermes-tech/
 - `0016_claim_task_kinds` — العامل لا يستلم إلا أنواع المهام التي يعرفها، فالنسخة القديمة أثناء النشر تترك الأنواع الجديدة
 - `0017_competitor_facts` — حقائق المنافس المنظمة وبصمة نص الصفحة في اللقطة، ودور مهمة الفحص اليومي بسقف شهري تفرضه القاعدة
 - `0018_inquiries_event_once` — استفسار واحد لكل رسالة واردة: المهمة المعادة لا تدرج الرسالة مرة ثانية
+- `0019_inquiries_message_type` — نوع الرسالة الواردة (نص، صوت، صورة…) في الاستفسار، فيعرف المالك أن عليه سماع الرسالة في واتساب
 <!-- /gen:migrations -->
 
 ![الشكل 2 · الكيانات الرئيسية والعلاقات (مبسّط)](diagrams/erd.png)
@@ -1002,12 +1003,12 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_service_supabase_auth | دخول المالك عبر Supabase Auth: رمز لمرة واحدة بالبريد، الجلسة من الخادم لا المتصفح، وتجديدها قبل انتهائها | 12 |
 | test_service_telemetry | المراقبة: قائمة سماح للسمات، لا أحداث محتوى، لا بيانات شخصية في القيم المسموحة | 8 |
 | test_service_webhook | معالج webhook: HMAC على البايتات الخام قبل التحليل، 401 بلا تخزين، إعادة التسليم نجاح، القناة المخاطَبة | 9 |
-| test_service_worker | حلقة العامل (P1): الشكوى وسؤال السعر يُصعَّدان، والرد من حقيقة اعتمدها المالك ويجتاز الحارس فقط | 9 |
+| test_service_worker | حلقة العامل (P1): الشكوى وسؤال السعر يُصعَّدان، والرد من حقيقة اعتمدها المالك ويجتاز الحارس فقط | 11 |
 | test_spec_consistency | المواصفة: كل قسم مولّد مطابق لمصدره، والإصدار متسق | 2 |
 | test_supply_chain | غياب CODEOWNERS فشل، pull_request_target فشل، والتعليقات لا تُعدّ إجراءات | 4 |
 | test_triage | المرحلة الثانية تضيف ولا تلغي، العتبة، استفسارات المالك | 5 |
 | test_validator_negative | اختبارات طفرات: يُدخل كل عيب وُجد في المراجعات ويتأكد أن المتحقق يرفضه | 13 |
-| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **271** |
+| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **273** |
 <!-- /gen:tests -->
 
 ### 15.3 العيوب التي تمنعها اختبارات الطفرات
@@ -1918,6 +1919,21 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 الحكم: «يحتاج نظرًا» إن انتظر صف إنسانًا أو فشل إرسال، و«لا نشاط» إن لم يحدث شيء، وإلا «سليم». موقع بلا بيانات منظمة ليس عطلًا عندنا. الادعاء P9.
 
 الاختبارات: tests/test_deps_monitor.py (6)، واختبار في tests/test_service_portal.py، وفحص في المسار الكامل.
+
+### 28.16 الرسائل غير النصية: الرسالة الصوتية لا تصل فارغة
+
+كثير من الزبائن في اليمن يرسلون رسائل صوتية. كان العامل يقرأ النص وحده: الرسالة الصوتية أو الصورة أو الموقع تصل استفسارًا فارغًا، وتُصعَّد بسبب «لا جواب معتمد»، ويرى المالك بطاقة فارغة. 0019 يسجّل نوع الرسالة في الاستفسار.
+
+| النوع | ما يُوجَّه عليه | ما يحدث |
+| --- | --- | --- |
+| text، button، interactive | النص، أو عنوان الزر أو القائمة | كما كان |
+| image، video، document | التعليق إن وُجد | بتعليق كالنص، وبلا تعليق تصعيد `non_text:<النوع>` |
+| audio، sticker، location، contacts، وما لا ندعمه | لا شيء | تصعيد `non_text:<النوع>`، والبوابة تقول للمالك «[رسالة صوتية] افتحها في واتساب للرد» |
+| reaction | — | تُتجاهل: لا استفسار ولا تنبيه |
+
+محتوى الوسائط لا يُجلب ولا يُخزَّن هنا. تحويل الصوت إلى نص قرار لاحق، لأنه يحتاج مزوّدًا ونموذجًا وموافقة على نقل صوت الزبون.
+
+الاختبارات: نوع كل رسالة وصياغة البوابة في tests/test_service_worker.py، وفي المسار الكامل رسالة صوتية (تصعيد `non_text:audio`، واستفسار من نوع audio بلا محتوى) وتفاعل (لا استفسار ولا تنبيه).
 
 ## الملحق أ · رموز الأخطاء
 

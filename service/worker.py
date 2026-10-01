@@ -37,6 +37,28 @@ CANNED_TOPICS = {
 }
 
 
+MEDIA_TYPES = ("audio", "image", "video", "document", "sticker", "location", "contacts")
+
+
+def message_content(msg: dict) -> tuple[str, str]:
+    """(type, text to route on) for a WhatsApp Cloud message (0019). Buttons and list replies carry their title; a
+    photo, video or document its caption; a voice note, sticker, location or contact card no text at all."""
+    kind = str(msg.get("type") or "text")
+    if kind == "text":
+        return "text", ((msg.get("text") or {}).get("body") or "").strip()
+    if kind == "button":
+        return "button", str((msg.get("button") or {}).get("text") or "").strip()
+    if kind == "interactive":
+        i = msg.get("interactive") or {}
+        reply = i.get("button_reply") or i.get("list_reply") or {}
+        return "interactive", str(reply.get("title") or "").strip()
+    if kind == "reaction":
+        return "reaction", ""
+    if kind in MEDIA_TYPES:
+        return kind, str((msg.get(kind) or {}).get("caption") or "").strip() if kind in ("image", "video", "document") else ""
+    return "unsupported", ""
+
+
 def decide(text: str, route: dict, facts: dict, guard: ContentGuard, norm_rules: dict) -> dict:
     """Pure decision for one message. facts: topic -> owner-approved, still valid fact."""
     if route["action"] == "escalate":
@@ -196,19 +218,26 @@ class Worker:
         return "receipt"
 
     def _message(self, t: Task, event_id: int, ext: str, channel: str, msg: dict) -> str:
-        text = ((msg.get("text") or {}).get("body") or "").strip()
+        kind, text = message_content(msg)
+        if kind == "reaction":                          # an emoji on one of our messages: nothing to answer, nobody to page
+            self._processed(t, event_id)
+            self._complete(t, "succeeded")
+            return "ignored"
         route = self.matcher.route(text, "patron")
         with self.db.tx(t.bind) as cur:
             cur.execute("select topic, fact from app.kb_facts where approved_by_owner"
                         " and (valid_until is null or valid_until >= current_date)")
             facts = dict(cur.fetchall())
             cats = route.get("categories") or []
-            cur.execute("insert into app.inquiries (customer_id, source, body, matched_category, owner_inquiry, routed_to, event_ref)"
-                        " values (%s, 'whatsapp', %s, %s, %s, %s, %s)"
+            cur.execute("insert into app.inquiries (customer_id, source, body, matched_category, owner_inquiry, routed_to, event_ref,"
+                        " message_type) values (%s, 'whatsapp', %s, %s, %s, %s, %s, %s)"
                         " on conflict (customer_id, event_ref) where event_ref is not null do nothing",   # a re-run task: once (0018)
-                        (t.customer_id, text, cats[0] if cats else None, route["kind"] == "owner_inquiry", route.get("routes", []),
-                         ext[:200] or None))
-        d = decide(text, route, facts, self.guard, self.matcher.rules)
+                        (t.customer_id, text or None, cats[0] if cats else None, route["kind"] == "owner_inquiry",
+                         route.get("routes", []), ext[:200] or None, kind))
+        if not text and kind != "text":                 # a voice note, a sticker, a location: the owner opens it in WhatsApp
+            d = {"action": "escalate", "reason": f"non_text:{kind}", "categories": [], "sla_minutes": None}
+        else:
+            d = decide(text, route, facts, self.guard, self.matcher.rules)
         if d["action"] == "propose":
             reply = {"phone_number_id": channel, "to": str(msg.get("from", "")), "body": d["body"], "in_reply_to": ext}
             with self.db.tx(t.bind) as cur:

@@ -189,6 +189,20 @@ def main():
               "one inquiry per inbound message, keyed by its message id (0018)")
         check(not q("select 1 from app.outbox where topic = 'reply.send' and target_id = %s", (q_ext,)), "nothing sent before the owner decides")
 
+        v_ext, r_ext0 = f"wamid.E2E.{run}.voice", f"wamid.E2E.{run}.react"     # a voice note and a reaction (0019)
+        check(post(url, secret, message_payload({"messages": [
+            {"from": "967700000004", "id": v_ext, "type": "audio", "audio": {"id": "media1", "voice": True}},
+            {"from": "967700000004", "id": r_ext0, "type": "reaction", "reaction": {"message_id": q_ext, "emoji": "👍"}}]})) == 200,
+              "a voice note and a reaction accepted (200)")
+        check(bool(wait("voice note escalated", lambda: q("select 1 from app.outbox where topic = 'notify.owner' and target_id = %s"
+                                                            " and payload->>'reason' = 'non_text:audio'", (v_ext,)))),
+              "voice note -> the owner is told it is a voice note (non_text:audio), not 'no approved answer'")
+        check(q("select message_type, body from app.inquiries where event_ref = %s", (v_ext,)) == [("audio", None)],
+              "voice note -> inquiry typed audio, nothing of the media stored")
+        check(bool(wait("reaction done", lambda: (task_status(r_ext0) or ("",))[0] == "succeeded"))
+              and not q("select 1 from app.inquiries where event_ref = %s", (r_ext0,))
+              and not q("select 1 from app.outbox where target_id = %s", (r_ext0,)), "reaction -> ignored: no inquiry, no notice")
+
         if ap:
             token = issue_staging_token(OWNER, JWT_SECRET)
             status, _, page = portal(url, token)

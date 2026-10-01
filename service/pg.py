@@ -104,10 +104,11 @@ class PortalDb:
                         " and (expires_at is null or expires_at > now()) order by requested_at", (ids,))
             approvals = [{"id": str(r[0]), "customer_id": str(r[1]), "action": r[2], "payload": r[3] or {},
                           "expires_at": r[4]} for r in cur.fetchall()]
-            cur.execute("select received_at, matched_category::text, owner_inquiry, body from app.inquiries"
+            cur.execute("select received_at, matched_category::text, owner_inquiry, body, message_type from app.inquiries"
                         " where customer_id = any(%s::uuid[]) and received_at > now() - interval '7 days'"
                         " order by received_at desc limit 50", (ids,))
-            inquiries = [{"received_at": r[0], "category": r[1], "owner_inquiry": r[2], "body": r[3]} for r in cur.fetchall()]
+            inquiries = [{"received_at": r[0], "category": r[1], "owner_inquiry": r[2], "body": r[3], "type": r[4]}
+                         for r in cur.fetchall()]
             cur.execute("select id, topic, fact, approved_by_owner from app.kb_facts where customer_id = any(%s::uuid[])"
                         " order by approved_by_owner, topic limit 200", (ids,))
             facts = [{"id": str(r[0]), "topic": r[1], "fact": r[2], "approved": r[3]} for r in cur.fetchall()]

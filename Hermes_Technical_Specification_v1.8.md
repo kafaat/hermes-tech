@@ -39,14 +39,14 @@
 | --- | --- | --- |
 | مخططات JSON والعقود والفهرس والسياسات | 34 فحصًا ناجحًا من 34 | tools/validate.py · الطبقة 1 |
 | قواعد الاتساق المنطقي والسياسة الإحصائية ومعجم الإخفاقات | 136 فحصًا ناجحًا من 136 | tools/validate.py · الطبقة 2 |
-| الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 255 فحصًا ناجحًا من 255 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
-| الاختبارات الآلية | 295 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
+| الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 258 فحصًا ناجحًا من 258 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
+| الاختبارات الآلية | 296 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
-| حالات SQL على Postgres فعلي | 54 حالة و65 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
+| حالات SQL على Postgres فعلي | 55 حالة و66 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
-المجموع: 425/425 فحصًا ناجحًا في أداة التحقق، و295 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
+المجموع: 428/428 فحصًا ناجحًا في أداة التحقق، و296 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
 
 ### وسوم المصدر
@@ -163,7 +163,7 @@ hermes-tech/
 ├── contracts/            agent_contract.schema.json · registry(.schema).json · 8 × *.contract.json
 ├── runtime/              agent_runtime_state · agent_call · ops_summary (schemas) · examples
 ├── policies/             acceptance_policy.json · acceptance_policy.schema.json · complaint_keywords.json · complaint_keywords.schema.json · content_rules.json · content_rules.schema.json · fetch_policy.json
-├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018 · 0019 · 0020 · 0021   (21 files)
+├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018 · 0019 · 0020 · 0021 · 0022   (22 files)
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
 ├── db/tests/             concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
@@ -197,7 +197,7 @@ hermes-tech/
 المخطط في المساحة app على Supabase Postgres 15 أو أحدث. كل جدول يخص عميلًا يحمل customer_id غير فارغ.
 
 <!-- gen:migrations -->
-الترحيلات 21 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
+الترحيلات 22 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
 
 - `0001_core` — الأنواع والجداول والقيود
 - `0002_rls` — الأدوار ودوال الهوية وأمن الصف
@@ -220,6 +220,7 @@ hermes-tech/
 - `0019_inquiries_message_type` — نوع الرسالة الواردة (نص، صوت، صورة…) في الاستفسار، فيعرف المالك أن عليه سماع الرسالة في واتساب
 - `0020_standing_approvals` — الموافقة الدائمة: المالك يعتمد ردًا لموضوع منخفض الخطر مرة واحدة فيُرسل فورًا، بنصه المعتمد وحده، ويلغيه متى شاء
 - `0021_standing_by_hash` — الموافقة الدائمة تطابق النص الممنوح ببصمته وإن تعددت معلومات الموضوع المعتمدة
+- `0022_standing_pause` — مفتاح عام: المالك يوقف كل الإرسال الفوري لمنشأته بضغطة ويستأنفه، دون أن تُلغى موافقاته الدائمة
 <!-- /gen:migrations -->
 
 ![الشكل 2 · الكيانات الرئيسية والعلاقات (مبسّط)](diagrams/erd.png)
@@ -412,11 +413,12 @@ create policy kb_facts_worker_rw on app.kb_facts for all to hermes_worker
 52. `the competitor job (hermes_jobs): reads active competitors and their snapshots, writes a snapshot only for the`
 53. `one inquiry per inbound message: a re-run task inserts it once; another customer's same id is its own (0018)`
 54. `standing approval (0020): the owner grants a low-risk topic once; the database, never the worker, decides a`
+55. `one switch (0022): the owner pauses every instant reply of the business and resumes it; the grants stay; only`
 46. `the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)`
 47. `the external monitor gets numbers, never rows: its role holds EXECUTE on one function and nothing else, and`
 48. `every table whose policies filter by customer_id has an index leading with customer_id (0013)`
 
-الملف db/tests/rls_isolation_test.sql ينفّذ 54 حالة داخل معاملة تُلغى في النهاية، ويطلب run_isolation.sh ظهور 65 إشعار نجاح (بعض الحالات تطلق أكثر من إشعار)، بعد تطبيق كل الترحيلات بدور مالك عادي. العناوين بلغة الملف نفسه لأنها الحالات كما تُنفَّذ.
+الملف db/tests/rls_isolation_test.sql ينفّذ 55 حالة داخل معاملة تُلغى في النهاية، ويطلب run_isolation.sh ظهور 66 إشعار نجاح (بعض الحالات تطلق أكثر من إشعار)، بعد تطبيق كل الترحيلات بدور مالك عادي. العناوين بلغة الملف نفسه لأنها الحالات كما تُنفَّذ.
 <!-- /gen:sql_cases -->
 
 ## 6. عقود الوكلاء
@@ -966,8 +968,8 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | --- | --- | --- |
 | المخططات | العقود والفهرس وحالة التشغيل وسجل النداءات والسياسات | 34 |
 | المنطق | قواعد 6.2، وسياسة الشكاوى، وسياسة القبول الواحدة، ومعجم الإخفاقات | 136 |
-| SQL | الحالة النهائية بعد كل الترحيلات: أمن الصف وFORCE والسياسات والمنح والدوال، والحراسات | 255 |
-| **المجموع** | فاشل: 0 | **425** |
+| SQL | الحالة النهائية بعد كل الترحيلات: أمن الصف وFORCE والسياسات والمنح والدوال، والحراسات | 258 |
+| **المجموع** | فاشل: 0 | **428** |
 <!-- /gen:validator -->
 
 طبقة SQL منذ 1.8 تقرأ الحالة النهائية بعد تطبيق كل الترحيلات بالترتيب (tools/sql_state.py): السياسة التي أسقطها ترحيل لاحق غير موجودة، والسحب على مستوى الجدول يزيل منح الأعمدة، و«create or replace» يستبدل. في 1.7 كانت تفحص نص الترحيلات مجتمعة، فنجح فحص كان يشترط نص سياسة حذفها 0009.
@@ -1000,7 +1002,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_service_dispatcher | الموزّع: الغامض لا يُعاد، قبل الإرسال يُحرَّر، الرفض نهائي، مطابقة رموز الآلة للترحيل 0010 | 14 |
 | test_service_graph_live | مرسل Graph الحقيقي: مغلق دون إعداد صريح، المضيف الوحيد graph.facebook.com عبر المسار المثبّت، والنتيجة الملتبسة لا تُعاد آليًا | 7 |
 | test_service_media_policy | صور المنشورات: صورة المالك كما هي، وصورة المخزون أو المولّدة لا تُنشر إلا بوسم «صورة توضيحية» ومصدر مرخّص | 5 |
-| test_service_portal | بوابة المالك: رمز الجلسة يُتحقق بصرامة، الإجراء مربوط بالجلسة (CSRF والأصل)، لا سكربت، كل قيمة مُهرَّبة | 20 |
+| test_service_portal | بوابة المالك: رمز الجلسة يُتحقق بصرامة، الإجراء مربوط بالجلسة (CSRF والأصل)، لا سكربت، كل قيمة مُهرَّبة | 21 |
 | test_service_qr | رمز QR لرابط واتساب يُولَّد محليًا: ترميز صحيح يطابق مرجعًا، ورابط wa.me ثابت لا تحويل عبر طرف ثالث | 6 |
 | test_service_redact | حجب السجلات: الهواتف بالأرقام العربية، حقول المحتوى، الرموز، نص الاستثناءات | 6 |
 | test_service_render | القوالب: التهريب، روابط javascript: بكل تمويه، مواضع القالب الخطرة | 6 |
@@ -1014,7 +1016,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_supply_chain | غياب CODEOWNERS فشل، pull_request_target فشل، والتعليقات لا تُعدّ إجراءات | 4 |
 | test_triage | المرحلة الثانية تضيف ولا تلغي، العتبة، استفسارات المالك | 5 |
 | test_validator_negative | اختبارات طفرات: يُدخل كل عيب وُجد في المراجعات ويتأكد أن المتحقق يرفضه | 13 |
-| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **295** |
+| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **296** |
 <!-- /gen:tests -->
 
 ### 15.3 العيوب التي تمنعها اختبارات الطفرات
@@ -2005,6 +2007,11 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 
 **البوابة:** على كل معلومة معتمدة من الموضوعات الثلاثة زر «أرسلها فورًا دون انتظاري»، أو «أوقف الإرسال الفوري» إن كانت مفعلة.
 
+**المفتاح العام (0022، بطلب المالك):** لكل منشأة فيها موافقة دائمة بطاقة واحدة: «أوقف كل الإرسال الفوري» أو «استأنف الإرسال الفوري». ينفع في إجازة أو أزمة أو تغيّر ساعات لم يُدخل بعد.
+- **أثناء الإيقاف:** لا تقرر `approve_by_standing` شيئًا لتلك المنشأة، فكل رد ينتظر المالك كما قبل 0020.
+- **الموافقات الدائمة:** تبقى محفوظة، والاستئناف لا يحتاج منحًا جديدًا.
+- **من يقلبه:** مالك المنشأة وحده، باسمه ووقته (`standing_pause`). لا العامل ولا مالك منشأة أخرى. الحالة 55.
+
 **المنصة لكل القطاعات:** المطعم في الأمثلة والاختبارات مثال لا حصر. فحص المنافس يقرأ عيادة أسنان بخدمات وأسعار كما يقرأ مطعمًا، وملخصه صار «من المنتجات والخدمات» بدل «صنفًا».
 
 الاختبارات:
@@ -2013,7 +2020,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 - **المسار الكامل:** يمنح المالك، فيُرسل الرد التالي فورًا. يلغي، فيعود الرد إلى الانتظار. التشغيل المكرر لا يترك منحًا خلفه.
 - **فحص المنافس:** عيادة أسنان.
 
-الادعاء P10.
+الادعاء P10. المفتاح العام: الحالة 55، واختبار البوابة، وفي المسار الكامل إيقاف ينتظر معه الرد، ثم استئناف يُرسل معه فورًا.
 
 ## الملحق أ · رموز الأخطاء
 

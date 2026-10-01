@@ -109,9 +109,9 @@ class PortalDb:
                         " order by received_at desc limit 50", (ids,))
             inquiries = [{"received_at": r[0], "category": r[1], "owner_inquiry": r[2], "body": r[3], "type": r[4]}
                          for r in cur.fetchall()]
-            cur.execute("select id, topic, fact, approved_by_owner from app.kb_facts where customer_id = any(%s::uuid[])"
+            cur.execute("select id, topic, fact, approved_by_owner, customer_id from app.kb_facts where customer_id = any(%s::uuid[])"
                         " order by approved_by_owner, topic limit 200", (ids,))
-            facts = [{"id": str(r[0]), "topic": r[1], "fact": r[2], "approved": r[3]} for r in cur.fetchall()]
+            facts = [{"id": str(r[0]), "topic": r[1], "fact": r[2], "approved": r[3], "customer_id": str(r[4])} for r in cur.fetchall()]
             cur.execute("select customer_id, topic, fact_hash from app.standing_approvals"
                         " where customer_id = any(%s::uuid[]) and revoked_at is null", (ids,))
             standing = {(str(r[0]), r[1]): r[2] for r in cur.fetchall()}
@@ -120,12 +120,16 @@ class PortalDb:
             for f in facts:                                  # on: a live grant for this topic and this exact text (0020)
                 h, cust = hashes.get(f["id"], (None, None))
                 f["standing"] = f["approved"] and standing.get((cust, f["topic"])) == h
+            cur.execute("select customer_id, paused from app.standing_pause where customer_id = any(%s::uuid[])", (ids,))
+            paused = {str(r[0]): r[1] for r in cur.fetchall()}
+            switches = [{"customer_id": c["id"], "name": c["name"], "paused": paused.get(c["id"], False),
+                         "topics": sorted(t for (cid, t) in standing if cid == c["id"])} for c in customers]
             cur.execute("select c.label, s.fetched_at, s.status::text, s.diff_summary from app.competitors c"
                         " left join lateral (select fetched_at, status, diff_summary from app.competitor_snapshots s"
                         "   where s.competitor_id = c.id and s.customer_id = c.customer_id order by fetched_at desc limit 1) s on true"
                         " where c.customer_id = any(%s::uuid[]) and c.active order by c.label", (ids,))
             competitors = [{"label": r[0], "fetched_at": r[1], "status": r[2], "summary": r[3]} for r in cur.fetchall()]
-        return {"customers": customers, "approvals": approvals, "inquiries": inquiries, "facts": facts,
+        return {"customers": customers, "approvals": approvals, "inquiries": inquiries, "facts": facts, "switches": switches,
                 "competitors": competitors}
 
     def decide(self, claims: dict, approval_id: str, decision: str) -> bool:
@@ -154,6 +158,14 @@ class PortalDb:
             cur.execute("insert into app.standing_approvals (customer_id, topic, fact_hash, granted_by)"
                         " select customer_id, topic, app.fact_hash(fact), %s from app.kb_facts where id = %s and approved_by_owner",
                         (claims["sub"], fact_id))
+            return cur.rowcount == 1
+
+    def set_standing_pause(self, claims: dict, customer_id: str, paused: bool) -> bool:
+        """The one switch (0022): pause or resume every instant reply of one of the owner's businesses."""
+        with self.db.tx(claims=claims) as cur:
+            cur.execute("insert into app.standing_pause (customer_id, paused, changed_by) values (%s, %s, %s)"
+                        " on conflict (customer_id) do update set paused = excluded.paused, changed_by = excluded.changed_by",
+                        (customer_id, paused, claims["sub"]))
             return cur.rowcount == 1
 
     def ops_overview(self, claims: dict) -> dict | None:

@@ -77,6 +77,9 @@ def seed():
           (CUSTOMER, HOURS), claims={"sub": OWNER, "aal": "aal1"})       # an approved fact is the owner's act (kb_facts_guard)
     q("update app.standing_approvals set revoked_at = now(), revoked_by = %s where customer_id = %s and revoked_at is null",
       (OWNER, CUSTOMER), claims={"sub": OWNER, "aal": "aal1"})    # a run that died mid-way leaves no standing approval behind
+    q("insert into app.standing_pause (customer_id, paused, changed_by) values (%s, false, %s)"
+      " on conflict (customer_id) do update set paused = false, changed_by = excluded.changed_by",
+      (CUSTOMER, OWNER), claims={"sub": OWNER, "aal": "aal1"})    # nor a paused switch
 
 
 def message_payload(items):
@@ -262,6 +265,27 @@ def main():
                         " where o.target_id = %s and o.dispatched_at is not null", (s_ext,)))
                     check(bool(auto) and auto[0][0] == "standing" and str(auto[0][1]) == OWNER,
                           "standing approval: the next hours question is answered at once, decided as the owner's standing approval")
+                    # the one switch (0022): paused, the same question waits; resumed, it goes out at once again
+                    status, where, _ = portal(url, token, "POST", {"_path": "/portal/standing/pause", "customer": CUSTOMER, "paused": "1",
+                                                                   "csrf": csrf_token(token, JWT_SECRET)})
+                    check(status == 303 and where == "/portal?done=paused", "one switch: the owner pauses every instant reply")
+                    p_ext = f"wamid.E2E.{run}.paused"
+                    post(url, secret, message_payload({"messages": [
+                        {"from": "967700000005", "id": p_ext, "type": "text", "text": {"body": "متى تفتحون الجمعة؟"}}]}))
+                    held = wait("proposal while paused", lambda: q("select id, decision::text from app.approvals where target_id = %s", (p_ext,)))
+                    check(bool(held) and held[0][1] == "pending" and not q("select 1 from app.outbox where target_id = %s", (p_ext,)),
+                          "one switch: while paused, the granted answer waits for the owner")
+                    if held:
+                        portal(url, token, "POST", {"_path": "/portal/decide", "approval": str(held[0][0]), "decision": "rejected",
+                                                    "csrf": csrf_token(token, JWT_SECRET)})
+                    status, where, _ = portal(url, token, "POST", {"_path": "/portal/standing/pause", "customer": CUSTOMER, "paused": "0",
+                                                                   "csrf": csrf_token(token, JWT_SECRET)})
+                    u_ext = f"wamid.E2E.{run}.resumed"
+                    post(url, secret, message_payload({"messages": [
+                        {"from": "967700000005", "id": u_ext, "type": "text", "text": {"body": "متى تفتحون السبت؟"}}]}))
+                    check(where == "/portal?done=resumed" and bool(wait("reply after resume", lambda: q(
+                        "select 1 from app.outbox where target_id = %s and dispatched_at is not null", (u_ext,)))),
+                          "one switch: resumed, the granted answer goes out at once again, no new grant needed")
                     status, where, _ = portal(url, token, "POST", {"_path": "/portal/facts/standing", "fact": hours_id, "on": "0",
                                                                    "csrf": csrf_token(token, JWT_SECRET)})
                     check(status == 303 and where == "/portal?done=standing_off", "standing approval: the owner revokes it")

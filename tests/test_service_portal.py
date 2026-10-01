@@ -233,6 +233,33 @@ class TestPortal(unittest.TestCase):
         status, _, _ = portal(store).handle("POST", "/portal/facts/standing", cookie(token), b"fact=f-h&on=1&csrf=bad")
         self.assertEqual((status, len(calls)), (403, 1))
 
+    def test_one_switch_pauses_and_resumes_every_instant_reply(self):
+        store = FakeStore()
+        base = store.overview
+        state = {"paused": False}
+
+        def overview(claims):
+            d = base(claims)
+            d["facts"] = [{"id": "f-h", "topic": "hours", "fact": "9-11", "approved": True, "standing": True, "customer_id": "c1"}]
+            d["switches"] = [{"customer_id": "c1", "name": "متجر <b>النور</b>", "paused": state["paused"], "topics": ["hours"]}]
+            return d
+        store.overview = overview
+        calls = []
+        store.set_standing_pause = lambda claims, customer, paused: calls.append((customer, paused)) or True
+        token = sign(GOOD)
+        page = portal(store).handle("GET", "/portal", cookie(token), b"")[2].decode()
+        self.assertIn("متجر &lt;b&gt;النور&lt;/b&gt; · الإرسال الفوري يعمل لـ 1 من الموضوعات", page)
+        self.assertIn("أوقف كل الإرسال الفوري", page)
+        status, headers, _ = portal(store).handle("POST", "/portal/standing/pause", cookie(token),
+                                                  f"customer=c1&paused=1&csrf={csrf_token(token, SECRET)}".encode())
+        self.assertEqual((status, dict(headers)["Location"], calls), (303, "/portal?done=paused", [("c1", True)]))
+        state["paused"] = True
+        page = portal(store).handle("GET", "/portal?done=paused", cookie(token), b"")[2].decode()
+        self.assertIn("استأنف الإرسال الفوري", page)
+        self.assertIn("موقوفة مؤقتًا بالمفتاح العام", page)
+        self.assertIn("موافقاتك الدائمة محفوظة", page)
+        self.assertEqual(portal(store).handle("POST", "/portal/standing/pause", cookie(token), b"customer=c1&paused=1&csrf=x")[0], 403)
+
     def test_fact_approval_and_logout(self):
         store, token = FakeStore(), sign(GOOD)
         csrf = csrf_token(token, SECRET)

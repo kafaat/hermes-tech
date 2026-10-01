@@ -1207,6 +1207,59 @@ reset role;
 select set_config('app.task_id', '', true), set_config('app.task_token', '', true), set_config('request.jwt.claim.sub', '', true),
        set_config('request.jwt.claims', '', true);
 
+-- 55. one switch (0022): the owner pauses every instant reply of the business and resumes it; the grants stay; only
+--     the business's own owner can flip it
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111', 'aal1');
+set local role authenticated;
+do $$ begin
+  insert into app.standing_approvals (customer_id, topic, fact_hash, granted_by)
+  values ('00000000-0000-0000-0000-00000000000a', 'location', app.fact_hash('L54b'), '11111111-1111-1111-1111-111111111111');
+  insert into app.standing_pause (customer_id, paused, changed_by)
+  values ('00000000-0000-0000-0000-00000000000a', true, '11111111-1111-1111-1111-111111111111');
+  begin
+    insert into app.standing_pause (customer_id, paused, changed_by)
+    values ('00000000-0000-0000-0000-00000000000b', true, '11111111-1111-1111-1111-111111111111');
+    raise exception 'FAIL an owner paused another business';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+select set_config('request.jwt.claim.sub', '', true), set_config('request.jwt.claims', '', true);
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000a');
+set local role hermes_worker;
+do $$ declare p uuid; begin
+  begin
+    update app.standing_pause set paused = false;
+    raise exception 'FAIL the worker flipped the switch';
+  exception when insufficient_privilege then null;
+  end;
+  insert into app.approvals (customer_id, scope, proposal_action, payload, requested_by_agent, target_id, expires_at)
+  values ('00000000-0000-0000-0000-00000000000a', 'customer', 'reply:send',
+          '{"phone_number_id":"pn","to":"9677","body":"L54b","in_reply_to":"w55a","topic":"location"}', 'agent_replies', 'w55a',
+          now() + interval '1 hour') returning id into p;
+  if app.approve_by_standing(p) then raise exception 'FAIL an instant reply went out while paused'; end if;
+end $$;
+reset role;
+select set_config('app.task_id', '', true), set_config('app.task_token', '', true);
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111', 'aal1');
+set local role authenticated;
+update app.standing_pause set paused = false, changed_by = '11111111-1111-1111-1111-111111111111'
+ where customer_id = '00000000-0000-0000-0000-00000000000a';
+reset role;
+select set_config('request.jwt.claim.sub', '', true), set_config('request.jwt.claims', '', true);
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000a');
+set local role hermes_worker;
+do $$ declare p uuid; begin
+  insert into app.approvals (customer_id, scope, proposal_action, payload, requested_by_agent, target_id, expires_at)
+  values ('00000000-0000-0000-0000-00000000000a', 'customer', 'reply:send',
+          '{"phone_number_id":"pn","to":"9677","body":"L54b","in_reply_to":"w55b","topic":"location"}', 'agent_replies', 'w55b',
+          now() + interval '1 hour') returning id into p;
+  if not app.approve_by_standing(p) then raise exception 'FAIL resuming did not bring the grant back'; end if;
+  raise notice 'PASS one switch pauses every instant reply of the business and resumes it, the owner''s alone';
+end $$;
+reset role;
+select set_config('app.task_id', '', true), set_config('app.task_token', '', true);
+
 -- 46. the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)
 do $$ declare got text; bad text; begin
   select string_agg(relname, ',' order by relname collate "C") into got from pg_class

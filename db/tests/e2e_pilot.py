@@ -242,6 +242,8 @@ def main():
         check(status == 403, "operator console: refused to the operator without a second factor (aal1)")
         status, _, page = portal(url, op2, "GET_OPS")
         check(status == 200 and f"#{ob}" in page, "operator console: the aal2 operator sees the row waiting for a human")
+        check("المصادر الخارجية" in page and "الردود عبر Graph" in page and "مواقع المنافسين" in page,
+              "operator console: one health line per external source (28.15)")
         status, where, _ = portal(url, op2, "POST", {"_path": "/portal/ops/resolve", "outbox": str(ob), "resolution": "resend",
                                                      "reason": "e2e: provider log shows no delivery", "csrf": csrf_token(op2, JWT_SECRET)})
         check(status == 303 and where == "/portal/ops?done=resolved", "operator console: resend with a reason is accepted")

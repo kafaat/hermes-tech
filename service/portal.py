@@ -125,6 +125,12 @@ OPS_TOP = """<h1>لوحة المشغّل</h1><p class="meta">جلسة مشغّل
 OPS_HEALTH = """<h2>الحالة</h2><div class="card"><div>آخر محو ناجح: {{retention}}</div><div>نصوص تجاوزت 31 يومًا: {{overdue}}</div>
 <div>أحداث موقّعة لا تتبع أي قناة: {{unrouted}}</div>
 <div>المنافسون النشطون: {{competitors}} · ببيانات منظمة {{structured}} · بلا بيانات منظمة {{unstructured}} · يمنعون الفحص {{blocked}}</div></div>"""
+OPS_SOURCES_H = """<h2>المصادر الخارجية</h2><p class="meta">لكل مصدر: ما نجح وما فشل وما ينتظر إنسانًا (رسائل واتساب
+وردودها خلال 24 ساعة، ومواقع المنافسين خلال 7 أيام). أرقام فقط.</p>"""
+OPS_SOURCE = """<div class="card"><div>{{name}} · {{verdict}}</div><div class="meta">نجح {{ok}} · فشل {{failed}} · ينتظر إنسانًا
+{{waiting}} · آخر نجاح {{last}}{{cause}}</div></div>"""
+SOURCE_AR = {"whatsapp_inbound": "رسائل واتساب الواردة", "reply.send": "الردود عبر Graph",
+             "notify.owner": "تنبيهات المالك", "competitor_sites": "مواقع المنافسين"}
 OPS_ROWS_H = """<h2>صفوف الصندوق الصادر التي تحتاج إنسانًا ({{count}})</h2>
 <p class="meta">«تحتاج قرارًا»: الإرسال غامض، لا يُعاد آليًا أبدًا. «ينتظر العامل»: انتهى حجز الإرسال بلا نتيجة، وسيعلّمه العامل
 عند استعادة المهمة. قبل «أُرسل فعلًا» تحقق من المزوّد؛ «أعد الإرسال» يُرسل مرة أخرى وقد يصل مرتين إن كان الأول قد وصل.</p>"""
@@ -395,6 +401,14 @@ class Portal:
                       competitors=comp["active"], structured=comp["structured"], unstructured=comp["unstructured"],
                       blocked=comp["blocked"],
                       unrouted=data["unrouted"]))
+        if data.get("sources"):
+            out.append(OPS_SOURCES_H)
+            for src in data["sources"]:
+                verdict = ("يحتاج نظرًا" if src["waiting"] or (src["failed"] and src["source"] != "competitor_sites")
+                           else "لا نشاط" if not src["ok"] and not src["failed"] else "سليم")
+                out.append(_r(OPS_SOURCE, name=SOURCE_AR.get(src["source"], src["source"]), verdict=verdict, ok=src["ok"],
+                              failed=src["failed"], waiting=src["waiting"], last=_when(src["last"]),
+                              cause=f" · السبب الأكثر: {src['cause']}" if src.get("cause") else ""))
         out.append(_r(OPS_ROWS_H, count=len(data["rows"])))
         for r in data["rows"]:
             fields = dict(id=r["id"], customer=r["customer"] or "المنصة", topic=r["topic"], attempts=r["attempts"],

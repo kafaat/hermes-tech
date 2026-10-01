@@ -7,9 +7,14 @@ For every hop (the first URL and each redirect):
 No HTTP library is used, so HTTP(S)_PROXY / NO_PROXY and similar environment settings cannot redirect
 the connection through something that resolves the name again. robots.txt is fetched through the same path;
 login pages are refused (§8.4). tests/test_service_boundaries.py fails if another module opens sockets.
+
+ApiClient is the same path for the provider APIs the service calls (Supabase Auth, the WhatsApp Graph API): the
+caller names the exact hosts it may reach, every address is validated by safe_fetch.plan and pinned, redirects are
+returned (never followed), and only the first validated address is tried: a POST that may have reached the provider
+is never sent again to another address. No credential ever enters an exception or a log line.
 """
 from __future__ import annotations
-import re, socket, ssl, sys
+import json, re, socket, ssl, sys
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
@@ -137,3 +142,45 @@ class Crawler:
         if LOGIN_HINT.search(page.url.encode()) or LOGIN_HINT.search(page.body[:200000]):
             raise FetchRefused("LOGIN_PAGE")
         return page
+
+
+API_USER_AGENT = "Hermes/1.8"
+_HEADER_OK = re.compile(r"^[\x21-\x7e][\x20-\x7e]*$")
+
+
+class ApiClient:
+    """JSON over HTTPS to named hosts only (spec 28.12): api.request("POST", url, {...}, {"apikey": k}) -> (status, dict)."""
+
+    def __init__(self, hosts, resolver=system_resolver, connector=tls_connector):
+        self.hosts = frozenset(h.lower() for h in hosts)
+        self.resolver, self.connector = resolver, connector
+
+    def request(self, method: str, url: str, body: dict | None = None, headers: dict | None = None) -> tuple[int, dict]:
+        if method not in ("GET", "POST", "DELETE"):
+            raise ValueError("method")
+        host = (urlsplit(url).hostname or "").lower()
+        if host not in self.hosts:
+            raise FetchRefused("HOST_NOT_ALLOWED")
+        plan = safe_fetch.plan(url, self.resolver)               # https, 443, every address public; resolves once
+        raw = self.connector(plan, _api_request(method, url, plan["host"], body, headers or {}))
+        status, _, payload = _parse(raw, plan["max_bytes"])
+        try:
+            data = json.loads(payload.decode("utf-8")) if payload.strip() else {}
+        except ValueError:
+            data = {}
+        return status, data if isinstance(data, dict) else {"items": data}
+
+
+def _api_request(method: str, url: str, host: str, body: dict | None, headers: dict) -> bytes:
+    u = urlsplit(url)
+    path = (u.path or "/") + (f"?{u.query}" if u.query else "")
+    payload = b"" if body is None else json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    lines = [f"{method} {path} HTTP/1.0", f"Host: {host}", f"User-Agent: {API_USER_AGENT}", "Accept: application/json",
+             "Accept-Encoding: identity", "Connection: close"]
+    if body is not None:
+        lines += ["Content-Type: application/json", f"Content-Length: {len(payload)}"]
+    for k, v in headers.items():
+        if not re.fullmatch(r"[A-Za-z0-9-]{1,64}", k) or not _HEADER_OK.match(str(v)):
+            raise ValueError("header")                           # no CR/LF, no control characters: no injected lines
+        lines.append(f"{k}: {v}")
+    return ("\r\n".join(lines) + "\r\n\r\n").encode("ascii") + payload

@@ -2,7 +2,7 @@ import os, sys, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from service.crawler import ApiClient, Crawler, FetchRefused
+from service.crawler import ApiClient, Crawler, FetchRefused, NotSent, tls_connector
 
 PUBLIC = "93.184.216.34"
 
@@ -190,6 +190,23 @@ class TestApiClient(unittest.TestCase):
         with self.assertRaises(TimeoutError):
             ApiClient({"api.example"}, resolve, fails).request("POST", "https://api.example/send", {})
         self.assertEqual(self.sent[1:], [PUBLIC])                    # a send that may have arrived is not sent elsewhere
+
+
+class TestTlsConnector(unittest.TestCase):
+    def test_a_failure_before_the_first_byte_is_not_sent_and_names_its_cause(self):
+        from unittest import mock
+        plan = {"connect_to": PUBLIC, "port": 443, "host": "shop.example", "timeout_seconds": 1, "max_bytes": 10}
+        with mock.patch("socket.create_connection", side_effect=ConnectionRefusedError()):
+            with self.assertRaises(NotSent) as e:
+                tls_connector(plan, b"GET / HTTP/1.0\r\n\r\n")
+        self.assertEqual(str(e.exception), "ConnectionRefusedError")
+        n = Net({"shop.example": [PUBLIC]}, {})
+
+        def refused(plan, request):
+            raise NotSent("ConnectionRefusedError")
+        with self.assertRaises(FetchRefused) as e:
+            Crawler(n.resolve, refused).fetch("https://shop.example/")
+        self.assertEqual(str(e.exception), "ROBOTS_UNREADABLE ConnectionRefusedError")
 
 
 if __name__ == "__main__":

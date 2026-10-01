@@ -104,7 +104,7 @@ APPROVAL_POST = """<div class="card"><div class="meta">منشور على {{where
 <form method="post" action="/portal/decide"><input type="hidden" name="approval" value="{{id}}">
 <input type="hidden" name="decision" value="rejected"><input type="hidden" name="csrf" value="{{csrf}}"><button class="no">رفض</button></form></div>"""
 POSTS_H = """<h2>منشوراتك</h2><p class="meta">اكتب المنشور هنا؛ يُفحص ثم يظهر لك أعلاه لتوافق عليه، ولا يُنشر قبل موافقتك.
-صورة المنشور رابط https لصورتك أنت (إنستغرام لا ينشر نصًا بلا صورة).</p>"""
+صورة المنشور رابط https لصورتك أنت (إنستغرام وتيك توك لا ينشران نصًا بلا صورة).</p>"""
 POST_FORM_OPEN = """<div class="card"><form method="post" action="/portal/posts/new"><input type="hidden" name="csrf" value="{{csrf}}">
 <select name="account" aria-label="الحساب">"""
 POST_FORM_CLOSE = """</select>
@@ -115,7 +115,8 @@ POST_OPTION = """<option value="{{value}}">{{label}}</option>"""
 POST_ROW = """<div class="card"><div class="meta">{{where}} · {{when}} · {{state}}</div><div class="body">{{body}}</div></div>"""
 POST_STATE = {"draft": "يُفحص", "pending_approval": "ينتظر موافقتك", "approved": "يُنشر الآن", "published": "نُشر",
               "rejected": "لم يُنشر (رُفض أو لم يجتز الفحص)"}
-PLATFORM_AR = {"facebook": "فيسبوك", "instagram": "إنستغرام"}
+PLATFORM_AR = {"facebook": "فيسبوك", "instagram": "إنستغرام", "tiktok": "تيك توك"}
+ACCOUNT_AR = {"facebook_page": "فيسبوك: ", "instagram_business": "إنستغرام: ", "tiktok_business": "تيك توك: "}
 NONE = """<p class="meta">{{text}}</p>"""
 INQUIRIES_H = """<h2>رسائل الأيام السبعة الأخيرة ({{count}})</h2>"""
 INQUIRY = """<div class="card"><div class="meta">{{when}} · {{category}}{{flag}}</div><div class="body">{{body}}</div></div>"""
@@ -524,8 +525,8 @@ class Portal:
         if data.get("channels"):                        # publishing needs a linked page or Instagram account (0023)
             out.append(POSTS_H)
             out.append(_r(POST_FORM_OPEN, csrf=csrf))
-            out += [_r(POST_OPTION, value=f"{c['kind']}:{c['id']}", label=("فيسبوك: " if c["kind"] == "facebook_page" else "إنستغرام: ")
-                       + c["name"]) for c in data["channels"]]
+            out += [_r(POST_OPTION, value=f"{c['kind']}:{c['id']}", label=ACCOUNT_AR.get(c["kind"], "") + c["name"])
+                    for c in data["channels"]]
             out.append(POST_FORM_CLOSE)
             for post in data.get("posts", []):
                 out.append(_r(POST_ROW, where=PLATFORM_AR.get(post["platform"], "—"), when=_when(post["created_at"]),

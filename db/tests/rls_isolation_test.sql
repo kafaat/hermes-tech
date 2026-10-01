@@ -1265,7 +1265,8 @@ select set_config('app.task_id', '', true), set_config('app.task_token', '', tru
 insert into app.channel_accounts (customer_id, kind, external_id, status, verified_at) values
   ('00000000-0000-0000-0000-00000000000a', 'facebook_page', '1069900000056', 'active', now()),
   ('00000000-0000-0000-0000-00000000000a', 'instagram_business', '1784199000056', 'active', now()),
-  ('00000000-0000-0000-0000-00000000000b', 'facebook_page', '1069900000057', 'active', now());
+  ('00000000-0000-0000-0000-00000000000b', 'facebook_page', '1069900000057', 'active', now()),
+  ('00000000-0000-0000-0000-00000000000a', 'tiktok_business', '_000k56TikTok', 'active', now());
 select pg_temp.as_user('11111111-1111-1111-1111-111111111111', 'aal1');
 set local role authenticated;
 do $$ declare c uuid; n int; begin
@@ -1285,6 +1286,14 @@ do $$ declare c uuid; n int; begin
     raise exception 'FAIL an Instagram post without an image was accepted';
   exception when raise_exception then if sqlerrm <> 'CONTENT_IMAGE_REQUIRED' then raise; end if;
   end;
+  begin
+    insert into app.content_items (customer_id, week_id, kind, body, platform, account_id)
+    values ('00000000-0000-0000-0000-00000000000a', '2026-W40', 'post', 'x', 'tiktok', '_000k56TikTok');
+    raise exception 'FAIL a TikTok post without an image was accepted';
+  exception when raise_exception then if sqlerrm <> 'CONTENT_IMAGE_REQUIRED' then raise; end if;
+  end;
+  insert into app.content_items (customer_id, week_id, kind, body, platform, account_id, image_url)
+  values ('00000000-0000-0000-0000-00000000000a', '2026-W40', 'post', 'x', 'tiktok', '_000k56TikTok', 'https://cdn.example/p.jpg');
   begin
     insert into app.content_items (customer_id, week_id, kind, body, platform, account_id, status)
     values ('00000000-0000-0000-0000-00000000000a', '2026-W40', 'post', 'x', 'facebook', '1069900000056', 'approved');

@@ -219,3 +219,50 @@ class MetaPublishAdapter:
         if not ref:
             raise RuntimeError("success without a post id")             # accepted but unidentifiable: ambiguous
         return str(ref)
+
+
+class TikTokPublishAdapter:
+    """content.publish to TikTok: a photo post through the Content Posting API (Direct Post, PULL_FROM_URL).
+    POST open.tiktokapis.com/v2/post/publish/content/init/ returns a publish id and TikTok publishes asynchronously;
+    that id is the provider reference. The image must sit on a domain the app verified with TikTok. The privacy level
+    is configuration only: an app TikTok has not audited may post SELF_ONLY, so that is the default."""
+
+    URL = "https://open.tiktokapis.com/v2/post/publish/content/init/"
+    PRIVACY = ("SELF_ONLY", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "PUBLIC_TO_EVERYONE")
+
+    def __init__(self, post, token_for_account, privacy: str = "SELF_ONLY"):
+        if privacy not in self.PRIVACY:
+            raise ValueError("privacy")
+        self.post, self.token_for_account, self.privacy = post, token_for_account, privacy
+
+    def send(self, row: dict) -> str:
+        p = row["payload"]
+        account, body, image = str(p.get("account_id") or ""), p.get("body") or "", p.get("image_url")
+        if p.get("platform") != "tiktok" or not re.fullmatch(r"[A-Za-z0-9_.-]{5,64}", account) or len(body) > 2200 \
+           or not image or not re.fullmatch(r"https://[^\s\"<>\\]{8,2000}", str(image)):
+            raise BeforeSend("BAD_TARGET")
+        token = self.token_for_account(account)
+        if not token:
+            raise BeforeSend("NO_ACCOUNT_TOKEN")
+        request = {"post_info": {"title": body[:90], "description": body, "privacy_level": self.privacy,
+                                 "disable_comment": False, "auto_add_music": True},
+                   "source_info": {"source": "PULL_FROM_URL", "photo_cover_index": 0, "photo_images": [image]},
+                   "post_mode": "DIRECT_POST", "media_type": "PHOTO"}
+        status, data = self.post(self.URL, request, {"Authorization": f"Bearer {token}"}, SEND_TIMEOUT_SECONDS)
+        error = str(((data or {}).get("error") or {}).get("code", ""))
+        if 200 <= status < 300 and error in ("", "ok"):
+            ref = ((data or {}).get("data") or {}).get("publish_id")
+            if not ref:
+                raise RuntimeError("success without a publish id")       # accepted but unidentifiable: ambiguous
+            return str(ref)
+        raise Rejected(status if status >= 400 else 400, error)
+
+
+class PublishRouter:
+    """content.publish goes to the platform the owner approved: Facebook / Instagram (Meta) or TikTok."""
+
+    def __init__(self, meta, tiktok):
+        self.meta, self.tiktok = meta, tiktok
+
+    def send(self, row: dict) -> str:
+        return (self.tiktok if row["payload"].get("platform") == "tiktok" else self.meta).send(row)

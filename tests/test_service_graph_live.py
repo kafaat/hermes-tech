@@ -184,6 +184,46 @@ class TestPublishing(unittest.TestCase):
                 self.assertEqual((outcome, sent), (FAILED_BEFORE_SEND, []))
 
 
+class TestTikTok(unittest.TestCase):
+    def publish(self, payload, answer, tokens=None, privacy="SELF_ONLY"):
+        sent = []
+
+        def connector(plan, request):
+            sent.append((plan["host"], request))
+            if isinstance(answer, BaseException):
+                raise answer
+            return answer
+        api = ApiClient({"open.tiktokapis.com"}, lambda h: [PUBLIC], connector)
+        from service.dispatcher import TikTokPublishAdapter
+        adapter = TikTokPublishAdapter(graph_post(api), ({"_000tiktokOpenId1": "act.TT"} if tokens is None else tokens).get, privacy)
+        db = Db()
+        db.row = lambda outbox_id: {"id": 12, "topic": "content.publish", "customer_id": "c1", "payload": payload}
+        return Dispatcher(db, {"content.publish": adapter}).run_once(12), db.finished, sent
+
+    POST = {"content_id": "c", "body": "منتج جديد", "platform": "tiktok", "account_id": "_000tiktokOpenId1",
+            "image_url": "https://cdn.example/p.jpg", "media_ids": []}
+
+    def test_a_photo_post_is_a_private_direct_post_by_default_and_returns_the_publish_id(self):
+        import json as _json
+        outcome, finished, sent = self.publish(self.POST, http(200, b'{"data":{"publish_id":"v_pub_1"},"error":{"code":"ok"}}'))
+        self.assertEqual((outcome, finished[0][1]), (SENT, "v_pub_1"))
+        host, req = sent[0]
+        self.assertTrue(req.startswith(b"POST /v2/post/publish/content/init/ HTTP/1.0\r\nHost: open.tiktokapis.com"))
+        body = _json.loads(req.split(b"\r\n\r\n", 1)[1])
+        self.assertEqual((body["post_mode"], body["media_type"], body["post_info"]["privacy_level"], body["source_info"]["photo_images"]),
+                         ("DIRECT_POST", "PHOTO", "SELF_ONLY", ["https://cdn.example/p.jpg"]))
+
+    def test_tiktok_errors_and_bad_input(self):
+        outcome, finished, _ = self.publish(self.POST, http(200, b'{"data":{},"error":{"code":"spam_risk_too_many_posts"}}'))
+        self.assertEqual((outcome, finished[0][2]), (FAILED_PERMANENT, "HTTP_400:spam_risk_too_many_posts"))
+        for bad in ({"image_url": None}, {"account_id": "a b"}, {"platform": "facebook"}):
+            outcome, _, sent = self.publish({**self.POST, **bad}, http(200))
+            self.assertEqual((outcome, sent), (FAILED_BEFORE_SEND, []), bad)
+        with self.assertRaises(ValueError):
+            from service.dispatcher import TikTokPublishAdapter
+            TikTokPublishAdapter(None, dict.get, "EVERYONE")
+
+
 class TestModes(unittest.TestCase):
     def test_live_needs_a_token_and_reaches_only_graph(self):
         with self.assertRaises(RuntimeError):

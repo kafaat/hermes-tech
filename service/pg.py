@@ -130,7 +130,7 @@ class PortalDb:
                         " where c.customer_id = any(%s::uuid[]) and c.active order by c.label", (ids,))
             competitors = [{"label": r[0], "fetched_at": r[1], "status": r[2], "summary": r[3]} for r in cur.fetchall()]
             cur.execute("select kind::text, external_id, coalesce(display_name, external_id), customer_id from app.channel_accounts"
-                        " where customer_id = any(%s::uuid[]) and status = 'active' and kind in ('facebook_page', 'instagram_business')"
+                        " where customer_id = any(%s::uuid[]) and status = 'active' and kind in ('facebook_page', 'instagram_business', 'tiktok_business')"
                         " order by kind, external_id", (ids,))
             channels = [{"kind": r[0], "id": r[1], "name": r[2], "customer_id": str(r[3])} for r in cur.fetchall()]
             cur.execute("select platform, body, status::text, created_at from app.content_items where customer_id = any(%s::uuid[])"
@@ -171,7 +171,7 @@ class PortalDb:
     def draft_post(self, claims: dict, kind: str, account_id: str, body: str, image_url: str | None) -> bool:
         """The owner's own draft (0023): the database refuses another business's account, an unlinked account, and an
         Instagram post without an image; then the owner queues its proposal (content.propose)."""
-        platform = {"facebook_page": "facebook", "instagram_business": "instagram"}.get(kind)
+        platform = {"facebook_page": "facebook", "instagram_business": "instagram", "tiktok_business": "tiktok"}.get(kind)
         if platform is None:
             return False
         with self.db.tx(claims=claims) as cur:

@@ -40,7 +40,7 @@ CUSTOMER = "00000000-0000-0000-0000-0000000e2e01"
 OWNER = "00000000-0000-0000-0000-0000000e2e0a"
 OPERATOR = "00000000-0000-0000-0000-0000000e2e0b"
 PHONE_ID = "pn-e2e-staging"
-FB_PAGE, IG_ACCOUNT = "1069900000001", "178419900000001"
+FB_PAGE, IG_ACCOUNT, TT_ACCOUNT = "1069900000001", "178419900000001", "_000e2eTikTok01"
 HOURS = "نفتح يوميًا من ٩ صباحًا إلى ١١ مساءً"
 MONITOR_TOKEN = os.environ.get("HERMES_MONITOR_TOKEN") or uuid.uuid4().hex   # staging: the service's own (shared var)
 JWT_SECRET = os.environ.get("HERMES_JWT_SECRET") or uuid.uuid4().hex * 2       # staging: the service's own (shared var)
@@ -71,7 +71,7 @@ def seed():
       " on conflict (customer_id, auth_user_id) do nothing", (CUSTOMER, OWNER))
     q("insert into app.channel_accounts (customer_id, kind, external_id, status, verified_at)"
       " values (%s, 'whatsapp_cloud', %s, 'active', now()) on conflict (kind, external_id) do nothing", (CUSTOMER, PHONE_ID))
-    for kind, ext_id in (("facebook_page", FB_PAGE), ("instagram_business", IG_ACCOUNT)):    # Messenger, Instagram Direct
+    for kind, ext_id in (("facebook_page", FB_PAGE), ("instagram_business", IG_ACCOUNT), ("tiktok_business", TT_ACCOUNT)):
         q("insert into app.channel_accounts (customer_id, kind, external_id, status, verified_at)"
           " values (%s, %s, %s, 'active', now()) on conflict (kind, external_id) do nothing", (CUSTOMER, kind, ext_id))
     q("update app.kb_facts set approved_by_owner = false where customer_id = %s and topic = 'hours' and fact <> %s"
@@ -259,7 +259,8 @@ def main():
         # posts (0023): the owner writes, the platform checks and proposes, the owner approves, then it is published
         owner_p = issue_staging_token(OWNER, JWT_SECRET)
         for kind, acct, body, image in (("facebook_page", FB_PAGE, f"عرض نهاية الأسبوع {run}", None),
-                                        ("instagram_business", IG_ACCOUNT, f"منتج جديد {run}", "https://cdn.example.test/new.jpg")):
+                                        ("instagram_business", IG_ACCOUNT, f"منتج جديد {run}", "https://cdn.example.test/new.jpg"),
+                                        ("tiktok_business", TT_ACCOUNT, f"صورة اليوم {run}", "https://cdn.example.test/day.jpg")):
             status, where, _ = portal(url, owner_p, "POST", {"_path": "/portal/posts/new", "account": f"{kind}:{acct}", "body": body,
                                                              **({"image_url": image} if image else {}), "csrf": csrf_token(owner_p, JWT_SECRET)})
             prop = wait(f"{kind} post proposal", lambda: q("select a.id, a.payload from app.approvals a join app.content_items c"
@@ -274,7 +275,7 @@ def main():
                 done = wait(f"{kind} post published", lambda: q(
                     "select c.status::text, o.provider_message_id from app.content_items c join app.outbox o on o.target_id = c.id::text"
                     " where c.body = %s and o.topic = 'content.publish' and o.dispatched_at is not null and c.status = 'published'", (body,)))
-                check(bool(done) and done[0][1].startswith("SIM_post_"),
+                check(bool(done) and done[0][1].startswith("SIM_tt_" if kind == "tiktok_business" else "SIM_post_"),
                       f"post on {kind}: published only after the owner's approval, marked published under it")
         blocked = f"هذا العسل يعالج السكر {run}"                 # a health claim: content_guard blocks it in posts
         portal(url, owner_p, "POST", {"_path": "/portal/posts/new", "account": f"facebook_page:{FB_PAGE}", "body": blocked,

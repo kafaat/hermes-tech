@@ -22,7 +22,7 @@ from complaints import Matcher, normalize  # noqa: E402
 from content_guard import ContentGuard  # noqa: E402
 
 from service.dispatcher import (SEND_TIMEOUT_SECONDS, SENT, BeforeSend, Dispatcher, MetaMessagingAdapter,  # noqa: E402
-                                MetaPublishAdapter, ReplyRouter, WhatsAppCloudAdapter)
+                                MetaPublishAdapter, PublishRouter, ReplyRouter, TikTokPublishAdapter, WhatsAppCloudAdapter)
 
 log = logging.getLogger("hermes.worker")
 AGENT = "agent_triage"
@@ -121,6 +121,11 @@ class SimulatedGraph:
         self.sent, self.delay = [], delay
 
     def __call__(self, url, body, headers, timeout):
+        if url.startswith("https://open.tiktokapis.com/"):                          # TikTok photo post (0024)
+            ref = "SIM_tt_" + uuid.uuid4().hex
+            self.sent.append({"url": url, "to": None, "id": ref})
+            accepted(ref, self.delay, timeout=timeout)
+            return 200, {"data": {"publish_id": ref}, "error": {"code": "ok", "message": ""}}
         if url.rsplit("/", 1)[-1] in ("feed", "photos", "media", "media_publish"):   # publishing (0023)
             ref = "SIM_post_" + uuid.uuid4().hex
             self.sent.append({"url": url, "to": None, "id": ref})
@@ -394,13 +399,15 @@ def simulated_adapters(delay: float | None = None):
     graph, notice = SimulatedGraph(delay), SimulatedOwnerNotice(delay)
     return {"reply.send": ReplyRouter(WhatsAppCloudAdapter(graph, lambda customer_id: "staging-simulated-token"),
                                       MetaMessagingAdapter(graph, lambda account: "staging-simulated-account-token")),
-            "content.publish": MetaPublishAdapter(graph, lambda account: "staging-simulated-account-token"),
+            "content.publish": PublishRouter(MetaPublishAdapter(graph, lambda account: "staging-simulated-account-token"),
+                                             TikTokPublishAdapter(graph, lambda account: "staging-simulated-tiktok-token")),
             "notify.owner": notice}
 
 
-GRAPH_HOSTS = ("graph.facebook.com", "graph.instagram.com")
+GRAPH_HOSTS = ("graph.facebook.com", "graph.instagram.com", "open.tiktokapis.com")
 GRAPH_PATH = re.compile(r"^https://graph\.facebook\.com/v\d{1,2}\.\d/\d{5,25}/(messages|feed|photos)$"
-                        r"|^https://graph\.instagram\.com/v\d{1,2}\.\d/\d{5,25}/(messages|media|media_publish)$")
+                        r"|^https://graph\.instagram\.com/v\d{1,2}\.\d/\d{5,25}/(messages|media|media_publish)$"
+                        r"|^https://open\.tiktokapis\.com/v2/post/publish/content/init/$")
 
 
 def graph_post(api):
@@ -436,7 +443,7 @@ def _token_ok(token: str) -> bool:
     return bool(token) and len(token) <= 1024 and token.isascii() and token.isprintable() and " " not in token
 
 
-def account_tokens(raw: str) -> dict:
+def account_tokens(raw: str, id_pattern: str = r"[0-9]{5,25}", name: str = "HERMES_GRAPH_ACCOUNT_TOKENS") -> dict:
     """HERMES_GRAPH_ACCOUNT_TOKENS: a JSON object {"<page id or Instagram account id>": "<its access token>"}; empty
     means Messenger and Instagram replies fail before sending (NO_ACCOUNT_TOKEN), WhatsApp is unaffected."""
     if not raw:
@@ -444,10 +451,10 @@ def account_tokens(raw: str) -> dict:
     try:
         data = json.loads(raw)
     except ValueError:
-        raise RuntimeError("HERMES_GRAPH_ACCOUNT_TOKENS must be a JSON object of account id -> token") from None
-    if not isinstance(data, dict) or not all(re.fullmatch(r"[0-9]{5,25}", str(k)) and isinstance(v, str) and _token_ok(v)
+        raise RuntimeError(f"{name} must be a JSON object of account id -> token") from None
+    if not isinstance(data, dict) or not all(re.fullmatch(id_pattern, str(k)) and isinstance(v, str) and _token_ok(v)
                                              for k, v in data.items()):
-        raise RuntimeError("HERMES_GRAPH_ACCOUNT_TOKENS must be a JSON object of account id -> token")
+        raise RuntimeError(f"{name} must be a JSON object of account id -> token")
     return {str(k): v for k, v in data.items()}
 
 
@@ -463,11 +470,13 @@ def live_adapters(env):
     if env.get("HERMES_SIM_SEND_DELAY_SECONDS"):
         raise RuntimeError("HERMES_SIM_SEND_DELAY_SECONDS needs HERMES_GRAPH=simulate")
     accounts = account_tokens(env.get("HERMES_GRAPH_ACCOUNT_TOKENS", ""))
+    tiktok = account_tokens(env.get("HERMES_TIKTOK_TOKENS", ""), r"[A-Za-z0-9_.-]{5,64}", "HERMES_TIKTOK_TOKENS")
     from service.crawler import ApiClient
     post = graph_post(ApiClient(set(GRAPH_HOSTS)))
     return {"reply.send": ReplyRouter(WhatsAppCloudAdapter(post, lambda customer_id: token, version),
                                       MetaMessagingAdapter(post, accounts.get, version)),
-            "content.publish": MetaPublishAdapter(post, accounts.get, version),
+            "content.publish": PublishRouter(MetaPublishAdapter(post, accounts.get, version),
+                                             TikTokPublishAdapter(post, tiktok.get, env.get("HERMES_TIKTOK_PRIVACY") or "SELF_ONLY")),
             "notify.owner": PortalNotice()}
 
 

@@ -1,0 +1,22 @@
+name: deps-monitor
+# The external monitor for /deps (spec 28.15): Railway does not report a skipped or hung cron run, so the service's
+# own pulse is read from outside every 30 minutes. A red run means degraded or unreachable; GitHub notifies the owner.
+# Needs the repository secrets HERMES_DEPS_URL (https://<app>/deps) and HERMES_MONITOR_TOKEN; without them the run
+# passes with a warning. Reads nothing from the repository but the script; no write permission.
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: { group: deps-monitor, cancel-in-progress: false }
+jobs:
+  deps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - run: python3 ops/monitor/check_deps.py
+        env:
+          HERMES_DEPS_URL: ${{ secrets.HERMES_DEPS_URL }}
+          HERMES_MONITOR_TOKEN: ${{ secrets.HERMES_MONITOR_TOKEN }}

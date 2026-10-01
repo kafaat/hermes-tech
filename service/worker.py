@@ -13,7 +13,7 @@ The reply text is an owner-approved fact (canned answer, §8.3): no model call o
 task is not caught into a status: the lease expires, recovery re-queues it, and the third expiry dead-letters it.
 """
 from __future__ import annotations
-import logging, os, sys, time, uuid
+import logging, os, re, sys, time, uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 from complaints import Matcher, normalize  # noqa: E402
 from content_guard import ContentGuard  # noqa: E402
 
-from service.dispatcher import SEND_TIMEOUT_SECONDS, SENT, Dispatcher, WhatsAppCloudAdapter  # noqa: E402
+from service.dispatcher import SEND_TIMEOUT_SECONDS, SENT, BeforeSend, Dispatcher, WhatsAppCloudAdapter  # noqa: E402
 
 log = logging.getLogger("hermes.worker")
 AGENT = "agent_triage"
@@ -66,9 +66,8 @@ class Task:
 
 
 class SimulatedGraph:
-    """Staging stand-in for the Graph API POST: records the request, answers like the Cloud API. The real client
-    is not built: it needs a Meta app and business verification (P3), and a network path under the single-path
-    rule (tests/test_service_boundaries.py)."""
+    """Staging stand-in for the Graph API POST: records the request, answers like the Cloud API. The live client is
+    live_adapters() below (HERMES_GRAPH=live, spec 28.14); it needs a Meta app and business verification (P3)."""
 
     def __init__(self, delay: float = 0.0):
         self.sent, self.delay = [], delay
@@ -204,9 +203,11 @@ class Worker:
                         " and (valid_until is null or valid_until >= current_date)")
             facts = dict(cur.fetchall())
             cats = route.get("categories") or []
-            cur.execute("insert into app.inquiries (customer_id, source, body, matched_category, owner_inquiry, routed_to)"
-                        " values (%s, 'whatsapp', %s, %s, %s, %s)",
-                        (t.customer_id, text, cats[0] if cats else None, route["kind"] == "owner_inquiry", route.get("routes", [])))
+            cur.execute("insert into app.inquiries (customer_id, source, body, matched_category, owner_inquiry, routed_to, event_ref)"
+                        " values (%s, 'whatsapp', %s, %s, %s, %s, %s)"
+                        " on conflict (customer_id, event_ref) where event_ref is not null do nothing",   # a re-run task: once (0018)
+                        (t.customer_id, text, cats[0] if cats else None, route["kind"] == "owner_inquiry", route.get("routes", []),
+                         ext[:200] or None))
         d = decide(text, route, facts, self.guard, self.matcher.rules)
         if d["action"] == "propose":
             reply = {"phone_number_id": channel, "to": str(msg.get("from", "")), "body": d["body"], "in_reply_to": ext}
@@ -258,6 +259,63 @@ def simulated_adapters(delay: float | None = None):
         raise RuntimeError("HERMES_SIM_SEND_DELAY_SECONDS needs HERMES_GRAPH=simulate")
     graph, notice = SimulatedGraph(delay), SimulatedOwnerNotice(delay)
     return {"reply.send": WhatsAppCloudAdapter(graph, lambda customer_id: "staging-simulated-token"), "notify.owner": notice}
+
+
+GRAPH_HOST = "graph.facebook.com"
+GRAPH_PATH = re.compile(r"^https://graph\.facebook\.com/v\d{1,2}\.\d/\d{5,20}/messages$")
+
+
+def graph_post(api):
+    """The WhatsAppCloudAdapter's post() over crawler.ApiClient: refusals before any byte left (an address or
+    a URL refused here, a header refused, a connection or TLS that failed) are BeforeSend and may be retried. A
+    failure after the request was written propagates and is AMBIGUOUS: an operator decides, nothing resends it."""
+    from service.crawler import NotSent             # the one network path (spec 28.12); FetchRefused comes with it
+    from safe_fetch import FetchRefused
+
+    def post(url, body, headers, timeout):
+        if not GRAPH_PATH.match(url):
+            raise BeforeSend("BAD_TARGET")           # live: a real phone number id, digits only
+        try:
+            return api.request("POST", url, body, headers)
+        except FetchRefused as exc:
+            raise BeforeSend(exc.code) from None
+        except NotSent as exc:
+            raise BeforeSend(str(exc)) from None
+        except ValueError:
+            raise BeforeSend("BAD_HEADER") from None
+    return post
+
+
+class PortalNotice:
+    """notify.owner in live mode: the owner reads escalations in the portal; no WhatsApp message to the owner until
+    an approved owner-notice template and the owner's number exist (spec 28.14). The outbox row records it once."""
+
+    def send(self, row):
+        return f"portal.{row.get('id')}"
+
+
+def live_adapters(env):
+    """HERMES_GRAPH=live: reply.send goes to the Graph API with the system user token HERMES_GRAPH_TOKEN, to
+    graph.facebook.com only (crawler.ApiClient). Missing configuration refuses to start."""
+    token = env.get("HERMES_GRAPH_TOKEN", "")
+    version = env.get("HERMES_GRAPH_API_VERSION", "v21.0")
+    if not token or len(token) > 1024 or not token.isascii() or not token.isprintable() or " " in token:
+        raise RuntimeError("HERMES_GRAPH=live needs HERMES_GRAPH_TOKEN (a Meta system user token)")
+    if env.get("HERMES_SIM_SEND_DELAY_SECONDS"):
+        raise RuntimeError("HERMES_SIM_SEND_DELAY_SECONDS needs HERMES_GRAPH=simulate")
+    from service.crawler import ApiClient
+    post = graph_post(ApiClient({GRAPH_HOST}))
+    return {"reply.send": WhatsAppCloudAdapter(post, lambda customer_id: token, version), "notify.owner": PortalNotice()}
+
+
+def adapters_for(env):
+    """simulate (staging) or live; anything else refuses to start."""
+    mode = env.get("HERMES_GRAPH")
+    if mode == "simulate":
+        return simulated_adapters()
+    if mode == "live":
+        return live_adapters(env)
+    raise RuntimeError("HERMES_GRAPH must be 'simulate' or 'live'")
 
 
 def worker_name() -> str:

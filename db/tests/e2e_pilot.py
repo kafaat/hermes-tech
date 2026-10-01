@@ -185,6 +185,8 @@ def main():
         inq = q("select matched_category::text from app.inquiries where customer_id = %s and body in (%s, %s)",
                 (CUSTOMER, "متى تفتحون اليوم؟", "الفاتورة غلط ودفعت مرتين"))
         check("pricing" in {r[0] for r in inq}, "inquiries recorded with the matched category")
+        check(q("select count(*) from app.inquiries where customer_id = %s and event_ref in (%s, %s)", (CUSTOMER, q_ext, c_ext))[0][0] == 2,
+              "one inquiry per inbound message, keyed by its message id (0018)")
         check(not q("select 1 from app.outbox where topic = 'reply.send' and target_id = %s", (q_ext,)), "nothing sent before the owner decides")
 
         if ap:
@@ -240,6 +242,8 @@ def main():
         check(status == 403, "operator console: refused to the operator without a second factor (aal1)")
         status, _, page = portal(url, op2, "GET_OPS")
         check(status == 200 and f"#{ob}" in page, "operator console: the aal2 operator sees the row waiting for a human")
+        check("المصادر الخارجية" in page and "الردود عبر Graph" in page and "مواقع المنافسين" in page,
+              "operator console: one health line per external source (28.15)")
         status, where, _ = portal(url, op2, "POST", {"_path": "/portal/ops/resolve", "outbox": str(ob), "resolution": "resend",
                                                      "reason": "e2e: provider log shows no delivery", "csrf": csrf_token(op2, JWT_SECRET)})
         check(status == 303 and where == "/portal/ops?done=resolved", "operator console: resend with a reason is accepted")

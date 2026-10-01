@@ -2,7 +2,7 @@ import os, sys, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from service.crawler import Crawler, FetchRefused
+from service.crawler import ApiClient, Crawler, FetchRefused, NotSent, tls_connector
 
 PUBLIC = "93.184.216.34"
 
@@ -137,6 +137,76 @@ class TestCrawler(unittest.TestCase):
             with self.assertRaises(FetchRefused, msg=path) as e:
                 c.fetch("https://shop.example" + path)
             self.assertEqual(e.exception.code, code, path)
+
+
+class TestApiClient(unittest.TestCase):
+    def setUp(self):
+        self.sent = []
+
+    def net(self, dns, raw):
+        def connect(plan, request):
+            self.sent.append((plan["connect_to"], plan["host"], request))
+            return raw
+        return (lambda h: dns[h]), connect
+
+    def test_json_to_a_named_host_through_the_pinned_address(self):
+        resolve, connect = self.net({"api.example": [PUBLIC]}, resp(200, b'{"ok": true}', {"Content-Type": "application/json"}))
+        status, data = ApiClient({"api.example"}, resolve, connect).request("POST", "https://api.example/v1/x?a=1", {"n": "س"},
+                                                                          {"apikey": "k1"})
+        self.assertEqual((status, data), (200, {"ok": True}))
+        addr, host, req = self.sent[0]
+        self.assertEqual((addr, host), (PUBLIC, "api.example"))
+        self.assertTrue(req.startswith(b"POST /v1/x?a=1 HTTP/1.0\r\nHost: api.example\r\n"))
+        self.assertIn(b"apikey: k1\r\n", req)
+        self.assertTrue(req.endswith('{"n":"س"}'.encode()))
+
+    def test_other_hosts_private_addresses_and_plain_http_are_refused(self):
+        for url, dns, code in (("https://evil.example/", {"evil.example": [PUBLIC]}, "HOST_NOT_ALLOWED"),
+                               ("https://api.example/", {"api.example": ["10.0.0.5"]}, "NON_PUBLIC_ADDRESS"),
+                               ("http://api.example/", {"api.example": [PUBLIC]}, None)):
+            resolve, connect = self.net(dns, resp())
+            with self.assertRaises(FetchRefused, msg=url) as e:
+                ApiClient({"api.example", "evil2.example"}, resolve, connect).request("GET", url)
+            if code:
+                self.assertEqual(e.exception.code, code)
+        self.assertEqual(self.sent, [])
+
+    def test_header_injection_is_refused_before_connecting(self):
+        resolve, connect = self.net({"api.example": [PUBLIC]}, resp())
+        for k, v in (("apikey", "a\r\nX-Evil: 1"), ("Bad Name", "v"), ("apikey", "ك")):
+            with self.assertRaises(ValueError):
+                ApiClient({"api.example"}, resolve, connect).request("GET", "https://api.example/", None, {k: v})
+        self.assertEqual(self.sent, [])
+
+    def test_a_redirect_is_returned_not_followed_and_one_address_only(self):
+        resolve, connect = self.net({"api.example": [PUBLIC, "93.184.216.35"]},
+                                    resp(302, b"", {"Location": "https://elsewhere.example/"}))
+        status, data = ApiClient({"api.example"}, resolve, connect).request("POST", "https://api.example/send", {})
+        self.assertEqual((status, data, len(self.sent)), (302, {}, 1))
+
+        def fails(plan, request):
+            self.sent.append(plan["connect_to"])
+            raise TimeoutError("read")
+        with self.assertRaises(TimeoutError):
+            ApiClient({"api.example"}, resolve, fails).request("POST", "https://api.example/send", {})
+        self.assertEqual(self.sent[1:], [PUBLIC])                    # a send that may have arrived is not sent elsewhere
+
+
+class TestTlsConnector(unittest.TestCase):
+    def test_a_failure_before_the_first_byte_is_not_sent_and_names_its_cause(self):
+        from unittest import mock
+        plan = {"connect_to": PUBLIC, "port": 443, "host": "shop.example", "timeout_seconds": 1, "max_bytes": 10}
+        with mock.patch("socket.create_connection", side_effect=ConnectionRefusedError()):
+            with self.assertRaises(NotSent) as e:
+                tls_connector(plan, b"GET / HTTP/1.0\r\n\r\n")
+        self.assertEqual(str(e.exception), "ConnectionRefusedError")
+        n = Net({"shop.example": [PUBLIC]}, {})
+
+        def refused(plan, request):
+            raise NotSent("ConnectionRefusedError")
+        with self.assertRaises(FetchRefused) as e:
+            Crawler(n.resolve, refused).fetch("https://shop.example/")
+        self.assertEqual(str(e.exception), "ROBOTS_UNREADABLE ConnectionRefusedError")
 
 
 if __name__ == "__main__":

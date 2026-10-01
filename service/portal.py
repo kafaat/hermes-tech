@@ -6,10 +6,18 @@ Without it nothing reaches a customer: every reply waits for the owner's decisio
 escalations here (a notice carries a reference, never the message text).
 
 Identity: a Supabase Auth access token (service/auth.py verifies it) kept in a __Host- cookie (Secure, HttpOnly,
-SameSite=Strict, Path=/). Every read and write runs in the owner's own database session, so the policies decide;
-the database also refuses a decision not attributed to the session user (DECIDER_MUST_BE_SESSION_USER).
-  GET  /portal                     the page, or the sign-in page
-  POST /portal/session             access_token=<Supabase token>   -> cookie (the Supabase client posts here)
+SameSite=Strict, Path=/), and its refresh token in a second one. Every read and write runs in the owner's own database
+session, so the policies decide; the database also refuses a decision not attributed to the session user
+(DECIDER_MUST_BE_SESSION_USER). Sign-in is server side (service/supabase_auth.py), since these pages run no script:
+  GET  /portal                     the page, or the sign-in page (email -> a 6-digit code)
+  POST /portal/login/code          email=<address>                  -> the code page (same answer for any address)
+  POST /portal/login/verify        email=<address> code=<6 digits>  -> both cookies
+  GET  /portal/mfa                 operator second factor: enrol a TOTP app once, then a code per session (aal2)
+  POST /portal/mfa/enroll          csrf=<token>                     -> the secret to type into the app
+  POST /portal/mfa/verify          factor=<id> code=<6 digits> csrf=<token> -> an aal2 session
+  POST /portal/session             access_token=<Supabase token>   -> cookie (a client that signed in elsewhere)
+An access token within five minutes of expiry, or expired, is replaced with the refresh token on the next request
+(Supabase rotates it); a refresh that fails signs the user out.
   POST /portal/staging-login       code=<HERMES_STAGING_LOGIN_CODE> -> a session for HERMES_STAGING_OWNER_ID;
                                    refused unless HERMES_GRAPH=simulate and both are set
   POST /portal/decide              approval=<id> decision=approved|rejected csrf=<token>
@@ -29,10 +37,14 @@ from typing import Protocol
 from urllib.parse import parse_qs, urlsplit
 
 from service.auth import AuthError, csrf_token, issue_staging_token, verify_session_token
+from service.supabase_auth import AuthFailed
 from service.render import render
 
 log = logging.getLogger("hermes.portal")
 COOKIE = "__Host-hermes_owner"
+REFRESH_COOKIE = "__Host-hermes_refresh"
+REFRESH_MAX_AGE = 14 * 86400
+RENEW_BEFORE_SECONDS = 300
 MAX_FORM_BYTES = 4096
 SECURITY_HEADERS = [
     ("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; "
@@ -88,6 +100,22 @@ FACT_PENDING = """<div class="card"><div class="meta">{{topic}} · تنتظر ا
 <form method="post" action="/portal/facts/approve"><input type="hidden" name="fact" value="{{id}}">
 <input type="hidden" name="csrf" value="{{csrf}}"><button class="ok">اعتماد</button></form></div>"""
 SIGN_IN = """<h1>بوابة المالك</h1><p>سجّل الدخول لترى الردود التي تنتظر موافقتك.</p><p class="meta">{{how}}</p>"""
+EMAIL_FORM = """<div class="card"><form method="post" action="/portal/login/code">
+<input type="text" name="email" inputmode="email" autocomplete="email" aria-label="البريد الإلكتروني" placeholder="البريد الإلكتروني" required>
+<button class="ok">أرسل رمز الدخول</button></form></div>"""
+CODE_FORM = """<h1>رمز الدخول</h1><p>إن كان {{email}} مسجلًا لدينا فقد أرسلنا إليه رمزًا من 6 أرقام. صلاحيته دقائق.</p>
+<div class="card"><form method="post" action="/portal/login/verify"><input type="hidden" name="email" value="{{email}}">
+<input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" aria-label="الرمز" placeholder="الرمز" required>
+<button class="ok">دخول</button></form></div><p class="meta"><a href="/portal">بريد آخر</a></p>"""
+MFA_CODE = """<h1>التحقق الثنائي</h1><p>أدخل الرمز الذي يعرضه تطبيق المصادقة الآن.</p>
+<div class="card"><form method="post" action="/portal/mfa/verify"><input type="hidden" name="factor" value="{{factor}}">
+<input type="hidden" name="csrf" value="{{csrf}}"><input type="text" name="code" inputmode="numeric" autocomplete="one-time-code"
+aria-label="الرمز" placeholder="الرمز" required><button class="ok">تحقق</button></form></div>"""
+MFA_ENROLL = """<h1>التحقق الثنائي</h1><p>لوحة المشغّل تتطلب تطبيق مصادقة (TOTP). يُضاف مرة واحدة.</p>
+<div class="card"><form method="post" action="/portal/mfa/enroll"><input type="hidden" name="csrf" value="{{csrf}}">
+<button class="ok">إضافة تطبيق مصادقة</button></form></div>"""
+MFA_SECRET = """<h1>أضف المفتاح إلى تطبيق المصادقة</h1><p>اختر «إدخال مفتاح يدويًا» في التطبيق واكتب:</p>
+<div class="card"><div class="body" dir="ltr">{{secret}}</div><p class="meta">لن يُعرض هذا المفتاح مرة أخرى.</p></div>"""
 STAGING_LOGIN = """<div class="card"><p class="meta">بيئة التجربة (staging): دخول برمز التجربة، لا يعمل في الإنتاج.</p>
 <form method="post" action="/portal/staging-login"><input type="password" name="code" aria-label="رمز التجربة" autocomplete="off">
 <button class="ok">دخول</button></form></div>"""
@@ -97,6 +125,12 @@ OPS_TOP = """<h1>لوحة المشغّل</h1><p class="meta">جلسة مشغّل
 OPS_HEALTH = """<h2>الحالة</h2><div class="card"><div>آخر محو ناجح: {{retention}}</div><div>نصوص تجاوزت 31 يومًا: {{overdue}}</div>
 <div>أحداث موقّعة لا تتبع أي قناة: {{unrouted}}</div>
 <div>المنافسون النشطون: {{competitors}} · ببيانات منظمة {{structured}} · بلا بيانات منظمة {{unstructured}} · يمنعون الفحص {{blocked}}</div></div>"""
+OPS_SOURCES_H = """<h2>المصادر الخارجية</h2><p class="meta">لكل مصدر: ما نجح وما فشل وما ينتظر إنسانًا (رسائل واتساب
+وردودها خلال 24 ساعة، ومواقع المنافسين خلال 7 أيام). أرقام فقط.</p>"""
+OPS_SOURCE = """<div class="card"><div>{{name}} · {{verdict}}</div><div class="meta">نجح {{ok}} · فشل {{failed}} · ينتظر إنسانًا
+{{waiting}} · آخر نجاح {{last}}{{cause}}</div></div>"""
+SOURCE_AR = {"whatsapp_inbound": "رسائل واتساب الواردة", "reply.send": "الردود عبر Graph",
+             "notify.owner": "تنبيهات المالك", "competitor_sites": "مواقع المنافسين"}
 OPS_ROWS_H = """<h2>صفوف الصندوق الصادر التي تحتاج إنسانًا ({{count}})</h2>
 <p class="meta">«تحتاج قرارًا»: الإرسال غامض، لا يُعاد آليًا أبدًا. «ينتظر العامل»: انتهى حجز الإرسال بلا نتيجة، وسيعلّمه العامل
 عند استعادة المهمة. قبل «أُرسل فعلًا» تحقق من المزوّد؛ «أعد الإرسال» يُرسل مرة أخرى وقد يصل مرتين إن كان الأول قد وصل.</p>"""
@@ -112,9 +146,11 @@ STAGING_OPERATOR = """<div class="card"><p class="meta">مشغّل بيئة ال
 <form method="post" action="/portal/staging-login"><input type="hidden" name="as" value="operator">
 <input type="password" name="code" aria-label="رمز التجربة" autocomplete="off"><button>دخول كمشغّل</button></form></div>"""
 
+AUTH_FAILED = {"invalid": "الرمز غير صحيح أو انتهت صلاحيته.", "rate_limited": "محاولات كثيرة. انتظر دقيقة ثم أعد المحاولة.",
+               "unavailable": "خدمة الدخول لا تستجيب الآن. أعد المحاولة بعد قليل."}
 MESSAGES = {"approved": "تمت الموافقة. يُرسل الرد خلال دقيقة.", "rejected": "رُفض المقترح ولن يُرسل.",
             "fact": "اعتُمدت المعلومة.", "resolved": "سُجّل القرار. «أعد الإرسال» يُرسل خلال دقيقة.",
-            "reason": "لم يُنفّذ: السبب إلزامي (خمسة أحرف على الأقل).", "gone": "لم يُنفّذ: المقترح لم يعد معلقًا أو ليس لك.", "error": "تعذّر التنفيذ. أعد المحاولة."}
+            "reason": "لم يُنفّذ: السبب إلزامي (خمسة أحرف على الأقل).", "mfa": "لم يُقبل الرمز. أعد المحاولة.", "gone": "لم يُنفّذ: المقترح لم يعد معلقًا أو ليس لك.", "error": "تعذّر التنفيذ. أعد المحاولة."}
 
 
 def _r(template: str, **fields) -> str:
@@ -135,8 +171,8 @@ def _when(ts) -> str:
 
 class Portal:
     def __init__(self, store: StorePort, secret: str, *, staging_login_code: str = "", staging_owner_id: str = "",
-                 staging_operator_id: str = "", simulate: bool = False, now=time.time):
-        self.store, self.secret, self.now = store, secret, now
+                 staging_operator_id: str = "", simulate: bool = False, now=time.time, auth=None):
+        self.store, self.secret, self.now, self.auth = store, secret, now, auth
         self.staging = bool(simulate and staging_login_code and staging_owner_id and secret)
         self.staging_code, self.staging_owner = staging_login_code, staging_owner_id
         self.staging_operator = staging_operator_id if self.staging else ""
@@ -149,24 +185,55 @@ class Portal:
     def _redirect(self, where: str, extra: list | None = None):
         return 303, [("Location", where), *SECURITY_HEADERS, *(extra or [])], b""
 
-    def _session(self, headers: dict):
+    @staticmethod
+    def _cookie_value(headers: dict, name: str) -> str:
         raw = headers.get("cookie", "")
-        token = next((p.split("=", 1)[1].strip() for p in raw.split(";") if p.strip().startswith(COOKIE + "=")), "")
-        if not token:
-            return None, None
+        return next((p.split("=", 1)[1].strip() for p in raw.split(";") if p.strip().startswith(name + "=")), "")
+
+    def _session(self, headers: dict):
+        """(token, claims, cookies to set). An expiring or expired access token is renewed with the refresh token."""
+        token, refresh = self._cookie_value(headers, COOKIE), self._cookie_value(headers, REFRESH_COOKIE)
+        claims = None
+        if token:
+            try:
+                claims = verify_session_token(token, self.secret, self.now())
+            except AuthError as exc:
+                log.info("portal session refused: %s", exc)
+        if claims is not None and claims["exp"] - self.now() > RENEW_BEFORE_SECONDS:
+            return token, claims, []
+        if self.auth is None or not refresh:
+            return (token, claims, []) if claims is not None else (None, None, [])
         try:
-            return token, verify_session_token(token, self.secret, self.now())
-        except AuthError as exc:
-            log.info("portal session refused: %s", exc)
-            return None, None
+            new = self.auth.refresh(refresh)
+            new_claims = verify_session_token(new.access_token, self.secret, self.now())
+        except (AuthFailed, AuthError) as exc:
+            log.info("portal session renewal refused: %s", exc)
+            if claims is not None:                         # still valid for a few minutes: keep it, try again next time
+                return token, claims, []
+            return None, None, self._clear()
+        return new.access_token, new_claims, self._cookies(new.access_token, new_claims, new.refresh_token)
 
     def _cookie(self, token: str, claims: dict):
         age = max(0, min(3600, int(claims["exp"] - self.now())))
         return ("Set-Cookie", f"{COOKIE}={token}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age={age}")
 
+    def _cookies(self, token: str, claims: dict, refresh: str | None = None) -> list:
+        out = [self._cookie(token, claims)]
+        if refresh and len(refresh) <= 512 and refresh.isprintable() and ";" not in refresh and " " not in refresh:
+            out.append(("Set-Cookie", f"{REFRESH_COOKIE}={refresh}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age={REFRESH_MAX_AGE}"))
+        return out
+
     @staticmethod
     def _clear():
-        return ("Set-Cookie", f"{COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0")
+        return [("Set-Cookie", f"{COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0"),
+                ("Set-Cookie", f"{REFRESH_COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0")]
+
+    @staticmethod
+    def _with(result, cookies: list):
+        """Add the renewed cookies unless the response sets the same cookie itself (sign-out, a new aal2 session)."""
+        status, headers, body = result
+        own = {v.split("=", 1)[0] for k, v in headers if k == "Set-Cookie"}
+        return status, [*headers, *(c for c in cookies if c[1].split("=", 1)[0] not in own)], body
 
     @staticmethod
     def _same_origin(headers: dict) -> bool:
@@ -182,10 +249,10 @@ class Portal:
         headers = {k.lower(): v for k, v in headers.items()}
         route = urlsplit(path).path.rstrip("/") or "/"
         done = parse_qs(urlsplit(path).query).get("done", [""])[0]
-        if method == "GET" and route == "/portal":
-            return self._home(headers, done)
-        if method == "GET" and route == "/portal/ops":
-            return self._ops(headers, done)
+        if method == "GET" and route in ("/portal", "/portal/ops", "/portal/mfa"):
+            token, claims, renew = self._session(headers)
+            page = {"/portal": self._home, "/portal/ops": self._ops, "/portal/mfa": self._mfa}[route]
+            return self._with(page(token, claims, done), renew)
         if method != "POST" or not route.startswith("/portal/"):
             return self._page(404, _r(NONE, text="غير موجود"))
         if len(body) > MAX_FORM_BYTES or not self._same_origin(headers):
@@ -198,13 +265,28 @@ class Portal:
             return self._sign_in(form.get("access_token", ""))
         if route == "/portal/staging-login":
             return self._staging_login(form.get("code", ""), form.get("as") == "operator")
-        token, claims = self._session(headers)
+        if route == "/portal/login/code" and self.auth is not None:
+            return self._login_code(form.get("email", "").strip())
+        if route == "/portal/login/verify" and self.auth is not None:
+            return self._login_verify(form.get("email", "").strip(), form.get("code", "").strip())
+        token, claims, renew = self._session(headers)
         if claims is None:
-            return self._redirect("/portal", [self._clear()])
-        if not hmac.compare_digest(form.get("csrf", ""), csrf_token(token, self.secret)):
+            return self._redirect("/portal", self._clear())
+        old = self._cookie_value(headers, COOKIE)          # a form made before a renewal carries the old token's CSRF
+        if not any(t and hmac.compare_digest(form.get("csrf", ""), csrf_token(t, self.secret))
+                   for t in ((token, old) if renew else (token,))):
             return self._page(403, _r(NONE, text="انتهت صلاحية الصفحة. افتح البوابة من جديد."))
+        return self._with(self._act(route, form, token, claims), renew)
+
+    def _act(self, route: str, form: dict, token: str, claims: dict):
         if route == "/portal/logout":
-            return self._redirect("/portal", [self._clear()])
+            if self.auth is not None:
+                self.auth.sign_out(token)
+            return self._redirect("/portal", self._clear())
+        if route == "/portal/mfa/enroll" and self.auth is not None:
+            return self._mfa_enroll(token, claims)
+        if route == "/portal/mfa/verify" and self.auth is not None:
+            return self._mfa_verify(token, form.get("factor", ""), form.get("code", "").strip())
         try:
             if route == "/portal/decide" and form.get("decision") in ("approved", "rejected"):
                 ok = self.store.decide(claims, form.get("approval", ""), form["decision"])
@@ -231,6 +313,63 @@ class Portal:
             return self._page(401, _r(NONE, text="تعذّر تسجيل الدخول."))
         return self._redirect("/portal", [self._cookie(access_token, claims)])
 
+    def _login_code(self, email: str):
+        try:
+            self.auth.send_code(email)
+        except AuthFailed as exc:
+            if exc.code != "invalid":                      # an unknown address is not told apart from a known one
+                return self._page(503 if exc.code == "unavailable" else 429,
+                                  _r(SIGN_IN, how=AUTH_FAILED[exc.code]) + EMAIL_FORM)
+            if not email or "@" not in email:
+                return self._page(400, _r(SIGN_IN, how="اكتب بريدًا إلكترونيًا صحيحًا.") + EMAIL_FORM)
+        return self._page(200, _r(CODE_FORM, email=email[:254]))
+
+    def _login_verify(self, email: str, code: str):
+        try:
+            session = self.auth.verify_code(email, code)
+            claims = verify_session_token(session.access_token, self.secret, self.now())
+        except (AuthFailed, AuthError) as exc:
+            log.info("portal sign-in refused: %s", exc)
+            message = AUTH_FAILED.get(getattr(exc, "code", ""), AUTH_FAILED["invalid"])
+            return self._page(401, _r(FLASH, message=message) + _r(CODE_FORM, email=email[:254]))
+        return self._redirect("/portal", self._cookies(session.access_token, claims, session.refresh_token))
+
+    def _mfa(self, token, claims, done: str):
+        if claims is None:
+            return self._redirect("/portal")
+        if self.auth is None:
+            return self._page(404, _r(NONE, text="غير موجود"))
+        if claims.get("aal") == "aal2":
+            return self._redirect("/portal/ops")
+        csrf = csrf_token(token, self.secret)
+        flash = _r(FLASH, message=MESSAGES["mfa"]) if done == "mfa" else ""
+        try:
+            factor = self.auth.mfa_factor(token)
+        except AuthFailed as exc:
+            return self._page(503, _r(NONE, text=AUTH_FAILED[exc.code if exc.code in AUTH_FAILED else "unavailable"]))
+        if factor is None:
+            return self._page(200, flash + _r(MFA_ENROLL, csrf=csrf))
+        return self._page(200, flash + _r(MFA_CODE, factor=factor["id"], csrf=csrf))
+
+    def _mfa_enroll(self, token, claims):
+        try:
+            if self.auth.mfa_factor(token) is not None:    # one factor per operator; a second enrolment is refused
+                return self._redirect("/portal/mfa")
+            factor = self.auth.mfa_enroll(token)
+        except AuthFailed as exc:
+            return self._page(503, _r(NONE, text=AUTH_FAILED[exc.code if exc.code in AUTH_FAILED else "unavailable"]))
+        return self._page(200, _r(MFA_SECRET, secret=factor["secret"]) + _r(MFA_CODE, factor=factor["id"],
+                                                                         csrf=csrf_token(token, self.secret)))
+
+    def _mfa_verify(self, token, factor: str, code: str):
+        try:
+            session = self.auth.mfa_verify(token, factor, code)
+            claims = verify_session_token(session.access_token, self.secret, self.now())
+        except (AuthFailed, AuthError) as exc:
+            log.info("portal second factor refused: %s", exc)
+            return self._redirect("/portal/mfa?done=mfa")
+        return self._redirect("/portal/ops", self._cookies(session.access_token, claims, session.refresh_token))
+
     def _staging_login(self, code: str, as_operator: bool = False):
         if not self.staging or not hmac.compare_digest(code.encode(), self.staging_code.encode()) \
            or (as_operator and not self.staging_operator):
@@ -241,8 +380,7 @@ class Portal:
         log.info("portal staging login as %s", "operator" if as_operator else "owner")
         return self._redirect(where, [self._cookie(token, verify_session_token(token, self.secret, self.now()))])
 
-    def _ops(self, headers: dict, done: str):
-        token, claims = self._session(headers)
+    def _ops(self, token, claims, done: str):
         if claims is None:
             return self._redirect("/portal")
         try:
@@ -251,6 +389,8 @@ class Portal:
             log.error("ops overview failed: %s", type(exc).__name__)
             return self._page(503, _r(NONE, text="تعذّر تحميل البيانات الآن. أعد المحاولة بعد قليل."))
         if data is None:                                   # the database says: not an operator in this session
+            if self.auth is not None and claims.get("aal") != "aal2":
+                return self._redirect("/portal/mfa")
             return self._page(403, _r(NONE, text="هذه الصفحة للمشغّلين بجلسة تحقق ثنائي فقط."))
         csrf = csrf_token(token, self.secret)
         out = [_r(OPS_TOP, csrf=csrf)]
@@ -261,6 +401,14 @@ class Portal:
                       competitors=comp["active"], structured=comp["structured"], unstructured=comp["unstructured"],
                       blocked=comp["blocked"],
                       unrouted=data["unrouted"]))
+        if data.get("sources"):
+            out.append(OPS_SOURCES_H)
+            for src in data["sources"]:
+                verdict = ("يحتاج نظرًا" if src["waiting"] or (src["failed"] and src["source"] != "competitor_sites")
+                           else "لا نشاط" if not src["ok"] and not src["failed"] else "سليم")
+                out.append(_r(OPS_SOURCE, name=SOURCE_AR.get(src["source"], src["source"]), verdict=verdict, ok=src["ok"],
+                              failed=src["failed"], waiting=src["waiting"], last=_when(src["last"]),
+                              cause=f" · السبب الأكثر: {src['cause']}" if src.get("cause") else ""))
         out.append(_r(OPS_ROWS_H, count=len(data["rows"])))
         for r in data["rows"]:
             fields = dict(id=r["id"], customer=r["customer"] or "المنصة", topic=r["topic"], attempts=r["attempts"],
@@ -273,11 +421,12 @@ class Portal:
             out.append(_r(NONE, text="لا شيء ينتظر قرارًا."))
         return self._page(200, "".join(out))
 
-    def _home(self, headers: dict, done: str):
-        token, claims = self._session(headers)
+    def _home(self, token, claims, done: str):
         if claims is None:
-            how = ("بيئة تجربة." if self.staging else "الدخول عبر حساب منشأتك (Supabase Auth).")
-            return self._page(200, _r(SIGN_IN, how=how) + (STAGING_LOGIN if self.staging else "")
+            how = ("الدخول برمز يصل إلى بريدك." if self.auth is not None else
+                   "بيئة تجربة." if self.staging else "الدخول غير مهيأ بعد (HERMES_SUPABASE_URL).")
+            return self._page(200, _r(SIGN_IN, how=how) + (EMAIL_FORM if self.auth is not None else "")
+                              + (STAGING_LOGIN if self.staging else "")
                               + (STAGING_OPERATOR if self.staging_operator else ""))
         try:
             data = self.store.overview(claims)

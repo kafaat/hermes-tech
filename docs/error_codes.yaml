@@ -89,6 +89,7 @@ codes:
   TOO_MANY_REDIRECTS:            {kind: error, since: "1.7", src: "safe_fetch · crawler", ar: "أكثر من 3 إعادات توجيه"}
   TOO_LARGE:                     {kind: error, since: "1.8", src: crawler, ar: "الصفحة أكبر من الحد"}
   MALFORMED_RESPONSE:            {kind: error, since: "1.8", src: crawler, ar: "استجابة HTTP غير صالحة"}
+  HOST_NOT_ALLOWED:              {kind: error, since: "1.8", src: crawler, ar: "مضيف خارج قائمة واجهات المزوّدين المسموحة"}
   ROBOTS_DISALLOW:               {kind: error, since: "1.8", src: crawler, ar: "robots.txt يمنع الجلب"}
   ROBOTS_UNREADABLE:             {kind: error, since: "1.8", src: crawler, ar: "تعذّرت قراءة robots.txt (شبكة أو خطأ خادم)؛ لا جلب، ويُعاد لاحقًا"}
   LOGIN_PAGE:                    {kind: error, since: "1.8", src: crawler, ar: "صفحة دخول: لا تُجلب"}

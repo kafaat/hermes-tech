@@ -13,6 +13,7 @@ cannot re-send: an expired unconfirmed claim of a non-idempotent topic cannot be
 """
 from __future__ import annotations
 from dataclasses import dataclass
+import re
 from typing import Protocol
 
 SENT, FAILED_PERMANENT, FAILED_BEFORE_SEND, AMBIGUOUS = "sent", "failed_permanent", "failed_before_send", "ambiguous"
@@ -113,6 +114,8 @@ class WhatsAppCloudAdapter:
 
     def send(self, row: dict) -> str:
         p = row["payload"]
+        if not re.fullmatch(r"[A-Za-z0-9-]{1,40}", str(p.get("phone_number_id", ""))) or not re.fullmatch(r"v\d{1,2}\.\d", self.api_version):
+            raise BeforeSend("BAD_TARGET")                    # no "/", "?" or ".." from a payload shapes the URL path
         url = f"https://graph.facebook.com/{self.api_version}/{p['phone_number_id']}/messages"
         body = {"messaging_product": "whatsapp", "to": p["to"], "type": "text", "text": {"body": p["body"]}}
         status, data = self.post(url, body, {"Authorization": f"Bearer {self.token_for_customer(row['customer_id'])}"},

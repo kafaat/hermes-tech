@@ -178,6 +178,7 @@
               "DECISION_FINAL",
               "DEPLOYMENT_IMMUTABLE",
               "EXECUTION_FAILED",
+              "HOST_NOT_ALLOWED",
               "KB_APPROVAL_OWNER_ONLY",
               "LEASE_INVALID",
               "LEASE_SECONDS_OUT_OF_RANGE",

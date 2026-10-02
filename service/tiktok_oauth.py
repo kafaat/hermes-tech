@@ -112,14 +112,17 @@ def _b64(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
 
 
-def sign_state(secret: str, customer: str, sub: str, now: float | None = None) -> str:
-    body = _b64(json.dumps({"c": customer, "s": sub, "n": secrets.token_hex(8),
+def sign_state(secret: str, customer: str, sub: str, now: float | None = None, nonce: str | None = None) -> str:
+    """nonce: also kept in a short-lived cookie of the browser that started the link, cleared when it finishes: the
+    state completes once, in that browser (review of 2026-10-02)."""
+    body = _b64(json.dumps({"c": customer, "s": sub, "n": nonce or secrets.token_hex(8),
                             "e": int((time.time() if now is None else now) + STATE_TTL)}, separators=(",", ":")).encode())
     return body + "." + _b64(hmac.new(("tiktok-state:" + secret).encode(), body.encode(), hashlib.sha256).digest())
 
 
-def verify_state(secret: str, state: str, sub: str, now: float | None = None) -> str:
-    """The business id the state was issued for, if it is ours, unexpired and issued to this same user; else ''."""
+def verify_state(secret: str, state: str, sub: str, now: float | None = None, nonce: str | None = None) -> str:
+    """The business id the state was issued for, if it is ours, unexpired, issued to this same user and (nonce given)
+    started in this browser; else ''."""
     try:
         body, sig = state.split(".")
         good = _b64(hmac.new(("tiktok-state:" + secret).encode(), body.encode(), hashlib.sha256).digest())
@@ -127,6 +130,8 @@ def verify_state(secret: str, state: str, sub: str, now: float | None = None) ->
             return ""
         data = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
         if data.get("s") != sub or int(data.get("e", 0)) < (time.time() if now is None else now):
+            return ""
+        if nonce is not None and not hmac.compare_digest(str(data.get("n", "")).encode(), nonce.encode()):
             return ""
         return str(uuid.UUID(str(data.get("c"))))
     except (ValueError, TypeError, AttributeError):
@@ -146,6 +151,18 @@ class TikTokTokens:
         bind = CURRENT_BIND.get()
         if bind is None or not OPEN_ID.match(account or ""):
             return None
+        try:
+            return self._token(bind, account)
+        except Exception as exc:                        # noqa: BLE001 - e.g. the commit of new tokens failed: before any
+            try:                                        # post, so a clean failure, recorded where possible
+                with self.db.tx(bind) as cur:
+                    cur.execute("update app.provider_tokens set failures = failures + 1, last_error = %s"
+                                " where provider = 'tiktok' and account_id = %s", (f"store:{type(exc).__name__}"[:120], account))
+            except Exception:                           # noqa: BLE001
+                pass
+            return None
+
+    def _token(self, bind, account: str):
         with self.db.tx(bind) as cur:                   # the row lock serialises two renewals of one account
             cur.execute("select access_ct, refresh_ct, access_expires_at > now() + make_interval(secs => %s),"
                         " refresh_expires_at > now() from app.provider_tokens where provider = 'tiktok' and account_id = %s"
@@ -174,4 +191,4 @@ class TikTokTokens:
                         (self.box.seal(t.access, aad("tiktok", account, "access")),
                          self.box.seal(t.refresh, aad("tiktok", account, "refresh")),
                          t.access_expires_in, t.refresh_expires_in, account))
-            return t.access
+        return t.access                                 # only once the new tokens are committed

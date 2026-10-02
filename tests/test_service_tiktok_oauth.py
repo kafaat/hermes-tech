@@ -66,6 +66,9 @@ class TestOAuth(unittest.TestCase):
         body, sig = st.split(".")
         self.assertEqual(verify_state(SECRET, body[:-2] + "AA." + sig, SUB, now=1500), "")                 # tampered
         self.assertEqual(verify_state(SECRET, "garbage", SUB, now=1500), "")
+        bound = sign_state(SECRET, CUST, SUB, now=1000, nonce="abc")
+        self.assertEqual(verify_state(SECRET, bound, SUB, now=1500, nonce="abc"), CUST)
+        self.assertEqual(verify_state(SECRET, bound, SUB, now=1500, nonce="abd"), "")
 
 
 class Db:
@@ -130,6 +133,34 @@ class TestRenewal(unittest.TestCase):
         self.assertEqual(db.binds, [])
 
 
+class TestRenewalDurability(unittest.TestCase):
+    """The review of 2026-10-02: new tokens count only once committed; a failed commit is a clean failure, recorded."""
+
+    def test_a_failed_commit_gives_no_token_and_is_recorded(self):
+        box = TokenBox([os.urandom(32)])
+
+        class Flaky(Db):
+            def __init__(self, *a, **k):
+                super().__init__(*a, **k)
+                self.calls = 0
+
+            @contextlib.contextmanager
+            def tx(self, bind=None, **k):
+                self.calls += 1
+                yield self
+                if self.calls == 1:
+                    raise OSError("connection lost at commit")
+        db = Flaky(box, fresh=False)
+        oauth = TikTokOAuth("ck", "cs", REDIRECT, Api((200, {**GOOD, "access_token": "act.new", "refresh_token": "rft.new"})))
+        mark = CURRENT_BIND.set(("task", "token"))
+        try:
+            self.assertIsNone(TikTokTokens(db, box, oauth)("_000abcDEF"))
+        finally:
+            CURRENT_BIND.reset(mark)
+        self.assertEqual((db.calls, db.row["failures"]), (2, 1))
+        self.assertTrue(db.row["error"].startswith("store:"))
+
+
 class Store:
     def __init__(self, fail=None):
         self.fail, self.linked = fail, []
@@ -142,16 +173,19 @@ class Store:
 
 
 class TestPortalLink(unittest.TestCase):
-    def finish(self, oauth, store, state=None, sub=SUB):
+    def finish(self, oauth, store, state=None, sub=SUB, nonce="n0nce"):
         box = TokenBox([os.urandom(32)])
         portal = Portal(store, SECRET, tiktok=oauth, box=box, now=lambda: 1000.0)
         claims = {"sub": sub, "exp": 5000}
-        return portal._tiktok_finish({"code": "SIMcode0123456789", "state": state or sign_state(SECRET, CUST, SUB, 1000)}, claims), box
+        state = state or sign_state(SECRET, CUST, SUB, 1000, nonce="n0nce")
+        return portal._tiktok_finish({"code": "SIMcode0123456789", "state": state}, claims, nonce), box
 
     def test_the_owner_links_and_only_sealed_tokens_reach_the_database(self):
         store = Store()
         (status, headers, _), box = self.finish(SimulatedTikTokOAuth(), store)
         self.assertEqual((status, dict(headers)["Location"]), (303, "/portal?done=tiktok_linked"))
+        self.assertIn("__Host-hermes_tiktok=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0",
+                      [v for k, v in headers if k == "Set-Cookie"])               # the state completes once
         (sub, customer, open_id, name, a_ct, r_ct, a_in, r_in), = store.linked
         self.assertEqual((sub, customer, a_in), (SUB, CUST, 86400))
         self.assertTrue(open_id.startswith("_sim"))
@@ -165,11 +199,18 @@ class TestPortalLink(unittest.TestCase):
         cases = [((SimulatedTikTokOAuth(), Store(), sign_state(SECRET, CUST, SUB, 1000), "22222222-2222-2222-2222-222222222222"), "tiktok_failed"),
                  ((NoPublish(), Store(), None, SUB), "tiktok_scope"),
                  ((SimulatedTikTokOAuth(), Store(fail="LINK_ACCOUNT_TAKEN"), None, SUB), "tiktok_taken"),
-                 ((SimulatedTikTokOAuth(), Store(fail="LINK_OWNER_ONLY"), None, SUB), "tiktok_failed")]
+                 ((SimulatedTikTokOAuth(), Store(fail="LINK_OWNER_ONLY"), None, SUB), "tiktok_failed"),
+                 ((SimulatedTikTokOAuth(), Store(fail="LINK_CHANNEL_SUSPENDED"), None, SUB), "tiktok_suspended")]
         for (oauth, store, state, sub), done in cases:
             with self.subTest(done):
                 (status, headers, _), _ = self.finish(oauth, store, state, sub)
                 self.assertEqual(dict(headers)["Location"], f"/portal?done={done}")
+                self.assertEqual(store.linked, [])
+        for nonce in ("", "another-browser"):                     # no cookie, or a state started in another browser
+            with self.subTest(nonce=nonce):
+                store = Store()
+                (status, headers, _), _ = self.finish(SimulatedTikTokOAuth(), store, nonce=nonce)
+                self.assertEqual(dict(headers)["Location"], "/portal?done=tiktok_failed")
                 self.assertEqual(store.linked, [])
 
     def test_the_callback_page_posts_back_from_this_site(self):

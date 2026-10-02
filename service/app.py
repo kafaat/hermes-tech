@@ -220,10 +220,8 @@ def main():
     webhook = Handler(secrets, ingest)
     worker = Worker(Database(url, "hermes_worker"), worker_name(), adapters,
                     approval_poll_seconds=int(os.environ.get("HERMES_APPROVAL_POLL_SECONDS", "60")), build=COMMIT.lower() if re.fullmatch(r"[0-9a-fA-F]{0,40}", COMMIT) else "")
-    worker.register_build()                                    # the previous build stops claiming (0027, spec 28.29)
     stop = threading.Event()
     worker_thread = threading.Thread(target=worker.loop, kwargs={"stop": stop}, name="worker", daemon=True)
-    worker_thread.start()
     port = int(os.environ.get("PORT", "8080"))
     email_secrets = [s.strip() for s in os.environ.get("HERMES_EMAIL_INBOUND_SECRETS", "").split(",") if s.strip()]
     own = frozenset(a for a in (address(v) for v in [*email_senders(os.environ.get("HERMES_EMAIL_SENDERS", "")).values(),
@@ -247,6 +245,11 @@ def main():
         webhook, os.environ.get("HERMES_VERIFY_TOKEN", ""), Database(url, "hermes_monitor"),
         os.environ.get("HERMES_MONITOR_TOKEN", ""), portal, FormHandler(ingest), email,
         EmailEventHandler(email_secrets, ingest) if email_secrets else None))
+
+    # the port is bound: only now does this build fence the previous one (a build that fails to start never fences)
+    worker.register_build()                                    # 0027, spec 28.29
+    threading.Thread(target=worker.beat_forever, args=(stop,), name="build-beat", daemon=True).start()
+    worker_thread.start()
 
     def on_term(signum, frame):                    # Railway sends SIGTERM, then SIGKILL after drainingSeconds: stop taking
         log.info("SIGTERM: draining")               # requests, let the current task finish (its lease covers a kill anyway)

@@ -112,19 +112,33 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def portal(url, token, method="GET", form=None):
-    """(status, location, page) as a browser holding the owner's session cookie would see them."""
+LAST_COOKIES = {}
+
+
+def portal(url, token, method="GET", form=None, cookies=None):
+    """(status, location, page) as a browser holding the owner's session cookie would see them; the cookies the answer
+    set are kept in LAST_COOKIES."""
     target = (form or {}).pop("_path", None) or {"GET": "/portal", "GET_OPS": "/portal/ops"}.get(method)
     if method.startswith("GET"):
         form = None
     req = urllib.request.Request(url + target, method="GET" if method.startswith("GET") else method,
                                  data=urllib.parse.urlencode(form).encode() if form else None,
-                                 headers={"Cookie": f"__Host-hermes_owner={token}"})
+                                 headers={"Cookie": "; ".join([f"__Host-hermes_owner={token}",
+                                                               *(f"{k}={v}" for k, v in (cookies or {}).items())])})
     try:
         with urllib.request.build_opener(_NoRedirect).open(req, timeout=15) as r:
+            _keep(r.headers)
             return r.status, r.headers.get("Location"), r.read().decode()
     except urllib.error.HTTPError as e:
+        _keep(e.headers)
         return e.code, e.headers.get("Location"), e.read().decode()
+
+
+def _keep(headers):
+    LAST_COOKIES.clear()
+    for c in headers.get_all("Set-Cookie") or []:
+        k, _, v = c.split(";")[0].partition("=")
+        LAST_COOKIES[k.strip()] = v.strip()
 
 
 def wait(what, fn, timeout=90):
@@ -287,6 +301,7 @@ def main():
         # sealed at rest and the next TikTok post is published with exactly that token
         status, where, _ = portal(url, owner_p, "POST", {"_path": "/portal/connect/tiktok", "customer": CUSTOMER,
                                                           "csrf": csrf_token(owner_p, JWT_SECRET)})
+        tt_cookie = {"__Host-hermes_tiktok": LAST_COOKIES.get("__Host-hermes_tiktok", "")}   # this browser's nonce
         cb = urllib.parse.urlsplit(where or "")
         code = urllib.parse.parse_qs(cb.query).get("code", [""])[0]
         status_cb, _, page_cb = portal(url, None, "GET", {"_path": f"{cb.path}?{cb.query}"})
@@ -294,7 +309,9 @@ def main():
               and 'action="/portal/connect/tiktok/finish"' in page_cb,
               "TikTok link: to the consent page with a signed state, back to a finish button on this site")
         state = urllib.parse.parse_qs(cb.query).get("state", [""])[0]
-        status, where, _ = portal(url, owner_p, "POST", {"_path": "/portal/connect/tiktok/finish", "code": code, "state": state})
+        status, where, _ = portal(url, owner_p, "POST", {"_path": "/portal/connect/tiktok/finish", "code": code, "state": state},
+                                  cookies=tt_cookie)
+        cleared = LAST_COOKIES.get("__Host-hermes_tiktok") == ""
         open_id = "_sim" + hashlib.sha256(code.encode()).hexdigest()[:12]
         sealed = q("select access_ct, refresh_ct from app.provider_tokens where provider = 'tiktok' and account_id = %s and customer_id = %s",
                    (open_id, CUSTOMER))
@@ -302,8 +319,10 @@ def main():
                                                                 " and external_id = %s and customer_id = %s and status = 'active'", (open_id, CUSTOMER)))
               and bool(sealed) and b"sim-" not in bytes(sealed[0][0]) + bytes(sealed[0][1]),
               "TikTok link: the account is linked to this business, its tokens sealed at rest")
+        check(cleared, "TikTok link: the browser's nonce is cleared, the state completes once")
         stranger_p = issue_staging_token(str(uuid.uuid4()), JWT_SECRET)
-        status, where, _ = portal(url, stranger_p, "POST", {"_path": "/portal/connect/tiktok/finish", "code": code, "state": state})
+        status, where, _ = portal(url, stranger_p, "POST", {"_path": "/portal/connect/tiktok/finish", "code": code, "state": state},
+                                  cookies=tt_cookie)
         check(where == "/portal?done=tiktok_failed", "TikTok link: the state of one user does not finish for another")
         tt_body = f"منشور بالحساب المربوط {run}"
         portal(url, owner_p, "POST", {"_path": "/portal/posts/new", "account": f"tiktok_business:{open_id}", "body": tt_body,

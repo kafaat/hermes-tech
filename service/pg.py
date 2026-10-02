@@ -143,6 +143,9 @@ class PortalDb:
             cur.execute("select platform, body, status::text, created_at from app.content_items where customer_id = any(%s::uuid[])"
                         " and kind = 'post' order by created_at desc limit 10", (ids,))
             posts = [{"platform": r[0], "body": r[1], "status": r[2], "created_at": r[3]} for r in cur.fetchall()]
+            if claims.get("email"):                              # the address follows the login's verified email: notices
+                cur.execute("update app.owner_notify set email = lower(%s) where auth_user_id = %s and email <> lower(%s)",
+                            (claims["email"], claims["sub"], claims["email"]))   # never go on to a former address
             cur.execute("select customer_id, email from app.owner_notify where customer_id = any(%s::uuid[]) and enabled", (ids,))
             notify = {str(r[0]): r[1] for r in cur.fetchall()}           # this signed-in member's own rows only (RLS)
             cur.execute("select customer_id, account_id, failures, refresh_expires_at from app.provider_tokens"

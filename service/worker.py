@@ -221,6 +221,15 @@ class Worker:
             cur.execute("update app.service_build set seen_at = now() where id = 1 and commit = %s", (self.build,))
         self._beat = time.monotonic()
 
+    def beat_forever(self, stop):
+        """The heartbeat on its own thread: a task longer than BUILD_STALE_SECONDS must not let the fence lapse."""
+        while not stop.is_set():
+            try:
+                self.heartbeat(force=True)
+            except Exception as exc:                    # noqa: BLE001 - a missed beat only lets the fence lapse
+                log.warning("build fence: beat failed: %s", type(exc).__name__)
+            stop.wait(BUILD_BEAT_SECONDS)
+
     def fenced(self) -> bool:
         """True while another build is live and alive: a deploy replaced this one."""
         if self.build is None:
@@ -283,7 +292,6 @@ class Worker:
 
     def loop(self, idle_seconds: float = 2.0, stop=None):
         while stop is None or not stop.is_set():
-            self.heartbeat()
             if self.run_once() is None:
                 if stop is None:
                     time.sleep(idle_seconds)

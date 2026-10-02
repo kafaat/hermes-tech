@@ -44,12 +44,12 @@ session's CSRF token. No script runs on these pages (Content-Security-Policy: sc
 is written through service.render, whose templates are checked at render time (claim A24).
 """
 from __future__ import annotations
-import hmac, logging, time
+import hmac, logging, secrets, time
 from typing import Protocol
 from urllib.parse import parse_qs, urlsplit
 
 from service.auth import AuthError, csrf_token, issue_staging_token, verify_session_token
-from service.tiktok_oauth import CODE, sign_state, verify_state
+from service.tiktok_oauth import CODE, STATE_TTL, sign_state, verify_state
 from service.token_box import aad
 from service.supabase_auth import AuthFailed
 from service.render import render
@@ -57,6 +57,7 @@ from service.render import render
 log = logging.getLogger("hermes.portal")
 COOKIE = "__Host-hermes_owner"
 REFRESH_COOKIE = "__Host-hermes_refresh"
+TIKTOK_COOKIE = "__Host-hermes_tiktok"         # the nonce of a TikTok link this browser started (28.30)
 REFRESH_MAX_AGE = 14 * 86400
 RENEW_BEFORE_SECONDS = 300
 MAX_FORM_BYTES = 4096
@@ -219,6 +220,7 @@ MESSAGES = {"approved": "تمت الموافقة. يُرسل الرد خلال �
             "tiktok_scope": "لم يُربط: يلزم السماح بالنشر (video.publish) في صفحة تيك توك. أعد المحاولة.",
             "tiktok_denied": "لم يُربط: لم تُكمل الموافقة في تيك توك.",
             "tiktok_failed": "تعذّر الربط. أعد المحاولة من البوابة.",
+            "tiktok_suspended": "لم يُربط: الحساب موقوف لدى فريق Hermes. تواصل معنا.",
             "resumed": "استُؤنف الإرسال الفوري للموضوعات التي وافقت عليها.", "resolved": "سُجّل القرار. «أعد الإرسال» يُرسل خلال دقيقة.",
             "reason": "لم يُنفّذ: السبب إلزامي (خمسة أحرف على الأقل).", "mfa": "لم يُقبل الرمز. أعد المحاولة.", "gone": "لم يُنفّذ: المقترح لم يعد معلقًا أو ليس لك.", "error": "تعذّر التنفيذ. أعد المحاولة."}
 
@@ -372,9 +374,10 @@ class Portal:
         if claims is None:
             return self._redirect("/portal", self._clear())
         if route == "/portal/connect/tiktok/finish" and self.tiktok is not None:   # the signed state stands for the CSRF token
-            return self._with(self._tiktok_finish(form, claims), renew)
+            return self._with(self._tiktok_finish(form, claims, self._cookie_value(headers, TIKTOK_COOKIE)), renew)
         old = self._cookie_value(headers, COOKIE)          # a form made before a renewal carries the old token's CSRF
-        if not any(t and hmac.compare_digest(form.get("csrf", ""), csrf_token(t, self.secret))
+        if not any(t and hmac.compare_digest(form.get("csrf", "").encode(), csrf_token(t, self.secret).encode())   # bytes:
+                   # a non-ASCII str would raise instead of refusing
                    for t in ((token, old) if renew else (token,))):
             return self._page(403, _r(NONE, text="انتهت صلاحية الصفحة. افتح البوابة من جديد."))
         return self._with(self._act(route, form, token, claims), renew)
@@ -404,8 +407,10 @@ class Portal:
                 ok = self.store.set_standing_pause(claims, form.get("customer", ""), form["paused"] == "1")
                 return self._redirect("/portal?done=" + (("paused" if form["paused"] == "1" else "resumed") if ok else "gone"))
             if route == "/portal/connect/tiktok" and self.tiktok is not None:
-                state = sign_state(self.secret, form.get("customer", ""), claims["sub"], self.now())
-                return self._redirect(self.tiktok.authorize_url(state))
+                nonce = secrets.token_hex(16)              # this browser finishes it, once (review of 2026-10-02)
+                state = sign_state(self.secret, form.get("customer", ""), claims["sub"], self.now(), nonce)
+                return self._redirect(self.tiktok.authorize_url(state), [("Set-Cookie", f"{TIKTOK_COOKIE}={nonce}; Path=/;"
+                                      f" Secure; HttpOnly; SameSite=Strict; Max-Age={STATE_TTL}")])
             if route == "/portal/notify/email" and form.get("on") in ("1", "0"):
                 ok = self.store.set_notify(claims, form.get("customer", ""), form["on"] == "1")
                 return self._redirect("/portal?done=" + (("notify_on" if form["on"] == "1" else "notify_off") if ok else "gone"))
@@ -542,15 +547,20 @@ class Portal:
             out.append(_r(NONE, text="لا شيء ينتظر قرارًا."))
         return self._page(200, "".join(out))
 
-    def _tiktok_finish(self, form: dict, claims: dict):
-        customer = verify_state(self.secret, form.get("state", ""), claims["sub"], self.now())
+    def _tiktok_finish(self, form: dict, claims: dict, nonce: str = ""):
+        done = self._tiktok_link(form, claims, nonce)
+        return self._redirect(f"/portal?done={done}", [("Set-Cookie", f"{TIKTOK_COOKIE}=; Path=/; Secure; HttpOnly;"
+                                                                       " SameSite=Strict; Max-Age=0")])
+
+    def _tiktok_link(self, form: dict, claims: dict, nonce: str) -> str:
+        customer = verify_state(self.secret, form.get("state", ""), claims["sub"], self.now(), nonce)
         code = form.get("code", "")
-        if not customer or not CODE.match(code):
-            return self._redirect("/portal?done=tiktok_failed")
+        if not nonce or not customer or not CODE.match(code):
+            return "tiktok_failed"
         try:
             t = self.tiktok.exchange(code)
             if "video.publish" not in t.scope.split(","):
-                return self._redirect("/portal?done=tiktok_scope")
+                return "tiktok_scope"
             name = self.tiktok.display_name(t.access)
             self.store.link_tiktok(claims, customer, t.open_id, name,
                                    self.box.seal(t.access, aad("tiktok", t.open_id, "access")),
@@ -558,8 +568,9 @@ class Portal:
                                    t.access_expires_in, t.refresh_expires_in)
         except Exception as exc:                           # noqa: BLE001 - TikTok refused, or the database did
             log.info("tiktok link refused: %s", type(exc).__name__)
-            return self._redirect("/portal?done=" + ("tiktok_taken" if "LINK_ACCOUNT_TAKEN" in str(exc) else "tiktok_failed"))
-        return self._redirect("/portal?done=tiktok_linked")
+            return {"LINK_ACCOUNT_TAKEN": "tiktok_taken", "LINK_CHANNEL_SUSPENDED": "tiktok_suspended"}.get(
+                next((c for c in ("LINK_ACCOUNT_TAKEN", "LINK_CHANNEL_SUSPENDED") if c in str(exc)), ""), "tiktok_failed")
+        return "tiktok_linked"
 
     def _home(self, token, claims, done: str):
         if claims is None:

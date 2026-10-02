@@ -1,7 +1,7 @@
 {
  "package_version": "1.8",
  "registry_version": "1.8.0",
- "source_id": "32d7ee1d792543e34390215b665f395a31653aac61f1fddb5f4ebe0e586978e8",
+ "source_id": "c56f025c276da5cf5d8b30e3e92d1cced8b055a56c55122daec9846f93e12270",
  "file_count": 251,
  "files": {
   ".dockerignore": "51acffa125b3d041889f51bdfe771d46303571b7407c6cc29621dbc9d2c1ce38",
@@ -100,7 +100,7 @@
   "docs/audit_checkpoints.md": "7fbd215bcff6ed358fe879ef7f17d04c62235cfffa03b39e9b33cda8746d7db5",
   "docs/claims.yaml": "8132e45a09446f937f88964db0d6ae252ac8a6bb567c9ac778088e9eb1bffd56",
   "docs/defects_v15.md": "ba7295253be1f12438e32e085b0f3287e1f15680fb274b18cc68a6b7568b6248",
-  "docs/delivery_protocol.md": "da16bff02f73d99e75df57053066cfa44d764c22461ef8001d3906b9078b0922",
+  "docs/delivery_protocol.md": "28da8149fd1975e3b5a15d0ed343b60d500cc882b9a251135b203ad0fa35dc79",
   "docs/error_codes.yaml": "e619a0829c7a8185c2a9b0574b41d62d39fff0e94e28fb50459a1ac332ff1743",
   "docs/licensing_matrix.md": "abc1feee8c53715e7673cf5e4d20995667bfa21ccca0f0f1885598db318118ba",
   "docs/load_targets.md": "59b2a33baba331085d54e252b2219aeec9d3614407e873a47aebff9a7517cae3",

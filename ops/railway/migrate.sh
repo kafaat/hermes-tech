@@ -16,8 +16,9 @@ db() { PGOPTIONS="${PGOPTIONS:-} -c client_min_messages=warning" psql "$DATABASE
 # but not yet recorded was applied again by the other (staging, 0025: "constraint already exists"). A session holds
 # an advisory lock for the whole loop; it is released when that session ends, however this script ends.
 lock_key=72511001
-lock_dir=$(mktemp -d); mkfifo "$lock_dir/in"
-PGAPPNAME="hermes-migrate-$$" psql "$DATABASE_URL" -qAt <"$lock_dir/in" >/dev/null 2>&1 &
+lock_name="hermes-migrate-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"   # not $$: each container numbers its own
+lock_dir=$(mktemp -d); mkfifo "$lock_dir/in"                            # processes, and two runners shared one name
+PGAPPNAME="$lock_name" psql "$DATABASE_URL" -qAt <"$lock_dir/in" >/dev/null 2>&1 &
 lock_pid=$!
 exec 9>"$lock_dir/in"
 trap 'exec 9>&-; wait "$lock_pid" 2>/dev/null || true; rm -rf "$lock_dir"' EXIT
@@ -25,7 +26,7 @@ echo "select pg_advisory_lock($lock_key);" >&9
 held=0
 for _ in $(seq 1 600); do
   held=$(db -tAc "select count(*) from pg_locks l join pg_stat_activity a using (pid) where l.locktype = 'advisory'
-                  and l.objid = $lock_key and l.granted and a.application_name = 'hermes-migrate-$$'")
+                  and l.objid = $lock_key and l.granted and a.application_name = '$lock_name'")
   [ "$held" = 1 ] && break
   kill -0 "$lock_pid" 2>/dev/null || { echo "migrations: the lock session ended"; exit 1; }
   sleep 1

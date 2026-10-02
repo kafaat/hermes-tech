@@ -174,7 +174,8 @@ def load(migrations=None) -> State:
 
 
 LEASE_BOUND = re.compile(r"worker_(customer_id|context)")
-WORKER_REFERENCE_POLICIES = {"templates_read", "outbox_topics_read", "agent_pauses_worker_read"}   # reference data, no tenant rows
+WORKER_REFERENCE_POLICIES = {"templates_read", "outbox_topics_read", "agent_pauses_worker_read",   # reference data, no tenant rows
+                             "service_build_worker"}             # 0027: the live build (one commit row), spec 28.29
 
 
 def worker_policies_not_lease_bound(st: State) -> list[str]:

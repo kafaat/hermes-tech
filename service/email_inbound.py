@@ -139,3 +139,67 @@ class EmailHandler:
         else:
             raise RuntimeError(f"ingest returned {r!r}")
         return 200, "ok"
+
+
+# Postmark's delivery events for what WE sent (spec 28.28): POST /email/events, the same basic auth as inbound mail.
+# A reply carries Metadata {"hermes_channel": <inbound address>} (PostmarkEmailAdapter), which routes the event to
+# its business like a WhatsApp status carries its phone number id. Delivered -> the outbox row is reconciled; a
+# bounce that means "not delivered", or a spam complaint -> the owner is told. Everything else (opens, clicks,
+# soft notices, events of notices to the owners, which carry no channel) is acknowledged and not stored.
+FAILED_BOUNCES = ("HardBounce", "SoftBounce", "BadEmailAddress", "Blocked", "DnsError", "SpamNotification",
+                  "ManuallyDeactivated")
+
+
+def event_from(payload: dict) -> tuple[str, str, dict] | None:
+    """(external event id, channel, item) for a delivery, a failed bounce or a spam complaint; None otherwise."""
+    record, mid = payload.get("RecordType"), str(payload.get("MessageID") or "")
+    meta = payload.get("Metadata") if isinstance(payload.get("Metadata"), dict) else {}
+    channel = address(meta.get("hermes_channel"))
+    if not PROVIDER_ID.match(mid) or not channel:
+        return None
+    if record == "Delivery":
+        status = "delivered"
+    elif record == "Bounce" and payload.get("Type") in FAILED_BOUNCES:
+        status = "failed"
+    elif record == "SpamComplaint":
+        status = "complained"
+    else:
+        return None
+    detail = str(payload.get("Type") if record == "Bounce" else record)[:40]
+    return f"status:{mid}:{status}", channel, {"status": {"id": mid, "status": status, "detail": detail}}
+
+
+@dataclass
+class EmailEventHandler:
+    secrets: list[str]
+    ingest: object
+    counters: Counters = field(default_factory=Counters)
+
+    def handle(self, headers: dict, raw: bytes) -> tuple[int, str]:
+        if len(raw) > 256 * 1024:
+            self.counters.refused += 1
+            return 403, "too large"
+        h = {k.lower(): v for k, v in headers.items()}
+        if not auth_ok(h.get("authorization"), self.secrets):
+            self.counters.rejected_auth += 1
+            return 401, "unauthorized"
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("not an object")
+        except (ValueError, UnicodeDecodeError):
+            self.counters.refused += 1
+            return 403, "unusable"
+        ev = event_from(payload)
+        if ev is None:
+            self.counters.automated += 1                # not ours to act on: acknowledged, not stored
+            return 200, "ignored"
+        ext, channel, item = ev
+        r = self.ingest.insert_event("email", ext, True, item, channel)
+        if r == "inserted":
+            self.counters.inserted += 1
+        elif r == "duplicate":
+            self.counters.duplicates += 1
+        else:
+            raise RuntimeError(f"ingest returned {r!r}")
+        return 200, "ok"

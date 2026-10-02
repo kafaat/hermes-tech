@@ -190,6 +190,8 @@ class PostmarkEmailAdapter:
             raise BeforeSend("NO_ACCOUNT_TOKEN")
         request = {"From": sender, "To": to, "ReplyTo": account, "Subject": subject or "رد", "TextBody": body,
                    "MessageStream": "outbound"}
+        if len(account) <= 80:                          # routes the delivery / bounce event back to this business (28.28)
+            request["Metadata"] = {"hermes_channel": account}
         if message_id:
             request["Headers"] = [{"Name": "In-Reply-To", "Value": message_id}, {"Name": "References", "Value": message_id}]
         status, data = self.post(self.URL, request, {"X-Postmark-Server-Token": self.token}, SEND_TIMEOUT_SECONDS)
@@ -204,7 +206,8 @@ class PostmarkEmailAdapter:
 
 NOTICE_REASON_AR = {"complaint": "شكوى من عميل تحتاج متابعتك", "owner_inquiry": "سؤال يحتاج قرارك",
                     "no_approved_answer": "سؤال ليس له جواب معتمد بعد", "site_form": "رسالة من نموذج الموقع",
-                    "email_unverified": "بريد يحتاج مراجعتك قبل أي رد"}
+                    "email_unverified": "بريد يحتاج مراجعتك قبل أي رد",
+                    "delivery_failed": "ردّ أُرسل ولم يصل إلى العميل", "email_spam_complaint": "عميل علّم ردّك بريدًا مزعجًا"}
 
 
 class OwnerEmailNotice:

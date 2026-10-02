@@ -322,8 +322,8 @@ def main():
               "site form: a bot (trap field) and an unknown site key store nothing")
 
         # email (28.25): a customer's question becomes a reply proposal in the same thread; automated mail is never stored
-        def email_post(payload, secret_=EMAIL_SECRET):
-            req = urllib.request.Request(f"{url}/email/inbound", data=json.dumps(payload).encode(), method="POST",
+        def email_post(payload, secret_=EMAIL_SECRET, path="/email/inbound"):
+            req = urllib.request.Request(f"{url}{path}", data=json.dumps(payload).encode(), method="POST",
                                          headers={"Content-Type": "application/json",
                                                   "Authorization": "Basic " + base64.b64encode(secret_.encode()).decode()})
             try:
@@ -354,6 +354,15 @@ def main():
             e_sent = wait("email reply sent", lambda: q("select provider_message_id from app.outbox where topic = 'reply.send'"
                                                          " and target_id = %s and dispatched_at is not null", (e_mid,)))
             check(bool(e_sent) and e_sent[0][0].startswith("sim-email-"), "email: sent once through the outbox after the owner's approval")
+            if e_sent:                                  # the provider reports the reply undelivered (28.28): the owner is told
+                bounce = {"RecordType": "Bounce", "Type": "HardBounce", "MessageID": e_sent[0][0], "Email": "salem@customer.example",
+                          "Metadata": {"hermes_channel": EMAIL_INBOX}}
+                check(email_post(bounce, path="/email/events") == 200 and email_post({**bounce, "RecordType": "Open"}, path="/email/events") == 200,
+                      "email events: a bounce and an open are accepted (200)")
+                told = wait("bounce notice", lambda: q("select payload from app.outbox where topic = 'notify.owner' and target_id = %s"
+                                                       " and dispatched_at is not null", (f"status:{e_sent[0][0]}:failed",)))
+                check(bool(told) and told[0][0].get("reason") == "delivery_failed" and told[0][0].get("event") == e_mid,
+                      "email events: a reply that bounced is told to the owner, pointing at the customer's email")
         before = q("select count(*) from app.webhook_events where kind = 'email'")[0][0]
         auto = email_post(email(f"e2e-mail-{run}-auto", "Out of office", "I am away", headers=[{"Name": "Auto-Submitted", "Value": "auto-replied"}]))
         wrong = email_post(email(f"e2e-mail-{run}-wrong", "x", "x"), "postmark:wrong")

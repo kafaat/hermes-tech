@@ -301,7 +301,7 @@ class Worker:
                         " where proposal_action = 'reply:send' and target_id = %s", (ext,))
             proposal = cur.fetchone()
         if "status" in payload:
-            return self._receipt(t, event_id, payload["status"])
+            return self._receipt(t, event_id, payload["status"], ext)
         if "form" in payload:                             # the contact form of the customer's site (28.24)
             return self._form(t, event_id, ext, payload["form"])
         if proposal is not None:
@@ -395,12 +395,21 @@ class Worker:
         self._complete(t, "succeeded" if outcome == SENT else "escalated", None if outcome == SENT else f"resend:{outcome}"[:60])
         return f"resend {outcome}"
 
-    def _receipt(self, t: Task, event_id: int, status: dict) -> str:
+    def _receipt(self, t: Task, event_id: int, status: dict, ext: str = "") -> str:
+        """A delivery report: reconciles the outbox row that carries its provider id (it was sent, whatever happened
+        next); a reply the provider could not deliver, or one the customer marked as spam, is told to the owner (28.28)."""
         with self.db.tx(t.bind) as cur:
-            cur.execute("select id, dispatched_at is not null from app.outbox where provider_message_id = %s", (str(status.get("id")),))
+            cur.execute("select id, dispatched_at is not null, topic, target_id from app.outbox where provider_message_id = %s",
+                        (str(status.get("id")),))
             row = cur.fetchone()
         if row and not row[1]:
             self._outbox_port(self.db, t.bind).reconcile(row[0], str(status["id"]))
+        if row and row[2] == "reply.send" and status.get("status") in ("failed", "complained"):
+            reason = "delivery_failed" if status["status"] == "failed" else "email_spam_complaint"
+            self._dispatch(t, self._notify(t, {"event": row[3], "reason": reason, "categories": [], "sla_minutes": None}, ext))
+            self._processed(t, event_id)
+            self._complete(t, "escalated", reason)
+            return "receipt escalated"
         self._processed(t, event_id)
         self._complete(t, "succeeded")
         return "receipt"

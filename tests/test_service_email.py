@@ -111,6 +111,7 @@ class TestReply(unittest.TestCase):
         self.assertEqual(headers, {"X-Postmark-Server-Token": "server-token"})
         self.assertEqual(body, {"From": "المتجر <info@shop.example>", "To": "salem@customer.example", "ReplyTo": INBOX,
                                 "Subject": "Re: سؤال عن الدوام", "TextBody": "نفتح من 8 إلى 10", "MessageStream": "outbound",
+                                "Metadata": {"hermes_channel": INBOX},
                                 "Headers": [{"Name": "In-Reply-To", "Value": "<CAF123@mail.customer.example>"},
                                             {"Name": "References", "Value": "<CAF123@mail.customer.example>"}]})
 

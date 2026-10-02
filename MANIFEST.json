@@ -1,7 +1,7 @@
 {
  "package_version": "1.8",
  "registry_version": "1.8.0",
- "source_id": "77cf6c9b9966a6eb2cca3fd233d35e39f47079b5dece9be1db2f6a1c9a7a192f",
+ "source_id": "e8c11240816a0c970011f51cd007f0261c5ee602c080b9bdd00ca2eb0cce739b",
  "file_count": 245,
  "files": {
   ".dockerignore": "51acffa125b3d041889f51bdfe771d46303571b7407c6cc29621dbc9d2c1ce38",
@@ -184,7 +184,7 @@
   "service/supabase_auth.py": "63007343179539fed5a0790c90960e56029d398716b211d5b8614c3c6b54b6a8",
   "service/telemetry.py": "9addb3192a3d2553e3259efd379b00f962b686667217e8ec4a0d238115bdba40",
   "service/webhook.py": "1b93f0534fdd363d8eb81b58bbea096269d1b9d5e431035e1bcf7dddf5c2e345",
-  "service/worker.py": "dd86e1b085a897d9a3488d917ba4f448279c510a1d7c7816b52a3c4bc68bcf37",
+  "service/worker.py": "ec5bb49d5382d040e6dca1378bae5979d1b1206b3a4376b5f22ba999fcb15717",
   "tests/fixtures/competitor_restaurant_ar.html": "4afd0ed0a9c4a31ad9b2f292693ad3a1e1fc2a669fceb8b7304d88ffe7eb5b2a",
   "tests/test_admission.py": "cdda3ad3c065d7f6104229f2f6ea006857d200b8974868c635bdb3bebcc50bc7",
   "tests/test_anonymize.py": "c1cd006633b97f2dbd138b1fd2299d959be9c874fd7f51f9b6b776816c3f0bf7",

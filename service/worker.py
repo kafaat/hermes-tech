@@ -194,12 +194,15 @@ def accepted(ref: str, delay: float, outbox_id=None, timeout: float | None = Non
 class Worker:
     def __init__(self, db, name: str, adapters: dict, lease_seconds: int = 120, approval_poll_seconds: int = 60,
                  build: str | None = None):
-        from service.pg import OutboxPort
         self.db, self.name, self.adapters, self.build = db, name, adapters, build
         self._beat, self._fenced = 0.0, False
         self.lease, self.poll = lease_seconds, approval_poll_seconds
         self.matcher, self.guard = Matcher(), ContentGuard()
-        self._outbox_port = OutboxPort
+
+    @staticmethod
+    def _outbox_port(db, bind):
+        from service.pg import OutboxPort                # psycopg: imported where the outbox is used, not at construction
+        return OutboxPort(db, bind)
 
     # ------------------------------------------------------------ build fence (0027, spec 28.29)
     def register_build(self):

@@ -186,6 +186,7 @@
               "LEASE_SECONDS_OUT_OF_RANGE",
               "LEASE_TAKEOVER",
               "LINK_ACCOUNT_TAKEN",
+              "LINK_CHANNEL_SUSPENDED",
               "LINK_OWNER_ONLY",
               "LINK_PROVIDER",
               "LOGIN_PAGE",

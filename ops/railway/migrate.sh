@@ -22,16 +22,15 @@ PGAPPNAME="$lock_name" psql "$DATABASE_URL" -qAt <"$lock_dir/in" >/dev/null 2>&1
 lock_pid=$!
 exec 9>"$lock_dir/in"
 trap 'exec 9>&-; wait "$lock_pid" 2>/dev/null || true; rm -rf "$lock_dir"' EXIT
-echo "select pg_advisory_lock($lock_key);" >&9
-held=0
+echo "set idle_session_timeout = 0; select pg_advisory_lock($lock_key);" >&9   # an idle lock session is never dropped
+held() { db -tAc "select count(*) from pg_locks l join pg_stat_activity a using (pid) where l.locktype = 'advisory'
+                  and l.objid = $lock_key and l.granted and a.application_name = '$lock_name'"; }
 for _ in $(seq 1 600); do
-  held=$(db -tAc "select count(*) from pg_locks l join pg_stat_activity a using (pid) where l.locktype = 'advisory'
-                  and l.objid = $lock_key and l.granted and a.application_name = '$lock_name'")
-  [ "$held" = 1 ] && break
+  [ "$(held)" = 1 ] && break
   kill -0 "$lock_pid" 2>/dev/null || { echo "migrations: the lock session ended"; exit 1; }
   sleep 1
 done
-[ "$held" = 1 ] || { echo "migrations: another runner held the lock for 10 minutes"; exit 1; }
+[ "$(held)" = 1 ] || { echo "migrations: another runner held the lock for 10 minutes"; exit 1; }
 
 db -f db/local/0000_supabase_shim.sql
 db -c "create table if not exists public.schema_migrations (name text primary key, applied_at timestamptz not null default now())"
@@ -40,6 +39,7 @@ for f in db/migrations/*.sql; do
   if [ "$(db -tAc "select count(*) from public.schema_migrations where name = '$name'")" = 1 ]; then
     echo "== $name already applied"; continue
   fi
+  [ "$(held)" = 1 ] || { echo "migrations: the lock was lost before $name; stopping"; exit 1; }   # never apply unlocked
   echo "== $name (as hermes_owner)"
   PGOPTIONS="-c role=hermes_owner" db -f "$f"      # db() appends client_min_messages
   db -c "insert into public.schema_migrations (name) values ('$name')"

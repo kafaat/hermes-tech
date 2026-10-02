@@ -59,6 +59,7 @@ codes:
   LINK_OWNER_ONLY:               {kind: error, since: "1.8", src: "0028", ar: "ربط حساب بالمنشأة لمالكها نفسه، من جلسته"}
   LINK_PROVIDER:                 {kind: error, since: "1.8", src: "0028", ar: "مزوّد غير مدعوم للربط"}
   LINK_ACCOUNT_TAKEN:            {kind: error, since: "1.8", src: "0028", ar: "الحساب مربوط بمنشأة أخرى"}
+  LINK_CHANNEL_SUSPENDED:        {kind: error, since: "1.8", src: "0029", ar: "الحساب موقوف أو ملغى من المشغّل؛ إعادة الربط لا تعيد تفعيله"}
   STANDING_OWNER_ONLY:           {kind: error, since: "1.8", src: "0020", ar: "الموافقة الدائمة يمنحها مالك المنشأة نفسه أو يلغيها"}
   STANDING_FACT_NOT_APPROVED:    {kind: error, since: "1.8", src: "0020", ar: "الموافقة الدائمة لنص معلومة اعتمدها المالك فقط"}
   STANDING_IMMUTABLE:            {kind: error, since: "1.8", src: "0020", ar: "الموافقة الدائمة لا تُعدَّل ولا تُستعاد بعد إلغائها؛ تُمنح من جديد"}

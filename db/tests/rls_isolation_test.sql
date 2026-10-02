@@ -1510,6 +1510,41 @@ end $$;
 reset role;
 select set_config('app.task_id', '', true), set_config('app.task_token', '', true), set_config('app.customer_id', '', true);
 
+-- 61. a relink respects the operator (0029): no re-activating a suspended account, no linking for an inactive business
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111', 'aal1');
+set local role authenticated;
+select app.link_provider_account('00000000-0000-0000-0000-00000000000a', 'tiktok', '_k61TikTokA', 'x',
+                                 decode(repeat('ab', 40), 'hex'), decode(repeat('ab', 40), 'hex'), now(), now());
+reset role;
+update app.channel_accounts set status = 'suspended' where external_id = '_k61TikTokA';      -- the operator's decision
+update app.customers set status = 'cancelled' where id = '00000000-0000-0000-0000-00000000000b';
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111', 'aal1');
+set local role authenticated;
+do $$ begin
+  perform app.link_provider_account('00000000-0000-0000-0000-00000000000a', 'tiktok', '_k61TikTokA', 'x',
+                                    decode(repeat('cd', 40), 'hex'), decode(repeat('cd', 40), 'hex'), now(), now());
+  raise exception 'FAIL a relink re-activated a suspended account';
+exception when raise_exception then if sqlerrm <> 'LINK_CHANNEL_SUSPENDED' then raise; end if;
+end $$;
+reset role;
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333', 'aal1');
+set local role authenticated;
+do $$ begin
+  perform app.link_provider_account('00000000-0000-0000-0000-00000000000b', 'tiktok', '_k61TikTokB', 'x',
+                                    decode(repeat('cd', 40), 'hex'), decode(repeat('cd', 40), 'hex'), now(), now());
+  raise exception 'FAIL a cancelled business linked an account';
+exception when insufficient_privilege then if sqlerrm <> 'LINK_OWNER_ONLY' then raise; end if;
+end $$;
+reset role;
+select set_config('request.jwt.claim.sub', '', true), set_config('request.jwt.claims', '', true);
+update app.customers set status = 'active' where id = '00000000-0000-0000-0000-00000000000b';
+do $$ begin
+  if (select status::text from app.channel_accounts where external_id = '_k61TikTokA') <> 'suspended' then
+    raise exception 'FAIL the suspension did not stand';
+  end if;
+  raise notice 'PASS relink: a suspended account stays suspended, an inactive business links nothing';
+end $$;
+
 -- 46. the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)
 do $$ declare got text; bad text; begin
   select string_agg(relname, ',' order by relname collate "C") into got from pg_class

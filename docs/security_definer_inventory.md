@@ -59,6 +59,8 @@
 |---|---|---|---|---|---|
 | `app.link_provider_account(uuid, text, text, text, bytea, bytea, timestamptz, timestamptz)` | تقرأ عضوية المستدعي في `customer_users`، وتكتب حساب `tiktok_business` في `channel_accounts` ورموزه المشفّرة في `provider_tokens` | المالك لا يملك كتابة الحسابات ولا الرموز؛ الربط بعد موافقته في تيك توك فعل واحد محدد | authenticated (البوابة بعد OAuth) | مالكها `hermes_linker` (بلا دخول): منح أعمدة وسياسات ضيقة على حسابات تيك توك وحدها. المستدعي من الجلسة لا من وسيط، ومالك نشط للمنشأة نفسها (`LINK_OWNER_ONLY`). الحساب المربوط بمنشأة أخرى مرفوض (`LINK_ACCOUNT_TAKEN`)، ورموز منشأة أخرى لا تُستبدل. الرموز نص مشفّر بمفتاح خارج القاعدة | 60 |
 
+أُعيد إنشاؤها في 0029: لا تعيد تفعيل حساب أوقفه المشغّل أو ألغاه (`LINK_CHANNEL_SUSPENDED`)، ولا تربط لمنشأة غير نشطة. تقرأ `customers.status` للمنشآت النشطة وحدها. الحالة 61.
+
  (مصدر واحد؛ يطابقه المتحقق مع الحالة النهائية للترحيلات، والحالة 46 مع الكتالوج)
 
 FORCE-EXCEPTIONS: approvals, audit_log, customer_users, operators, outbox_topics, task_leases, tasks

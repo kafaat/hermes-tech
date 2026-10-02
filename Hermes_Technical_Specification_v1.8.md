@@ -44,7 +44,7 @@
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
-| حالات SQL على Postgres فعلي | 60 حالة و71 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
+| حالات SQL على Postgres فعلي | 61 حالة و72 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
 المجموع: 442/442 فحصًا ناجحًا في أداة التحقق، و355 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
@@ -163,7 +163,7 @@ hermes-tech/
 ├── contracts/            agent_contract.schema.json · registry(.schema).json · 8 × *.contract.json
 ├── runtime/              agent_runtime_state · agent_call · ops_summary (schemas) · examples
 ├── policies/             acceptance_policy.json · acceptance_policy.schema.json · complaint_keywords.json · complaint_keywords.schema.json · content_rules.json · content_rules.schema.json · fetch_policy.json
-├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018 · 0019 · 0020 · 0021 · 0022 · 0023 · 0024 · 0025 · 0026 · 0027 · 0028   (28 files)
+├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018 · 0019 · 0020 · 0021 · 0022 · 0023 · 0024 · 0025 · 0026 · 0027 · 0028 · 0029   (29 files)
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
 ├── db/tests/             concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
@@ -197,7 +197,7 @@ hermes-tech/
 المخطط في المساحة app على Supabase Postgres 15 أو أحدث. كل جدول يخص عميلًا يحمل customer_id غير فارغ.
 
 <!-- gen:migrations -->
-الترحيلات 28 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
+الترحيلات 29 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
 
 - `0001_core` — الأنواع والجداول والقيود
 - `0002_rls` — الأدوار ودوال الهوية وأمن الصف
@@ -227,6 +227,7 @@ hermes-tech/
 - `0026_owner_notify_email` — تنبيهات المالك بالبريد إلى عنوان دخوله الموثّق وحده، بلا نص رسالة العميل
 - `0027_build_fence` — سياج البناء: عامل البناء الأقدم لا يأخذ مهامًا ما دام بناء أحدث حيًا، ويستأنف إن مات
 - `0028_provider_tokens` — ربط حساب تيك توك بإذن المالك، ورموزه مشفّرة بمفتاح خارج القاعدة وتُجدَّد قبل انتهائها
+- `0029_link_respects_suspension` — إعادة الربط لا تعيد تفعيل حساب أوقفه المشغّل، ولا ربط لمنشأة غير نشطة
 <!-- /gen:migrations -->
 
 ![الشكل 2 · الكيانات الرئيسية والعلاقات (مبسّط)](diagrams/erd.png)
@@ -425,11 +426,12 @@ create policy kb_facts_worker_rw on app.kb_facts for all to hermes_worker
 58. `escalations by email (0026): a member opts in to exactly the address of their own session, for their own business;`
 59. `build fence (0027): one row, written and read by the worker role only; an owner neither sees nor moves it`
 60. `linking a TikTok account (0028): an owner of the business itself, from the session; one business per account; the`
+61. `a relink respects the operator (0029): no re-activating a suspended account, no linking for an inactive business`
 46. `the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)`
 47. `the external monitor gets numbers, never rows: its role holds EXECUTE on one function and nothing else, and`
 48. `every table whose policies filter by customer_id has an index leading with customer_id (0013)`
 
-الملف db/tests/rls_isolation_test.sql ينفّذ 60 حالة داخل معاملة تُلغى في النهاية، ويطلب run_isolation.sh ظهور 71 إشعار نجاح (بعض الحالات تطلق أكثر من إشعار)، بعد تطبيق كل الترحيلات بدور مالك عادي. العناوين بلغة الملف نفسه لأنها الحالات كما تُنفَّذ.
+الملف db/tests/rls_isolation_test.sql ينفّذ 61 حالة داخل معاملة تُلغى في النهاية، ويطلب run_isolation.sh ظهور 72 إشعار نجاح (بعض الحالات تطلق أكثر من إشعار)، بعد تطبيق كل الترحيلات بدور مالك عادي. العناوين بلغة الملف نفسه لأنها الحالات كما تُنفَّذ.
 <!-- /gen:sql_cases -->
 
 ## 6. عقود الوكلاء
@@ -2295,10 +2297,43 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 
 الادعاء P20.
 
+### 28.31 مراجعة مستقلة لما بين 28.24 و28.30 (2 أكتوبر 2026)
+
+ثلاثة مراجعين مستقلين راجعوا الشرائح الأخيرة، وطُلب من كل منهم إثبات كل ملاحظة بتجربة. سُدّت كل ملاحظة أُثبتت.
+
+**الإرسال:**
+- **إجابة لا تُقرأ بعد الإرسال:** صارت ملتبسة لا «فشلًا قبل الإرسال» (`AfterSend`). كانت تجعل الصف قابلًا للمطالبة من جديد، فيتكرر إرسال قد يكون نفّذه المزوّد.
+
+**البريد:**
+- **حلقات البريد:** ردودنا وتنبيهاتنا تحمل `Auto-Submitted`. والبريد الوارد من عناوين إرسالنا، أو بمسار عودة فارغ، آلي لا يُخزَّن.
+- **المرسل المزوّر:** البريد غير الموثّق (لا SPF ناجحًا لنطاق المرسل ولا DKIM له) لا يجيبه إذن دائم أبدًا.
+- **حكم الإزعاج:** أي نسخة من `X-Spam-Status` تقول نعم تكفي، لا الأخيرة وحدها.
+- **المحارف غير المرئية في الموضوع:** RLM وZWNJ كانت تُفشل ردًا معتمدًا إلى الأبد، فصارت تُنظَّف.
+
+**الطلبات الواردة:**
+- **طول الجسم:** `Content-Length` السالب مرفوض، والمقبس مهلته 30 ثانية.
+- **حد المعدل في نموذج الموقع:** يُحسب على العنوان الذي أضافه وسيطنا، لا الذي يكتبه الزائر.
+
+**البوابة وتيك توك:**
+- **حالة ربط تيك توك:** صارت تُكمَل مرة واحدة، في المتصفح الذي بدأها (كوكي `__Host-`).
+- **رمز CSRF:** يُقارن بايتات، فالمحرف غير ASCII يُرفض بدل أن يُسقط الطلب.
+- **رموز تيك توك الجديدة:** لا تُعتمد إلا بعد حفظها. وفشل الحفظ فشل نظيف مسجَّل قبل الإرسال.
+- **عنوان تنبيه المالك:** يتبع بريد دخوله الموثّق الحالي.
+
+**سياج البناء:** نبضه على خيط مستقل، ولا يسيّج البناء الجديد إلا بعد ربط منفذه.
+
+**قاعدة البيانات (0029):** إعادة الربط لا تعيد تفعيل حساب أوقفه المشغّل أو ألغاه (`LINK_CHANNEL_SUSPENDED`)، ولا ربط لمنشأة غير نشطة. الحالة 61.
+
+**الترحيلات:** `migrate.sh` يتحقق من القفل قبل كل ترحيل، ويتوقف إن فقده، وجلسة القفل بلا مهلة خمول.
+
+**ما بقي مقبولًا عن وعي:**
+- **فقد رمز تجديد تيك توك:** إن قُتلت العملية بين تجديد تيك توك وحفظ الرمز الجديد ضاع الرمز، ويعيد المالك الربط.
+- **حاوية قديمة تعيد التشغيل:** حاوية قديمة تعيد التشغيل في أثناء التداخل قد تستعيد السياج لمدة قصيرة.
+
 ## الملحق أ · رموز الأخطاء
 
 <!-- gen:errors -->
-مولّد من docs/error_codes.yaml (98 رمزًا)، المصدر نفسه لقاموس باب البيانات.
+مولّد من docs/error_codes.yaml (99 رمزًا)، المصدر نفسه لقاموس باب البيانات.
 
 | الرمز | المصدر | منذ | المعنى |
 | --- | --- | --- | --- |
@@ -2357,6 +2392,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | LINK_OWNER_ONLY | 0028 | 1.8 | ربط حساب بالمنشأة لمالكها نفسه، من جلسته |
 | LINK_PROVIDER | 0028 | 1.8 | مزوّد غير مدعوم للربط |
 | LINK_ACCOUNT_TAKEN | 0028 | 1.8 | الحساب مربوط بمنشأة أخرى |
+| LINK_CHANNEL_SUSPENDED | 0029 | 1.8 | الحساب موقوف أو ملغى من المشغّل؛ إعادة الربط لا تعيد تفعيله |
 | STANDING_OWNER_ONLY | 0020 | 1.8 | الموافقة الدائمة يمنحها مالك المنشأة نفسه أو يلغيها |
 | STANDING_FACT_NOT_APPROVED | 0020 | 1.8 | الموافقة الدائمة لنص معلومة اعتمدها المالك فقط |
 | STANDING_IMMUTABLE | 0020 | 1.8 | الموافقة الدائمة لا تُعدَّل ولا تُستعاد بعد إلغائها؛ تُمنح من جديد |

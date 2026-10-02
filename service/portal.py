@@ -25,6 +25,7 @@ An access token within five minutes of expiry, or expired, is replaced with the 
   POST /portal/posts/new           account=<kind>:<id> body=<text> image_url=<https url> csrf=<token>   the owner's draft
                                    post (0023); it is checked, proposed, and published only after the owner approves it
   POST /portal/standing/pause      customer=<id> paused=1|0 csrf=<token>   the one switch (0022): pause every instant reply
+  POST /portal/notify/email        customer=<id> on=1|0 csrf=<token>       escalations by email to this login's address (0026)
                                    of the business, or resume; the grants stay
   POST /portal/facts/standing      fact=<id> on=1|0 csrf=<token>   send this approved answer at once from now on (0020),
                                    for hours, location and payment only; prices, offers and complaints always wait
@@ -67,6 +68,7 @@ class StorePort(Protocol):
     def approve_fact(self, claims: dict, fact_id: str) -> bool: ...
     def set_standing(self, claims: dict, fact_id: str, on: bool) -> bool: ...
     def set_standing_pause(self, claims: dict, customer_id: str, paused: bool) -> bool: ...
+    def set_notify(self, claims: dict, customer_id: str, on: bool) -> bool: ...
     def draft_post(self, claims: dict, kind: str, account_id: str, body: str, image_url: str | None) -> bool: ...
     def ops_overview(self, claims: dict) -> dict | None: ...                 # None: not an operator in this session
     def resolve(self, claims: dict, outbox_id: str, resolution: str, reason: str) -> None: ...
@@ -132,6 +134,9 @@ STANDING_TOPICS = ("hours", "location", "payment")
 SWITCH = """<div class="note">{{name}} · الإرسال الفوري {{state}}
 <form method="post" action="/portal/standing/pause"><input type="hidden" name="customer" value="{{customer}}">
 <input type="hidden" name="paused" value="{{paused}}"><input type="hidden" name="csrf" value="{{csrf}}"><button class="{{cls}}">{{label}}</button></form></div>"""
+NOTIFY = """<div class="note">{{name}} · التنبيهات بالبريد: {{state}}
+<form method="post" action="/portal/notify/email"><input type="hidden" name="customer" value="{{customer}}">
+<input type="hidden" name="on" value="{{on}}"><input type="hidden" name="csrf" value="{{csrf}}"><button class="{{cls}}">{{label}}</button></form></div>"""
 FACT_PENDING = """<div class="card"><div class="meta">{{topic}} · تنتظر اعتمادك</div><div class="body">{{fact}}</div>
 <form method="post" action="/portal/facts/approve"><input type="hidden" name="fact" value="{{id}}">
 <input type="hidden" name="csrf" value="{{csrf}}"><button class="ok">اعتماد</button></form></div>"""
@@ -190,6 +195,8 @@ MESSAGES = {"approved": "تمت الموافقة. يُرسل الرد خلال �
             "post": "استلمنا المنشور: يُفحص الآن ثم يظهر أعلاه لتوافق عليه قبل نشره.",
             "post_invalid": "لم يُقبل المنشور: النص مطلوب (حتى 2200 حرف)، ورابط الصورة إن وُجد يبدأ بـ https.",
             "paused": "أُوقف كل الإرسال الفوري: كل رد ينتظر موافقتك حتى تستأنفه. موافقاتك الدائمة محفوظة.",
+            "notify_on": "ستصلك التنبيهات على بريدك: سبب التنبيه ورابط البوابة، دون نص رسالة العميل.",
+            "notify_off": "أُوقفت التنبيهات بالبريد. تبقى التنبيهات في البوابة.",
             "resumed": "استُؤنف الإرسال الفوري للموضوعات التي وافقت عليها.", "resolved": "سُجّل القرار. «أعد الإرسال» يُرسل خلال دقيقة.",
             "reason": "لم يُنفّذ: السبب إلزامي (خمسة أحرف على الأقل).", "mfa": "لم يُقبل الرمز. أعد المحاولة.", "gone": "لم يُنفّذ: المقترح لم يعد معلقًا أو ليس لك.", "error": "تعذّر التنفيذ. أعد المحاولة."}
 
@@ -365,6 +372,9 @@ class Portal:
             if route == "/portal/standing/pause" and form.get("paused") in ("1", "0"):
                 ok = self.store.set_standing_pause(claims, form.get("customer", ""), form["paused"] == "1")
                 return self._redirect("/portal?done=" + (("paused" if form["paused"] == "1" else "resumed") if ok else "gone"))
+            if route == "/portal/notify/email" and form.get("on") in ("1", "0"):
+                ok = self.store.set_notify(claims, form.get("customer", ""), form["on"] == "1")
+                return self._redirect("/portal?done=" + (("notify_on" if form["on"] == "1" else "notify_off") if ok else "gone"))
             if route == "/portal/facts/standing" and form.get("on") in ("1", "0"):
                 ok = self.store.set_standing(claims, form.get("fact", ""), form["on"] == "1")
                 return self._redirect("/portal?done=" + (("standing_on" if form["on"] == "1" else "standing_off") if ok else "gone"))
@@ -548,6 +558,12 @@ class Portal:
             for c in comps:
                 out.append(_r(COMPETITOR, label=c["label"], when=_when(c["fetched_at"]), state=SNAPSHOT_STATE.get(c["status"], "—"),
                               summary=c["summary"] or "يُفحص خلال الأيام القادمة."))
+        if claims.get("email"):                             # only an address Supabase verified for this login
+            for c in data["customers"]:
+                mine = data.get("notify", {}).get(c["id"])
+                out.append(_r(NOTIFY, name=c["name"], customer=c["id"], csrf=csrf, on="0" if mine else "1",
+                              state=f"تصل إلى {mine}" if mine else "في البوابة فقط", cls="no" if mine else "ok",
+                              label="أوقف التنبيهات بالبريد" if mine else f"أرسل التنبيهات إلى {str(claims['email']).lower()}"))
         out.append(_r(FACTS_H, count=len(data["facts"])))
         paused = {sw["customer_id"] for sw in data.get("switches", []) if sw["paused"]}
         for sw in data.get("switches", []):

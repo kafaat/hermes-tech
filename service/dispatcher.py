@@ -202,6 +202,44 @@ class PostmarkEmailAdapter:
         raise Rejected(status if status >= 400 else 422, str(code or ""))
 
 
+NOTICE_REASON_AR = {"complaint": "شكوى من عميل تحتاج متابعتك", "owner_inquiry": "سؤال يحتاج قرارك",
+                    "no_approved_answer": "سؤال ليس له جواب معتمد بعد", "site_form": "رسالة من نموذج الموقع",
+                    "email_unverified": "بريد يحتاج مراجعتك قبل أي رد"}
+
+
+class OwnerEmailNotice:
+    """notify.owner by email (spec 28.27): to the addresses the owners verified (the payload's notify_to, read from
+    app.owner_notify by the worker), from the platform's sender (HERMES_NOTIFY_SENDER), the reason and a link to the
+    portal only: the customer's message never leaves the portal. No address: the notice waits in the portal, as before."""
+
+    def __init__(self, post, token: str, sender: str, portal_url: str):
+        self.post, self.token, self.sender, self.portal_url = post, token, sender, portal_url
+
+    def send(self, row: dict) -> str:
+        p = row["payload"]
+        to = p.get("notify_to") or []
+        if not to:
+            return f"portal.{row.get('id')}"
+        reason = str(p.get("reason") or "")
+        if not isinstance(to, list) or len(to) > 10 or not all(isinstance(a, str) and EMAIL_ADDRESS.fullmatch(a) for a in to):
+            raise BeforeSend("BAD_TARGET")
+        if not self.token or not self.sender:
+            raise BeforeSend("NO_SENDER")
+        text = NOTICE_REASON_AR.get(reason) or ("رسالة بلا نص (صوت أو صورة أو ملف) تنتظرك" if reason.startswith("non_text:")
+                                                else "استفسار يحتاجك")
+        body = f"{text}.\n\nافتح البوابة لقراءة الرسالة والرد عليها:\n{self.portal_url}\n\n— Hermes"
+        request = {"From": self.sender, "To": ", ".join(to), "Subject": f"Hermes: {text}", "TextBody": body,
+                   "MessageStream": "outbound"}
+        status, data = self.post(PostmarkEmailAdapter.URL, request, {"X-Postmark-Server-Token": self.token}, SEND_TIMEOUT_SECONDS)
+        code = (data or {}).get("ErrorCode")
+        if 200 <= status < 300 and code in (0, None):
+            ref = (data or {}).get("MessageID")
+            if not ref:
+                raise RuntimeError("success without a message id")
+            return str(ref)
+        raise Rejected(status if status >= 400 else 422, str(code or ""))
+
+
 class ReplyRouter:
     """reply.send goes back on the channel the customer wrote on: WhatsApp, Messenger / Instagram Direct, or email."""
 

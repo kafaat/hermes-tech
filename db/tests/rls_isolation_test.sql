@@ -1350,6 +1350,69 @@ do $$ begin
   raise notice 'PASS email: one spelling per inbound address, routed by it exactly, recorded as an email inquiry';
 end $$;
 
+-- 58. escalations by email (0026): a member opts in to exactly the address of their own session, for their own business;
+--     the worker reads the enabled addresses of its leased business and of members still active, nothing else
+insert into app.customer_users (customer_id, auth_user_id, role) values
+  ('00000000-0000-0000-0000-00000000000a', '44444444-4444-4444-4444-444444444444', 'staff');
+select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true),
+       set_config('request.jwt.claims', '{"sub": "11111111-1111-1111-1111-111111111111", "aal": "aal1", "email": "Owner-A@Shop.example"}', true);
+set local role authenticated;
+do $$ begin
+  begin
+    insert into app.owner_notify (customer_id, auth_user_id, email, enabled)
+    values ('00000000-0000-0000-0000-00000000000a', '11111111-1111-1111-1111-111111111111', 'someone@else.example', true);
+    raise exception 'FAIL an owner chose an address that is not their session''s';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into app.owner_notify (customer_id, auth_user_id, email, enabled)
+    values ('00000000-0000-0000-0000-00000000000b', '11111111-1111-1111-1111-111111111111', 'owner-a@shop.example', true);
+    raise exception 'FAIL an owner opted in for another business';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into app.owner_notify (customer_id, auth_user_id, email, enabled)
+    values ('00000000-0000-0000-0000-00000000000a', '44444444-4444-4444-4444-444444444444', 'owner-a@shop.example', true);
+    raise exception 'FAIL an owner opted in another member';
+  exception when insufficient_privilege then null;
+  end;
+  insert into app.owner_notify (customer_id, auth_user_id, email, enabled)
+  values ('00000000-0000-0000-0000-00000000000a', '11111111-1111-1111-1111-111111111111', 'owner-a@shop.example', true);
+end $$;
+reset role;
+select set_config('request.jwt.claim.sub', '44444444-4444-4444-4444-444444444444', true),
+       set_config('request.jwt.claims', '{"sub": "44444444-4444-4444-4444-444444444444", "aal": "aal1", "email": "staff@shop.example"}', true);
+set local role authenticated;
+insert into app.owner_notify (customer_id, auth_user_id, email, enabled)
+values ('00000000-0000-0000-0000-00000000000a', '44444444-4444-4444-4444-444444444444', 'staff@shop.example', true);
+reset role;
+select set_config('request.jwt.claim.sub', '33333333-3333-3333-3333-333333333333', true),
+       set_config('request.jwt.claims', '{"sub": "33333333-3333-3333-3333-333333333333", "aal": "aal1", "email": "owner-b@shop.example"}', true);
+set local role authenticated;
+insert into app.owner_notify (customer_id, auth_user_id, email, enabled)
+values ('00000000-0000-0000-0000-00000000000b', '33333333-3333-3333-3333-333333333333', 'owner-b@shop.example', true);
+update app.owner_notify set enabled = false where customer_id = '00000000-0000-0000-0000-00000000000b';
+reset role;
+select set_config('request.jwt.claim.sub', '', true), set_config('request.jwt.claims', '', true);
+update app.customer_users set active = false where auth_user_id = '44444444-4444-4444-4444-444444444444';
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000a');
+set local role hermes_worker;
+do $$ begin
+  if (select string_agg(email, ',') from app.owner_notify) is distinct from 'owner-a@shop.example' then
+    raise exception 'FAIL the worker of business A reads %', (select string_agg(email, ',') from app.owner_notify);
+  end if;
+end $$;
+reset role;
+select set_config('app.task_id', '', true), set_config('app.task_token', '', true);
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000b');
+set local role hermes_worker;
+do $$ begin
+  if exists (select 1 from app.owner_notify) then raise exception 'FAIL the worker read a disabled address'; end if;
+  raise notice 'PASS email notices: only the session''s own address, own business, read by the leased worker while enabled and active';
+end $$;
+reset role;
+select set_config('app.task_id', '', true), set_config('app.task_token', '', true), set_config('app.customer_id', '', true);
+
 -- 46. the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)
 do $$ declare got text; bad text; begin
   select string_agg(relname, ',' order by relname collate "C") into got from pg_class

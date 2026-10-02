@@ -39,14 +39,14 @@
 | --- | --- | --- |
 | مخططات JSON والعقود والفهرس والسياسات | 34 فحصًا ناجحًا من 34 | tools/validate.py · الطبقة 1 |
 | قواعد الاتساق المنطقي والسياسة الإحصائية ومعجم الإخفاقات | 136 فحصًا ناجحًا من 136 | tools/validate.py · الطبقة 2 |
-| الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 258 فحصًا ناجحًا من 258 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
-| الاختبارات الآلية | 327 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
+| الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 263 فحصًا ناجحًا من 263 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
+| الاختبارات الآلية | 331 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
-| حالات SQL على Postgres فعلي | 57 حالة و68 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
+| حالات SQL على Postgres فعلي | 58 حالة و69 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
-المجموع: 428/428 فحصًا ناجحًا في أداة التحقق، و327 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
+المجموع: 433/433 فحصًا ناجحًا في أداة التحقق، و331 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
 
 ### وسوم المصدر
@@ -163,12 +163,12 @@ hermes-tech/
 ├── contracts/            agent_contract.schema.json · registry(.schema).json · 8 × *.contract.json
 ├── runtime/              agent_runtime_state · agent_call · ops_summary (schemas) · examples
 ├── policies/             acceptance_policy.json · acceptance_policy.schema.json · complaint_keywords.json · complaint_keywords.schema.json · content_rules.json · content_rules.schema.json · fetch_policy.json
-├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018 · 0019 · 0020 · 0021 · 0022 · 0023 · 0024 · 0025   (25 files)
+├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018 · 0019 · 0020 · 0021 · 0022 · 0023 · 0024 · 0025 · 0026   (26 files)
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
 ├── db/tests/             concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
 ├── service/              __init__.py · app.py · auth.py · competitor.py · crawler.py · dispatcher.py · email_inbound.py · health.py · jobs.py · jwks.py · media_policy.py · outbox_model.py · pg.py · portal.py · qr.py · redact.py · render.py · site_form.py · site_seo.py · structured.py · supabase_auth.py · telemetry.py · webhook.py · worker.py
-├── tests/                40 modules (inventory in §15.2)
+├── tests/                41 modules (inventory in §15.2)
 ├── evals/                complaints_seed.jsonl · content_guard_golden.jsonl · model_admission.json
 ├── docs/                 19 documents · adr/ (11 decisions)
 ├── derived/              policy_matrix.md · agent_capabilities.json · alerts.yaml   (generated)
@@ -197,7 +197,7 @@ hermes-tech/
 المخطط في المساحة app على Supabase Postgres 15 أو أحدث. كل جدول يخص عميلًا يحمل customer_id غير فارغ.
 
 <!-- gen:migrations -->
-الترحيلات 25 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
+الترحيلات 26 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
 
 - `0001_core` — الأنواع والجداول والقيود
 - `0002_rls` — الأدوار ودوال الهوية وأمن الصف
@@ -224,6 +224,7 @@ hermes-tech/
 - `0023_content_publish` — منشورات فيسبوك وإنستغرام: المالك يكتب المسودة، والمنصة تفحصها وتقترحها، ولا تُنشر إلا بموافقته على نصها وحسابها وصورتها
 - `0024_tiktok_publish` — منشورات تيك توك المصوّرة بموافقة المالك، خاصة افتراضيًا حتى تُراجع تيك توك التطبيق
 - `0025_email_channel` — البريد الإلكتروني قناةً: الاستفسار بمصدر البريد، وعنوان القناة بصيغة واحدة
+- `0026_owner_notify_email` — تنبيهات المالك بالبريد إلى عنوان دخوله الموثّق وحده، بلا نص رسالة العميل
 <!-- /gen:migrations -->
 
 ![الشكل 2 · الكيانات الرئيسية والعلاقات (مبسّط)](diagrams/erd.png)
@@ -419,11 +420,12 @@ create policy kb_facts_worker_rw on app.kb_facts for all to hermes_worker
 55. `one switch (0022): the owner pauses every instant reply of the business and resumes it; the grants stay; only`
 56. `posts (0023): the owner drafts only for an active linked account of their own business; Instagram needs an image;`
 57. `email (0025): an inbound address has one spelling, routes a signed event to its business like a phone number id,`
+58. `escalations by email (0026): a member opts in to exactly the address of their own session, for their own business;`
 46. `the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)`
 47. `the external monitor gets numbers, never rows: its role holds EXECUTE on one function and nothing else, and`
 48. `every table whose policies filter by customer_id has an index leading with customer_id (0013)`
 
-الملف db/tests/rls_isolation_test.sql ينفّذ 57 حالة داخل معاملة تُلغى في النهاية، ويطلب run_isolation.sh ظهور 68 إشعار نجاح (بعض الحالات تطلق أكثر من إشعار)، بعد تطبيق كل الترحيلات بدور مالك عادي. العناوين بلغة الملف نفسه لأنها الحالات كما تُنفَّذ.
+الملف db/tests/rls_isolation_test.sql ينفّذ 58 حالة داخل معاملة تُلغى في النهاية، ويطلب run_isolation.sh ظهور 69 إشعار نجاح (بعض الحالات تطلق أكثر من إشعار)، بعد تطبيق كل الترحيلات بدور مالك عادي. العناوين بلغة الملف نفسه لأنها الحالات كما تُنفَّذ.
 <!-- /gen:sql_cases -->
 
 ## 6. عقود الوكلاء
@@ -973,8 +975,8 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | --- | --- | --- |
 | المخططات | العقود والفهرس وحالة التشغيل وسجل النداءات والسياسات | 34 |
 | المنطق | قواعد 6.2، وسياسة الشكاوى، وسياسة القبول الواحدة، ومعجم الإخفاقات | 136 |
-| SQL | الحالة النهائية بعد كل الترحيلات: أمن الصف وFORCE والسياسات والمنح والدوال، والحراسات | 258 |
-| **المجموع** | فاشل: 0 | **428** |
+| SQL | الحالة النهائية بعد كل الترحيلات: أمن الصف وFORCE والسياسات والمنح والدوال، والحراسات | 263 |
+| **المجموع** | فاشل: 0 | **433** |
 <!-- /gen:validator -->
 
 طبقة SQL منذ 1.8 تقرأ الحالة النهائية بعد تطبيق كل الترحيلات بالترتيب (tools/sql_state.py): السياسة التي أسقطها ترحيل لاحق غير موجودة، والسحب على مستوى الجدول يزيل منح الأعمدة، و«create or replace» يستبدل. في 1.7 كانت تفحص نص الترحيلات مجتمعة، فنجح فحص كان يشترط نص سياسة حذفها 0009.
@@ -1009,6 +1011,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_service_graph_live | مرسل Graph الحقيقي: مغلق دون إعداد صريح، المضيف الوحيد graph.facebook.com عبر المسار المثبّت، والنتيجة الملتبسة لا تُعاد آليًا | 16 |
 | test_service_jwks | مفاتيح توقيع Supabase: ES256 وRS256 بخوارزمية المفتاح نفسها، ولا تبديل خوارزمية، وإعادة جلب محدودة | 5 |
 | test_service_media_policy | صور المنشورات: صورة المالك كما هي، وصورة المخزون أو المولّدة لا تُنشر إلا بوسم «صورة توضيحية» ومصدر مرخّص | 5 |
+| test_service_owner_notify | تنبيه المالك بالبريد: سبب ورابط للبوابة بلا نص العميل، ومن مرسل المنصة المُعَدّ | 4 |
 | test_service_portal | بوابة المالك: رمز الجلسة يُتحقق بصرامة، الإجراء مربوط بالجلسة (CSRF والأصل)، لا سكربت، كل قيمة مُهرَّبة | 22 |
 | test_service_qr | رمز QR لرابط واتساب يُولَّد محليًا: ترميز صحيح يطابق مرجعًا، ورابط wa.me ثابت لا تحويل عبر طرف ثالث | 6 |
 | test_service_redact | حجب السجلات: الهواتف بالأرقام العربية، حقول المحتوى، الرموز، نص الاستثناءات | 6 |
@@ -1024,7 +1027,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_supply_chain | غياب CODEOWNERS فشل، pull_request_target فشل، والتعليقات لا تُعدّ إجراءات | 4 |
 | test_triage | المرحلة الثانية تضيف ولا تلغي، العتبة، استفسارات المالك | 5 |
 | test_validator_negative | اختبارات طفرات: يُدخل كل عيب وُجد في المراجعات ويتأكد أن المتحقق يرفضه | 13 |
-| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **327** |
+| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **331** |
 <!-- /gen:tests -->
 
 ### 15.3 العيوب التي تمنعها اختبارات الطفرات
@@ -1272,7 +1275,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 ### 21.3 شروط ما قبل التجربة (مولّدة منذ 1.8)
 
 <!-- gen:conditions -->
-قائمة مولّدة من docs/claims.yaml (كل ادعاء قراره fix_before_pilot) وحالته المحسوبة الآن. «في CI فقط» تعني أن الاختبار مكتوب ولم يُشغَّل؛ الشرط الأول مشترك بينها كلها: أول تشغيل ناجح لمهمة database على Postgres فعلي يغطي 63 ادعاءً بجزء إنتاجي ينتظر CI، ومنها كل حالات السلطة والعزل.
+قائمة مولّدة من docs/claims.yaml (كل ادعاء قراره fix_before_pilot) وحالته المحسوبة الآن. «في CI فقط» تعني أن الاختبار مكتوب ولم يُشغَّل؛ الشرط الأول مشترك بينها كلها: أول تشغيل ناجح لمهمة database على Postgres فعلي يغطي 64 ادعاءً بجزء إنتاجي ينتظر CI، ومنها كل حالات السلطة والعزل.
 
 | الادعاء | الشرط | الحالة الآن |
 | --- | --- | --- |
@@ -1299,6 +1302,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | P14 | رسالة نموذج الموقع تصل المالك من مفتاح موقع نشط وحده، والروبوت والمفتاح المجهول لا يخزّنان شيئًا، ولا رد آلي للزائر | متحقق هنا + ينتظر CI |
 | P15 | البريد يُصادَق قبل قراءته ويُخزَّن لعنوان نشط وحده، والبريد الآلي لا يُخزَّن ولا يُجاب، والرد بموافقة المالك من مرسل مُعَدّ وفي سلسلة العميل نفسها | متحقق هنا + ينتظر CI |
 | P16 | رموز Supabase غير المتماثلة تُقبل بالمفتاح العام المنشور وبخوارزميته وحدها، ولا يُقبل رمز لم يُتحقق من توقيعه | متحقق هنا |
+| P17 | تنبيه المالك بالبريد يصل إلى عنوان جلسته الموثّق وحده، بسبب التنبيه ورابط البوابة دون نص رسالة العميل | متحقق هنا + ينتظر CI |
 | P3 | سعر واتساب لليمن وترخيص صور FLUX التجاري مؤكدان كتابيًا | إجرائي |
 
 خارج المصفوفة ولا يُولَّد: اختبار القبول للشكاوى ليس شرطًا للتجربة بل لأي سياسة إرسال دون موافقة لكل رد (22.2).
@@ -1671,14 +1675,14 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 <!-- gen:claims -->
 | الحالة | العدد |
 | --- | --- |
-| متحقق هنا | 48 |
+| متحقق هنا | 49 |
 | في CI فقط | 42 |
 | بنيوي فقط | 4 |
 | تشغيل مسجّل | 1 |
 | إجرائي | 4 |
-| **المجموع** | **99** |
+| **المجموع** | **100** |
 
-منها 63 بجزء إنتاجي ينتظر أول تشغيل في CI. ادعاءات بقرار «مقبول» معلن لا تحجب الإصدار: C9.4، A26، A35؛ منها A35 حد ثقة مسمّى (27.5) لا نقص تنفيذ.
+منها 64 بجزء إنتاجي ينتظر أول تشغيل في CI. ادعاءات بقرار «مقبول» معلن لا تحجب الإصدار: C9.4، A26، A35؛ منها A35 حد ثقة مسمّى (27.5) لا نقص تنفيذ.
 <!-- /gen:claims -->
 
 ### 27.7 ما بقي مفتوحًا
@@ -2188,6 +2192,28 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 - الجلب من مضيف المشروع وحده.
 
 الادعاء P16.
+
+### 28.27 تنبيهات المالك بالبريد: إلى عنوان دخوله الموثّق، بلا نص رسالة العميل
+
+**السبب:** من 1 أكتوبر 2026 تفوتر Meta قوالب المنفعة حتى داخل نافذة الخدمة. تنبيه المالك على واتساب صار يكلّف عن كل تنبيه (docs/whatsapp_cost_scenarios.md)، وكان التنبيه في التشغيل الحقيقي ينتظر في البوابة وحدها.
+
+**الاشتراك (0026):** عضو المنشأة النشط يشغّل التنبيهات بالبريد من البوابة بزر واحد.
+- العنوان هو بريد جلسته نفسها (ادعاء `email` الذي تحققت منه Supabase بإرسال رمز الدخول إليه)، لا عنوانًا يكتبه.
+- القاعدة ترفض أي عنوان آخر، وأي منشأة ليست له، وأي عضو غيره.
+- الإيقاف مفتاح (`enabled`) لا حذف.
+- العامل يقرأ عناوين منشأته المؤجّرة وحدها، المفعّلة، ولأعضاء ما زالوا نشطين.
+
+**التنبيه** (`OwnerEmailNotice`): العامل يضع العناوين في حمولة `notify.owner`، والمحوّل يرسل عبر Postmark من مرسل المنصة (`HERMES_NOTIFY_SENDER`).
+- **المحتوى:** سبب التنبيه بالعربية ورابط البوابة (`HERMES_PORTAL_URL`) وحدهما. نص رسالة العميل ومعرّفات المزوّد لا تغادر البوابة.
+- **بلا عنوان:** يبقى التنبيه في البوابة كما كان.
+- **الإعداد كله أو لا شيء:** الرمز والمرسل ورابط البوابة معًا، وإلا يرفض التطبيق الإقلاع.
+
+الاختبارات:
+- **الوحدات:** في tests/test_service_owner_notify.py.
+- **الحالة 58:** العنوان من الجلسة وحدها، والمنشأة والعضو، وقراءة العامل.
+- **المسار الكامل:** التشغيل من البوابة، ووصول التنبيه إلى العنوان بلا نص العميل، والإيقاف.
+
+الادعاء P17.
 
 ## الملحق أ · رموز الأخطاء
 

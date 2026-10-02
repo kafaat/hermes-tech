@@ -22,7 +22,8 @@ from complaints import Matcher, normalize  # noqa: E402
 from content_guard import ContentGuard  # noqa: E402
 
 from service.dispatcher import (EMAIL_ADDRESS, SEND_TIMEOUT_SECONDS, SENT, BeforeSend, Dispatcher,  # noqa: E402
-                                MetaMessagingAdapter, MetaPublishAdapter, PostmarkEmailAdapter, PublishRouter, ReplyRouter,
+                                MetaMessagingAdapter, MetaPublishAdapter, OwnerEmailNotice, PostmarkEmailAdapter,
+                                PublishRouter, ReplyRouter,
                                 TikTokPublishAdapter, WhatsAppCloudAdapter)
 
 log = logging.getLogger("hermes.worker")
@@ -335,13 +336,19 @@ class Worker:
                          route["kind"] == "owner_inquiry", route.get("routes", []), ext[:200]))
         notice = {"event": ext, "reason": route["kind"] if route["action"] == "escalate" else "site_form", "categories": cats,
                   "sla_minutes": route.get("sla_minutes")}
-        with self.db.tx(t.bind) as cur:
-            cur.execute("select app.enqueue_outbox('notify.owner', %s, null, %s)", (_json(notice), ext))
-            outbox_id = cur.fetchone()[0]
+        outbox_id = self._notify(t, notice, ext)
         self._dispatch(t, outbox_id)
         self._processed(t, event_id)
         self._complete(t, "escalated", notice["reason"][:60])
         return "escalated"
+
+    def _notify(self, t: Task, notice: dict, ext: str) -> int:
+        """Queue the owner's notice; with the addresses the owners verified for email notices (0026, 28.27)."""
+        with self.db.tx(t.bind) as cur:
+            cur.execute("select email from app.owner_notify order by email limit 10")   # this business only (RLS)
+            to = [r[0] for r in cur.fetchall()]
+            cur.execute("select app.enqueue_outbox('notify.owner', %s, null, %s)", (_json({**notice, **({"notify_to": to} if to else {})}), ext))
+            return cur.fetchone()[0]
 
     def _resend(self, t: Task, outbox_id: int) -> str:
         """The same dispatcher and claim as any send: the database refuses a row that is not pending again, and a
@@ -417,9 +424,7 @@ class Worker:
                 return "proposed"
             return self._after_proposal(t, event_id, ext, (approval_id, "approved", reply, False))
         notice = {"event": ext, "reason": d["reason"], "categories": d["categories"], "sla_minutes": d["sla_minutes"]}
-        with self.db.tx(t.bind) as cur:                  # a reference, never the message text: the owner reads it in the portal
-            cur.execute("select app.enqueue_outbox('notify.owner', %s, null, %s)", (_json(notice), ext))
-            outbox_id = cur.fetchone()[0]
+        outbox_id = self._notify(t, notice, ext)        # a reference, never the message text: the owner reads it in the portal
         self._dispatch(t, outbox_id)
         self._processed(t, event_id)
         self._complete(t, "escalated", d["reason"][:60])
@@ -556,14 +561,19 @@ def live_adapters(env):
     if postmark and not _token_ok(postmark):
         raise RuntimeError("HERMES_POSTMARK_TOKEN is not a token")
     senders = email_senders(env.get("HERMES_EMAIL_SENDERS", ""))
+    notify_sender, portal_url = env.get("HERMES_NOTIFY_SENDER", ""), env.get("HERMES_PORTAL_URL", "")
+    if notify_sender or portal_url:                   # email notices to the owners (28.27): all three, or none
+        if not (postmark and SENDER.fullmatch(notify_sender) and re.fullmatch(r"https://[A-Za-z0-9.-]+(:\d+)?/portal", portal_url)):
+            raise RuntimeError("email notices need HERMES_POSTMARK_TOKEN, HERMES_NOTIFY_SENDER and HERMES_PORTAL_URL (https://<host>/portal)")
     from service.crawler import ApiClient
     post = graph_post(ApiClient(set(GRAPH_HOSTS)))
+    notice = OwnerEmailNotice(post, postmark, notify_sender, portal_url) if notify_sender else PortalNotice()
     return {"reply.send": ReplyRouter(WhatsAppCloudAdapter(post, lambda customer_id: token, version),
                                       MetaMessagingAdapter(post, accounts.get, version),
                                       PostmarkEmailAdapter(post, postmark, senders.get)),
             "content.publish": PublishRouter(MetaPublishAdapter(post, accounts.get, version),
                                              TikTokPublishAdapter(post, tiktok.get, env.get("HERMES_TIKTOK_PRIVACY") or "SELF_ONLY")),
-            "notify.owner": PortalNotice()}
+            "notify.owner": notice}
 
 
 def adapters_for(env):

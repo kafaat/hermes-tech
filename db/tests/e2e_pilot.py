@@ -281,6 +281,14 @@ def main():
                     " where c.body = %s and o.topic = 'content.publish' and o.dispatched_at is not null and c.status = 'published'", (body,)))
                 check(bool(done) and done[0][1].startswith("SIM_tt_" if kind == "tiktok_business" else "SIM_post_"),
                       f"post on {kind}: published only after the owner's approval, marked published under it")
+        # escalations by email (28.27): the owner opts in from the portal, to the address of their own session only
+        OWNER_EMAIL = "owner-e2e@hermes.example"
+        owner_m = issue_staging_token(OWNER, JWT_SECRET, email=OWNER_EMAIL.upper())
+        status, where, _ = portal(url, owner_m, "POST", {"_path": "/portal/notify/email", "customer": CUSTOMER, "on": "1",
+                                                          "csrf": csrf_token(owner_m, JWT_SECRET)})
+        _, _, page = portal(url, owner_m)
+        check(where == "/portal?done=notify_on" and f"تصل إلى {OWNER_EMAIL}" in page,
+              "email notices: the owner turns them on, to the address of their own session")
         # the contact form of the customer's site (28.24): stored for the owner, never answered automatically
         def form_post(key, fields):
             req = urllib.request.Request(f"{url}/forms/{key}", data=urllib.parse.urlencode(fields).encode(), method="POST",
@@ -300,6 +308,13 @@ def main():
                                                                        " and dispatched_at is not null", (f_inq[0][0],))))
               and not q("select 1 from app.approvals where target_id = %s", (f_inq[0][0],)),
               "site form: the owner is notified; nothing is proposed or sent to the visitor")
+        f_note = q("select payload from app.outbox where topic = 'notify.owner' and target_id = %s", (f_inq[0][0],)) if f_inq else []
+        check(bool(f_note) and f_note[0][0].get("notify_to") == [OWNER_EMAIL] and f_msg not in json.dumps(f_note[0][0], ensure_ascii=False),
+              "email notices: the notice goes to the owner's address, without the customer's message")
+        portal(url, owner_m, "POST", {"_path": "/portal/notify/email", "customer": CUSTOMER, "on": "0",
+                                      "csrf": csrf_token(owner_m, JWT_SECRET)})
+        check(bool(q("select 1 from app.owner_notify where customer_id = %s and not enabled", (CUSTOMER,))),
+              "email notices: the owner turns them off again")
         before = q("select count(*) from app.webhook_events where kind = 'site_form'")[0][0]
         status_trap, _ = form_post(SITE_KEY, {"message": "spam", "website": "http://spam.example"})
         status_unknown, _ = form_post("unknownKEYBBBBBBBBBBBBBBBBBB01", {"message": "x"})

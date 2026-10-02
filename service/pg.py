@@ -143,8 +143,10 @@ class PortalDb:
             cur.execute("select platform, body, status::text, created_at from app.content_items where customer_id = any(%s::uuid[])"
                         " and kind = 'post' order by created_at desc limit 10", (ids,))
             posts = [{"platform": r[0], "body": r[1], "status": r[2], "created_at": r[3]} for r in cur.fetchall()]
+            cur.execute("select customer_id, email from app.owner_notify where customer_id = any(%s::uuid[]) and enabled", (ids,))
+            notify = {str(r[0]): r[1] for r in cur.fetchall()}           # this signed-in member's own rows only (RLS)
         return {"customers": customers, "approvals": approvals, "inquiries": inquiries, "facts": facts, "switches": switches,
-                "channels": channels, "posts": posts,
+                "channels": channels, "posts": posts, "notify": notify,
                 "competitors": competitors}
 
     def decide(self, claims: dict, approval_id: str, decision: str) -> bool:
@@ -202,6 +204,15 @@ class PortalDb:
             cur.execute("insert into app.standing_pause (customer_id, paused, changed_by) values (%s, %s, %s)"
                         " on conflict (customer_id) do update set paused = excluded.paused, changed_by = excluded.changed_by",
                         (customer_id, paused, claims["sub"]))
+            return cur.rowcount == 1
+
+    def set_notify(self, claims: dict, customer_id: str, on: bool) -> bool:
+        """Escalations by email (0026): on, to the address this login verified (the session's email claim; the database
+        refuses any other); off, removed."""
+        with self.db.tx(claims=claims) as cur:
+            cur.execute("insert into app.owner_notify (customer_id, auth_user_id, email, enabled) values (%s, %s, %s, %s)"
+                        " on conflict (customer_id, auth_user_id) do update set email = excluded.email, enabled = excluded.enabled",
+                        (customer_id, claims["sub"], str(claims.get("email") or "").lower(), on))
             return cur.rowcount == 1
 
     def ops_overview(self, claims: dict) -> dict | None:

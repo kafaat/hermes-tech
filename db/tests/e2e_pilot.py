@@ -114,7 +114,9 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def portal(url, token, method="GET", form=None):
     """(status, location, page) as a browser holding the owner's session cookie would see them."""
-    target = {"GET": "/portal", "GET_OPS": "/portal/ops"}.get(method) or form.pop("_path")
+    target = (form or {}).pop("_path", None) or {"GET": "/portal", "GET_OPS": "/portal/ops"}.get(method)
+    if method.startswith("GET"):
+        form = None
     req = urllib.request.Request(url + target, method="GET" if method.startswith("GET") else method,
                                  data=urllib.parse.urlencode(form).encode() if form else None,
                                  headers={"Cookie": f"__Host-hermes_owner={token}"})
@@ -281,6 +283,42 @@ def main():
                     " where c.body = %s and o.topic = 'content.publish' and o.dispatched_at is not null and c.status = 'published'", (body,)))
                 check(bool(done) and done[0][1].startswith("SIM_tt_" if kind == "tiktok_business" else "SIM_post_"),
                       f"post on {kind}: published only after the owner's approval, marked published under it")
+        # linking a TikTok account by the owner's consent (28.30): TikTok's answers are simulated on staging; the token is
+        # sealed at rest and the next TikTok post is published with exactly that token
+        status, where, _ = portal(url, owner_p, "POST", {"_path": "/portal/connect/tiktok", "customer": CUSTOMER,
+                                                          "csrf": csrf_token(owner_p, JWT_SECRET)})
+        cb = urllib.parse.urlsplit(where or "")
+        code = urllib.parse.parse_qs(cb.query).get("code", [""])[0]
+        status_cb, _, page_cb = portal(url, None, "GET", {"_path": f"{cb.path}?{cb.query}"})
+        check(status == 303 and cb.path == "/portal/connect/tiktok/callback" and status_cb == 200
+              and 'action="/portal/connect/tiktok/finish"' in page_cb,
+              "TikTok link: to the consent page with a signed state, back to a finish button on this site")
+        state = urllib.parse.parse_qs(cb.query).get("state", [""])[0]
+        status, where, _ = portal(url, owner_p, "POST", {"_path": "/portal/connect/tiktok/finish", "code": code, "state": state})
+        open_id = "_sim" + hashlib.sha256(code.encode()).hexdigest()[:12]
+        sealed = q("select access_ct, refresh_ct from app.provider_tokens where provider = 'tiktok' and account_id = %s and customer_id = %s",
+                   (open_id, CUSTOMER))
+        check(where == "/portal?done=tiktok_linked" and bool(q("select 1 from app.channel_accounts where kind = 'tiktok_business'"
+                                                                " and external_id = %s and customer_id = %s and status = 'active'", (open_id, CUSTOMER)))
+              and bool(sealed) and b"sim-" not in bytes(sealed[0][0]) + bytes(sealed[0][1]),
+              "TikTok link: the account is linked to this business, its tokens sealed at rest")
+        stranger_p = issue_staging_token(str(uuid.uuid4()), JWT_SECRET)
+        status, where, _ = portal(url, stranger_p, "POST", {"_path": "/portal/connect/tiktok/finish", "code": code, "state": state})
+        check(where == "/portal?done=tiktok_failed", "TikTok link: the state of one user does not finish for another")
+        tt_body = f"منشور بالحساب المربوط {run}"
+        portal(url, owner_p, "POST", {"_path": "/portal/posts/new", "account": f"tiktok_business:{open_id}", "body": tt_body,
+                                      "image_url": "https://cdn.example.test/linked.jpg", "csrf": csrf_token(owner_p, JWT_SECRET)})
+        tt_prop = wait("linked TikTok proposal", lambda: q("select a.id from app.approvals a join app.content_items c on a.target_id = c.id::text"
+                                                           " where c.body = %s and a.proposal_action = 'content:publish'", (tt_body,)))
+        if tt_prop:
+            portal(url, owner_p, "POST", {"_path": "/portal/decide", "approval": str(tt_prop[0][0]), "decision": "approved",
+                                          "csrf": csrf_token(owner_p, JWT_SECRET)})
+        tt_done = wait("linked TikTok post published", lambda: q(
+            "select o.provider_message_id from app.content_items c join app.outbox o on o.target_id = c.id::text"
+            " where c.body = %s and o.topic = 'content.publish' and o.dispatched_at is not null", (tt_body,)))
+        token_hash = hashlib.sha256(("sim-access-" + open_id[4:]).encode()).hexdigest()[:8]
+        check(bool(tt_done) and tt_done[0][0].startswith(f"SIM_tt_{token_hash}_"),
+              "TikTok link: the post is published with the linked account's own token, opened from its seal")
         # escalations by email (28.27): the owner opts in from the portal, to the address of their own session only
         OWNER_EMAIL = "owner-e2e@hermes.example"
         owner_m = issue_staging_token(OWNER, JWT_SECRET, email=OWNER_EMAIL.upper())

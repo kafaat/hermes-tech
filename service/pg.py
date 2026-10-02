@@ -145,8 +145,13 @@ class PortalDb:
             posts = [{"platform": r[0], "body": r[1], "status": r[2], "created_at": r[3]} for r in cur.fetchall()]
             cur.execute("select customer_id, email from app.owner_notify where customer_id = any(%s::uuid[]) and enabled", (ids,))
             notify = {str(r[0]): r[1] for r in cur.fetchall()}           # this signed-in member's own rows only (RLS)
+            cur.execute("select customer_id, account_id, failures, refresh_expires_at from app.provider_tokens"
+                        " where customer_id = any(%s::uuid[]) and provider = 'tiktok' order by account_id", (ids,))
+            tiktok = {}
+            for r in cur.fetchall():                             # the link's health, never a token (0028 column grants)
+                tiktok.setdefault(str(r[0]), []).append({"account": r[1], "failures": r[2], "refresh_expires_at": r[3]})
         return {"customers": customers, "approvals": approvals, "inquiries": inquiries, "facts": facts, "switches": switches,
-                "channels": channels, "posts": posts, "notify": notify,
+                "channels": channels, "posts": posts, "notify": notify, "tiktok": tiktok,
                 "competitors": competitors}
 
     def decide(self, claims: dict, approval_id: str, decision: str) -> bool:
@@ -214,6 +219,14 @@ class PortalDb:
                         " on conflict (customer_id, auth_user_id) do update set email = excluded.email, enabled = excluded.enabled",
                         (customer_id, claims["sub"], str(claims.get("email") or "").lower(), on))
             return cur.rowcount == 1
+
+    def link_tiktok(self, claims: dict, customer_id: str, open_id: str, name: str, access_ct: bytes, refresh_ct: bytes,
+                    access_in: int, refresh_in: int) -> bool:
+        """app.link_provider_account as this owner (0028): the database decides who may link what."""
+        with self.db.tx(claims=claims) as cur:
+            cur.execute("select app.link_provider_account(%s, 'tiktok', %s, %s, %s, %s, now() + make_interval(secs => %s),"
+                        " now() + make_interval(secs => %s))", (customer_id, open_id, name, access_ct, refresh_ct, access_in, refresh_in))
+            return bool(cur.fetchone()[0])
 
     def ops_overview(self, claims: dict) -> dict | None:
         """None unless app.is_operator() holds in this session (an active operator AND aal2); the operator

@@ -17,7 +17,7 @@ from __future__ import annotations
 import json, re, socket, ssl, sys
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urlencode, urljoin, urlsplit
 from urllib.robotparser import RobotFileParser
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
@@ -168,14 +168,18 @@ class ApiClient:
         self.hosts = frozenset(h.lower() for h in hosts)
         self.resolver, self.connector = resolver, connector
 
-    def request(self, method: str, url: str, body: dict | None = None, headers: dict | None = None) -> tuple[int, dict]:
+    def request(self, method: str, url: str, body: dict | None = None, headers: dict | None = None,
+                form: dict | None = None) -> tuple[int, dict]:
+        """body: JSON; form: application/x-www-form-urlencoded (OAuth token endpoints); never both."""
         if method not in ("GET", "POST", "DELETE"):
             raise ValueError("method")
         host = (urlsplit(url).hostname or "").lower()
         if host not in self.hosts:
             raise FetchRefused("HOST_NOT_ALLOWED")
         plan = safe_fetch.plan(url, self.resolver)               # https, 443, every address public; resolves once
-        raw = self.connector(plan, _api_request(method, url, plan["host"], body, headers or {}))
+        if body is not None and form is not None:
+            raise ValueError("body or form")
+        raw = self.connector(plan, _api_request(method, url, plan["host"], body, headers or {}, form))
         status, _, payload = _parse(raw, plan["max_bytes"])
         try:
             data = json.loads(payload.decode("utf-8")) if payload.strip() else {}
@@ -184,12 +188,16 @@ class ApiClient:
         return status, data if isinstance(data, dict) else {"items": data}
 
 
-def _api_request(method: str, url: str, host: str, body: dict | None, headers: dict) -> bytes:
+def _api_request(method: str, url: str, host: str, body: dict | None, headers: dict, form: dict | None = None) -> bytes:
     u = urlsplit(url)
     path = (u.path or "/") + (f"?{u.query}" if u.query else "")
-    payload = b"" if body is None else json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     lines = [f"{method} {path} HTTP/1.0", f"Host: {host}", f"User-Agent: {API_USER_AGENT}", "Accept: application/json",
              "Accept-Encoding: identity", "Connection: close"]
+    if form is not None:
+        payload = urlencode({str(k): str(v) for k, v in form.items()}).encode("ascii")
+        lines += ["Content-Type: application/x-www-form-urlencoded", f"Content-Length: {len(payload)}"]
+    else:
+        payload = b"" if body is None else json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     if body is not None:
         lines += ["Content-Type: application/json", f"Content-Length: {len(payload)}"]
     for k, v in headers.items():

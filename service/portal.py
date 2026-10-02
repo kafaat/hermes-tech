@@ -26,6 +26,11 @@ An access token within five minutes of expiry, or expired, is replaced with the 
                                    post (0023); it is checked, proposed, and published only after the owner approves it
   POST /portal/standing/pause      customer=<id> paused=1|0 csrf=<token>   the one switch (0022): pause every instant reply
   POST /portal/notify/email        customer=<id> on=1|0 csrf=<token>       escalations by email to this login's address (0026)
+  POST /portal/connect/tiktok      customer=<id> csrf=<token>               to TikTok's consent page with a signed state (28.30)
+  GET  /portal/connect/tiktok/callback   code=... state=...                 TikTok sends the browser back: a "finish" button
+  POST /portal/connect/tiktok/finish     code=... state=...                 exchange, seal, link (app.link_provider_account)
+                                   (the session cookie is SameSite=Strict, so TikTok's redirect cannot carry it: the
+                                   finish form, posted from this site, does; the signed state binds it to that user)
                                    of the business, or resume; the grants stay
   POST /portal/facts/standing      fact=<id> on=1|0 csrf=<token>   send this approved answer at once from now on (0020),
                                    for hours, location and payment only; prices, offers and complaints always wait
@@ -44,6 +49,8 @@ from typing import Protocol
 from urllib.parse import parse_qs, urlsplit
 
 from service.auth import AuthError, csrf_token, issue_staging_token, verify_session_token
+from service.tiktok_oauth import CODE, sign_state, verify_state
+from service.token_box import aad
 from service.supabase_auth import AuthFailed
 from service.render import render
 
@@ -53,8 +60,10 @@ REFRESH_COOKIE = "__Host-hermes_refresh"
 REFRESH_MAX_AGE = 14 * 86400
 RENEW_BEFORE_SECONDS = 300
 MAX_FORM_BYTES = 4096
+# form-action also governs where a submitted form may be redirected: the TikTok link form goes to TikTok's consent
+# page (28.30), and only there
 SECURITY_HEADERS = [
-    ("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; "
+    ("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://www.tiktok.com; "
                                 "frame-ancestors 'none'; base-uri 'none'"),
     ("X-Content-Type-Options", "nosniff"), ("Referrer-Policy", "no-referrer"),
     ("X-Frame-Options", "DENY"), ("Cache-Control", "no-store"),
@@ -69,6 +78,8 @@ class StorePort(Protocol):
     def set_standing(self, claims: dict, fact_id: str, on: bool) -> bool: ...
     def set_standing_pause(self, claims: dict, customer_id: str, paused: bool) -> bool: ...
     def set_notify(self, claims: dict, customer_id: str, on: bool) -> bool: ...
+    def link_tiktok(self, claims: dict, customer_id: str, open_id: str, name: str, access_ct: bytes, refresh_ct: bytes,
+                    access_in: int, refresh_in: int) -> bool: ...
     def draft_post(self, claims: dict, kind: str, account_id: str, body: str, image_url: str | None) -> bool: ...
     def ops_overview(self, claims: dict) -> dict | None: ...                 # None: not an operator in this session
     def resolve(self, claims: dict, outbox_id: str, resolution: str, reason: str) -> None: ...
@@ -137,6 +148,12 @@ SWITCH = """<div class="note">{{name}} · الإرسال الفوري {{state}}
 NOTIFY = """<div class="note">{{name}} · التنبيهات بالبريد: {{state}}
 <form method="post" action="/portal/notify/email"><input type="hidden" name="customer" value="{{customer}}">
 <input type="hidden" name="on" value="{{on}}"><input type="hidden" name="csrf" value="{{csrf}}"><button class="{{cls}}">{{label}}</button></form></div>"""
+TIKTOK_LINK = """<div class="note">{{name}} · تيك توك: {{state}}
+<form method="post" action="/portal/connect/tiktok"><input type="hidden" name="customer" value="{{customer}}">
+<input type="hidden" name="csrf" value="{{csrf}}"><button class="ok">{{label}}</button></form></div>"""
+TIKTOK_FINISH = """<h1>ربط تيك توك</h1><p>وافقتَ في تيك توك. اضغط لإكمال الربط بمنشأتك.</p>
+<div class="card"><form method="post" action="/portal/connect/tiktok/finish"><input type="hidden" name="code" value="{{code}}">
+<input type="hidden" name="state" value="{{state}}"><button class="ok">أكمل الربط</button></form></div>"""
 FACT_PENDING = """<div class="card"><div class="meta">{{topic}} · تنتظر اعتمادك</div><div class="body">{{fact}}</div>
 <form method="post" action="/portal/facts/approve"><input type="hidden" name="fact" value="{{id}}">
 <input type="hidden" name="csrf" value="{{csrf}}"><button class="ok">اعتماد</button></form></div>"""
@@ -197,6 +214,11 @@ MESSAGES = {"approved": "تمت الموافقة. يُرسل الرد خلال �
             "paused": "أُوقف كل الإرسال الفوري: كل رد ينتظر موافقتك حتى تستأنفه. موافقاتك الدائمة محفوظة.",
             "notify_on": "ستصلك التنبيهات على بريدك: سبب التنبيه ورابط البوابة، دون نص رسالة العميل.",
             "notify_off": "أُوقفت التنبيهات بالبريد. تبقى التنبيهات في البوابة.",
+            "tiktok_linked": "رُبط حساب تيك توك. منشوراته تمر بموافقتك كغيرها، والرمز يُجدَّد تلقائيًا.",
+            "tiktok_taken": "لم يُربط: حساب تيك توك هذا مربوط بمنشأة أخرى.",
+            "tiktok_scope": "لم يُربط: يلزم السماح بالنشر (video.publish) في صفحة تيك توك. أعد المحاولة.",
+            "tiktok_denied": "لم يُربط: لم تُكمل الموافقة في تيك توك.",
+            "tiktok_failed": "تعذّر الربط. أعد المحاولة من البوابة.",
             "resumed": "استُؤنف الإرسال الفوري للموضوعات التي وافقت عليها.", "resolved": "سُجّل القرار. «أعد الإرسال» يُرسل خلال دقيقة.",
             "reason": "لم يُنفّذ: السبب إلزامي (خمسة أحرف على الأقل).", "mfa": "لم يُقبل الرمز. أعد المحاولة.", "gone": "لم يُنفّذ: المقترح لم يعد معلقًا أو ليس لك.", "error": "تعذّر التنفيذ. أعد المحاولة."}
 
@@ -241,8 +263,10 @@ def _when(ts) -> str:
 
 class Portal:
     def __init__(self, store: StorePort, secret: str, *, staging_login_code: str = "", staging_owner_id: str = "",
-                 staging_operator_id: str = "", simulate: bool = False, now=time.time, auth=None, keys=None):
+                 staging_operator_id: str = "", simulate: bool = False, now=time.time, auth=None, keys=None,
+                 tiktok=None, box=None):
         self.store, self.secret, self.now, self.auth, self.keys = store, secret, now, auth, keys   # keys: jwks.Jwks (28.26)
+        self.tiktok, self.box = (tiktok, box) if tiktok is not None and box is not None else (None, None)   # 28.30
         self.staging = bool(simulate and staging_login_code and staging_owner_id and secret)
         self.staging_code, self.staging_owner = staging_login_code, staging_owner_id
         self.staging_operator = staging_operator_id if self.staging else ""
@@ -323,6 +347,11 @@ class Portal:
             token, claims, renew = self._session(headers)
             page = {"/portal": self._home, "/portal/ops": self._ops, "/portal/mfa": self._mfa}[route]
             return self._with(page(token, claims, done), renew)
+        if method == "GET" and route == "/portal/connect/tiktok/callback" and self.tiktok is not None:
+            q = {k: v[0] for k, v in parse_qs(urlsplit(path).query).items()}
+            if q.get("error") or not CODE.match(q.get("code", "")) or len(q.get("state", "")) > 600:
+                return self._redirect("/portal?done=tiktok_denied")
+            return self._page(200, _r(TIKTOK_FINISH, code=q["code"], state=q.get("state", "")))
         if method != "POST" or not route.startswith("/portal/"):
             return self._page(404, _r(NONE, text="غير موجود"))
         if len(body) > MAX_FORM_BYTES or not self._same_origin(headers):
@@ -342,6 +371,8 @@ class Portal:
         token, claims, renew = self._session(headers)
         if claims is None:
             return self._redirect("/portal", self._clear())
+        if route == "/portal/connect/tiktok/finish" and self.tiktok is not None:   # the signed state stands for the CSRF token
+            return self._with(self._tiktok_finish(form, claims), renew)
         old = self._cookie_value(headers, COOKIE)          # a form made before a renewal carries the old token's CSRF
         if not any(t and hmac.compare_digest(form.get("csrf", ""), csrf_token(t, self.secret))
                    for t in ((token, old) if renew else (token,))):
@@ -372,6 +403,9 @@ class Portal:
             if route == "/portal/standing/pause" and form.get("paused") in ("1", "0"):
                 ok = self.store.set_standing_pause(claims, form.get("customer", ""), form["paused"] == "1")
                 return self._redirect("/portal?done=" + (("paused" if form["paused"] == "1" else "resumed") if ok else "gone"))
+            if route == "/portal/connect/tiktok" and self.tiktok is not None:
+                state = sign_state(self.secret, form.get("customer", ""), claims["sub"], self.now())
+                return self._redirect(self.tiktok.authorize_url(state))
             if route == "/portal/notify/email" and form.get("on") in ("1", "0"):
                 ok = self.store.set_notify(claims, form.get("customer", ""), form["on"] == "1")
                 return self._redirect("/portal?done=" + (("notify_on" if form["on"] == "1" else "notify_off") if ok else "gone"))
@@ -508,6 +542,25 @@ class Portal:
             out.append(_r(NONE, text="لا شيء ينتظر قرارًا."))
         return self._page(200, "".join(out))
 
+    def _tiktok_finish(self, form: dict, claims: dict):
+        customer = verify_state(self.secret, form.get("state", ""), claims["sub"], self.now())
+        code = form.get("code", "")
+        if not customer or not CODE.match(code):
+            return self._redirect("/portal?done=tiktok_failed")
+        try:
+            t = self.tiktok.exchange(code)
+            if "video.publish" not in t.scope.split(","):
+                return self._redirect("/portal?done=tiktok_scope")
+            name = self.tiktok.display_name(t.access)
+            self.store.link_tiktok(claims, customer, t.open_id, name,
+                                   self.box.seal(t.access, aad("tiktok", t.open_id, "access")),
+                                   self.box.seal(t.refresh, aad("tiktok", t.open_id, "refresh")),
+                                   t.access_expires_in, t.refresh_expires_in)
+        except Exception as exc:                           # noqa: BLE001 - TikTok refused, or the database did
+            log.info("tiktok link refused: %s", type(exc).__name__)
+            return self._redirect("/portal?done=" + ("tiktok_taken" if "LINK_ACCOUNT_TAKEN" in str(exc) else "tiktok_failed"))
+        return self._redirect("/portal?done=tiktok_linked")
+
     def _home(self, token, claims, done: str):
         if claims is None:
             how = ("الدخول برمز يصل إلى بريدك." if self.auth is not None else
@@ -558,6 +611,14 @@ class Portal:
             for c in comps:
                 out.append(_r(COMPETITOR, label=c["label"], when=_when(c["fetched_at"]), state=SNAPSHOT_STATE.get(c["status"], "—"),
                               summary=c["summary"] or "يُفحص خلال الأيام القادمة."))
+        if self.tiktok is not None:                         # link (or relink) a TikTok account, as the owner (28.30)
+            links = data.get("tiktok", {})
+            for c in data["customers"]:
+                mine = [x for x in links.get(c["id"], [])]
+                bad = [x for x in mine if x["failures"]]
+                out.append(_r(TIKTOK_LINK, name=c["name"], customer=c["id"], csrf=csrf,
+                              state=("الرمز يحتاج إعادة ربط" if bad else f"مربوط ({len(mine)})") if mine else "غير مربوط",
+                              label="أعد ربط تيك توك" if bad else ("اربط حسابًا آخر" if mine else "اربط حساب تيك توك")))
         if claims.get("email"):                             # only an address Supabase verified for this login
             for c in data["customers"]:
                 mine = data.get("notify", {}).get(c["id"])

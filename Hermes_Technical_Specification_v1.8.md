@@ -39,14 +39,14 @@
 | --- | --- | --- |
 | مخططات JSON والعقود والفهرس والسياسات | 34 فحصًا ناجحًا من 34 | tools/validate.py · الطبقة 1 |
 | قواعد الاتساق المنطقي والسياسة الإحصائية ومعجم الإخفاقات | 136 فحصًا ناجحًا من 136 | tools/validate.py · الطبقة 2 |
-| الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 266 فحصًا ناجحًا من 266 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
-| الاختبارات الآلية | 337 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
+| الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 272 فحصًا ناجحًا من 272 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
+| الاختبارات الآلية | 350 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
-| حالات SQL على Postgres فعلي | 59 حالة و70 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
+| حالات SQL على Postgres فعلي | 60 حالة و71 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
-المجموع: 436/436 فحصًا ناجحًا في أداة التحقق، و337 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
+المجموع: 442/442 فحصًا ناجحًا في أداة التحقق، و350 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
 
 ### وسوم المصدر
@@ -163,12 +163,12 @@ hermes-tech/
 ├── contracts/            agent_contract.schema.json · registry(.schema).json · 8 × *.contract.json
 ├── runtime/              agent_runtime_state · agent_call · ops_summary (schemas) · examples
 ├── policies/             acceptance_policy.json · acceptance_policy.schema.json · complaint_keywords.json · complaint_keywords.schema.json · content_rules.json · content_rules.schema.json · fetch_policy.json
-├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018 · 0019 · 0020 · 0021 · 0022 · 0023 · 0024 · 0025 · 0026 · 0027   (27 files)
+├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018 · 0019 · 0020 · 0021 · 0022 · 0023 · 0024 · 0025 · 0026 · 0027 · 0028   (28 files)
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
 ├── db/tests/             concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
-├── service/              __init__.py · app.py · auth.py · competitor.py · crawler.py · dispatcher.py · email_inbound.py · health.py · jobs.py · jwks.py · media_policy.py · outbox_model.py · pg.py · portal.py · qr.py · redact.py · render.py · site_form.py · site_seo.py · structured.py · supabase_auth.py · telemetry.py · webhook.py · worker.py
-├── tests/                43 modules (inventory in §15.2)
+├── service/              __init__.py · app.py · auth.py · competitor.py · crawler.py · dispatcher.py · email_inbound.py · health.py · jobs.py · jwks.py · media_policy.py · outbox_model.py · pg.py · portal.py · qr.py · redact.py · render.py · site_form.py · site_seo.py · structured.py · supabase_auth.py · telemetry.py · tiktok_oauth.py · token_box.py · webhook.py · worker.py
+├── tests/                45 modules (inventory in §15.2)
 ├── evals/                complaints_seed.jsonl · content_guard_golden.jsonl · model_admission.json
 ├── docs/                 19 documents · adr/ (11 decisions)
 ├── derived/              policy_matrix.md · agent_capabilities.json · alerts.yaml   (generated)
@@ -197,7 +197,7 @@ hermes-tech/
 المخطط في المساحة app على Supabase Postgres 15 أو أحدث. كل جدول يخص عميلًا يحمل customer_id غير فارغ.
 
 <!-- gen:migrations -->
-الترحيلات 27 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
+الترحيلات 28 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
 
 - `0001_core` — الأنواع والجداول والقيود
 - `0002_rls` — الأدوار ودوال الهوية وأمن الصف
@@ -226,6 +226,7 @@ hermes-tech/
 - `0025_email_channel` — البريد الإلكتروني قناةً: الاستفسار بمصدر البريد، وعنوان القناة بصيغة واحدة
 - `0026_owner_notify_email` — تنبيهات المالك بالبريد إلى عنوان دخوله الموثّق وحده، بلا نص رسالة العميل
 - `0027_build_fence` — سياج البناء: عامل البناء الأقدم لا يأخذ مهامًا ما دام بناء أحدث حيًا، ويستأنف إن مات
+- `0028_provider_tokens` — ربط حساب تيك توك بإذن المالك، ورموزه مشفّرة بمفتاح خارج القاعدة وتُجدَّد قبل انتهائها
 <!-- /gen:migrations -->
 
 ![الشكل 2 · الكيانات الرئيسية والعلاقات (مبسّط)](diagrams/erd.png)
@@ -355,7 +356,7 @@ create policy kb_facts_worker_rw on app.kb_facts for all to hermes_worker
 <!-- gen:force -->
 أمن الصف مُجبَر (FORCE) على كل جداول app عدا 7: `approvals`، `audit_log`، `customer_users`، `operators`، `outbox_topics`، `task_leases`، `tasks`. سبب كل استثناء وما يعوّضه في docs/security_definer_inventory.md؛ المتحقق يطابق القائمة مع الحالة النهائية للترحيلات، والحالة 46 تطابقها مع الكتالوج الفعلي.
 
-دوال SECURITY DEFINER بعد كل الترحيلات (17): `app.approve_by_standing()`، `app.audit_chain()`، `app.audit_effect()`، `app.audit_head()`، `app.audit_verify()`، `app.bind_task()`، `app.claim_task()`، `app.complete_task()`، `app.current_user_customer_ids()`، `app.extend_task_lease()`، `app.health_signals()`، `app.is_operator()`، `app.jwt_aal()`، `app.outbox_before_write()`، `app.requeue_task()`، `app.worker_context()`، `app.worker_customer_id()`. لكل منها في الجرد ما تقرؤه وتكتبه ولماذا تحتاج صلاحيات المالك ومن ينفّذها والاختبار الذي يغطيها.
+دوال SECURITY DEFINER بعد كل الترحيلات (18): `app.approve_by_standing()`، `app.audit_chain()`، `app.audit_effect()`، `app.audit_head()`، `app.audit_verify()`، `app.bind_task()`، `app.claim_task()`، `app.complete_task()`، `app.current_user_customer_ids()`، `app.extend_task_lease()`، `app.health_signals()`، `app.is_operator()`، `app.jwt_aal()`، `app.link_provider_account()`، `app.outbox_before_write()`، `app.requeue_task()`، `app.worker_context()`، `app.worker_customer_id()`. لكل منها في الجرد ما تقرؤه وتكتبه ولماذا تحتاج صلاحيات المالك ومن ينفّذها والاختبار الذي يغطيها.
 <!-- /gen:force -->
 
 كل دالة definer تثبّت search_path، وصلاحية EXECUTE مسحوبة من PUBLIC على كل دوال المخطط app (الترحيل 0006) مع منح صريح لكل دور. ومخطط app لا يُكشف في PostgREST. الاستثناء لا يكون ثغرة إلا إن اتصل التطبيق بصفة مالك الجداول؛ لذلك تُطبَّق الترحيلات في CI بدور مالك عادي (1.8). [ت]
@@ -423,11 +424,12 @@ create policy kb_facts_worker_rw on app.kb_facts for all to hermes_worker
 57. `email (0025): an inbound address has one spelling, routes a signed event to its business like a phone number id,`
 58. `escalations by email (0026): a member opts in to exactly the address of their own session, for their own business;`
 59. `build fence (0027): one row, written and read by the worker role only; an owner neither sees nor moves it`
+60. `linking a TikTok account (0028): an owner of the business itself, from the session; one business per account; the`
 46. `the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)`
 47. `the external monitor gets numbers, never rows: its role holds EXECUTE on one function and nothing else, and`
 48. `every table whose policies filter by customer_id has an index leading with customer_id (0013)`
 
-الملف db/tests/rls_isolation_test.sql ينفّذ 59 حالة داخل معاملة تُلغى في النهاية، ويطلب run_isolation.sh ظهور 70 إشعار نجاح (بعض الحالات تطلق أكثر من إشعار)، بعد تطبيق كل الترحيلات بدور مالك عادي. العناوين بلغة الملف نفسه لأنها الحالات كما تُنفَّذ.
+الملف db/tests/rls_isolation_test.sql ينفّذ 60 حالة داخل معاملة تُلغى في النهاية، ويطلب run_isolation.sh ظهور 71 إشعار نجاح (بعض الحالات تطلق أكثر من إشعار)، بعد تطبيق كل الترحيلات بدور مالك عادي. العناوين بلغة الملف نفسه لأنها الحالات كما تُنفَّذ.
 <!-- /gen:sql_cases -->
 
 ## 6. عقود الوكلاء
@@ -977,8 +979,8 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | --- | --- | --- |
 | المخططات | العقود والفهرس وحالة التشغيل وسجل النداءات والسياسات | 34 |
 | المنطق | قواعد 6.2، وسياسة الشكاوى، وسياسة القبول الواحدة، ومعجم الإخفاقات | 136 |
-| SQL | الحالة النهائية بعد كل الترحيلات: أمن الصف وFORCE والسياسات والمنح والدوال، والحراسات | 266 |
-| **المجموع** | فاشل: 0 | **436** |
+| SQL | الحالة النهائية بعد كل الترحيلات: أمن الصف وFORCE والسياسات والمنح والدوال، والحراسات | 272 |
+| **المجموع** | فاشل: 0 | **442** |
 <!-- /gen:validator -->
 
 طبقة SQL منذ 1.8 تقرأ الحالة النهائية بعد تطبيق كل الترحيلات بالترتيب (tools/sql_state.py): السياسة التي أسقطها ترحيل لاحق غير موجودة، والسحب على مستوى الجدول يزيل منح الأعمدة، و«create or replace» يستبدل. في 1.7 كانت تفحص نص الترحيلات مجتمعة، فنجح فحص كان يشترط نص سياسة حذفها 0009.
@@ -1025,13 +1027,15 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_service_structured | حقائق المنافس المنظمة (JSON-LD): إعادة التصميم لا تغيّر شيئًا، تغيّر السعر يُكتشف ويُقال بالعربية، والمدخل العدائي محدود | 10 |
 | test_service_supabase_auth | دخول المالك عبر Supabase Auth: رمز لمرة واحدة بالبريد، الجلسة من الخادم لا المتصفح، وتجديدها قبل انتهائها | 12 |
 | test_service_telemetry | المراقبة: قائمة سماح للسمات، لا أحداث محتوى، لا بيانات شخصية في القيم المسموحة | 8 |
+| test_service_tiktok_oauth | ربط تيك توك: حالة موقّعة للجلسة نفسها، وتبادل الرمز وتجديده، والتجديد قبل الانتهاء | 9 |
+| test_service_token_box | صندوق الرموز: تشفير AES-GCM مربوط بالحساب، ورفض العبث والتبديل، ودوران المفتاح | 4 |
 | test_service_webhook | معالج webhook: HMAC على البايتات الخام قبل التحليل، 401 بلا تخزين، إعادة التسليم نجاح، القناة المخاطَبة | 11 |
 | test_service_worker | حلقة العامل (P1): الشكوى وسؤال السعر يُصعَّدان، والرد من حقيقة اعتمدها المالك ويجتاز الحارس فقط | 12 |
 | test_spec_consistency | المواصفة: كل قسم مولّد مطابق لمصدره، والإصدار متسق | 2 |
 | test_supply_chain | غياب CODEOWNERS فشل، pull_request_target فشل، والتعليقات لا تُعدّ إجراءات | 4 |
 | test_triage | المرحلة الثانية تضيف ولا تلغي، العتبة، استفسارات المالك | 5 |
 | test_validator_negative | اختبارات طفرات: يُدخل كل عيب وُجد في المراجعات ويتأكد أن المتحقق يرفضه | 13 |
-| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **337** |
+| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **350** |
 <!-- /gen:tests -->
 
 ### 15.3 العيوب التي تمنعها اختبارات الطفرات
@@ -1279,7 +1283,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 ### 21.3 شروط ما قبل التجربة (مولّدة منذ 1.8)
 
 <!-- gen:conditions -->
-قائمة مولّدة من docs/claims.yaml (كل ادعاء قراره fix_before_pilot) وحالته المحسوبة الآن. «في CI فقط» تعني أن الاختبار مكتوب ولم يُشغَّل؛ الشرط الأول مشترك بينها كلها: أول تشغيل ناجح لمهمة database على Postgres فعلي يغطي 66 ادعاءً بجزء إنتاجي ينتظر CI، ومنها كل حالات السلطة والعزل.
+قائمة مولّدة من docs/claims.yaml (كل ادعاء قراره fix_before_pilot) وحالته المحسوبة الآن. «في CI فقط» تعني أن الاختبار مكتوب ولم يُشغَّل؛ الشرط الأول مشترك بينها كلها: أول تشغيل ناجح لمهمة database على Postgres فعلي يغطي 67 ادعاءً بجزء إنتاجي ينتظر CI، ومنها كل حالات السلطة والعزل.
 
 | الادعاء | الشرط | الحالة الآن |
 | --- | --- | --- |
@@ -1309,6 +1313,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | P17 | تنبيه المالك بالبريد يصل إلى عنوان جلسته الموثّق وحده، بسبب التنبيه ورابط البوابة دون نص رسالة العميل | متحقق هنا + ينتظر CI |
 | P18 | أثناء النشر لا يأخذ عامل البناء السابق مهمة ما دام البناء الأحدث حيًا، ويواصل إن توقف نبض الأحدث | متحقق هنا + ينتظر CI |
 | P19 | الرد الذي لم يصل أو شُكي منه يُبلَّغ به المالك، وأحداث التسليم تُصادَق قبل قراءتها ولا يُخزَّن منها إلا ما يخص ردودنا | متحقق هنا + ينتظر CI |
+| P20 | حساب تيك توك يُربط بموافقة مالك المنشأة نفسها، ورموزه مختومة بمفتاح خارج القاعدة ومربوطة بصفها، وتتجدد قبل انتهائها والفشل نظيف قبل الإرسال | متحقق هنا + ينتظر CI |
 | P3 | سعر واتساب لليمن وترخيص صور FLUX التجاري مؤكدان كتابيًا | إجرائي |
 
 خارج المصفوفة ولا يُولَّد: اختبار القبول للشكاوى ليس شرطًا للتجربة بل لأي سياسة إرسال دون موافقة لكل رد (22.2).
@@ -1681,14 +1686,14 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 <!-- gen:claims -->
 | الحالة | العدد |
 | --- | --- |
-| متحقق هنا | 51 |
+| متحقق هنا | 52 |
 | في CI فقط | 42 |
 | بنيوي فقط | 4 |
 | تشغيل مسجّل | 1 |
 | إجرائي | 4 |
-| **المجموع** | **102** |
+| **المجموع** | **103** |
 
-منها 66 بجزء إنتاجي ينتظر أول تشغيل في CI. ادعاءات بقرار «مقبول» معلن لا تحجب الإصدار: C9.4، A26، A35؛ منها A35 حد ثقة مسمّى (27.5) لا نقص تنفيذ.
+منها 67 بجزء إنتاجي ينتظر أول تشغيل في CI. ادعاءات بقرار «مقبول» معلن لا تحجب الإصدار: C9.4، A26، A35؛ منها A35 حد ثقة مسمّى (27.5) لا نقص تنفيذ.
 <!-- /gen:claims -->
 
 ### 27.7 ما بقي مفتوحًا
@@ -2257,10 +2262,43 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 
 الادعاء P18.
 
+### 28.30 ربط حساب تيك توك بموافقة المالك، ورموزه مختومة وتتجدد
+
+**الفجوة:** رمز تيك توك كان إعدادًا (`HERMES_TIKTOK_TOKENS`)، لكن رمز الوصول يعيش 24 ساعة ورمز التجديد يتبدّل، فيتوقف النشر بعد يوم من الإعداد.
+
+**الربط** (`service/tiktok_oauth.py`):
+1. المالك يضغط «اربط حساب تيك توك» في البوابة.
+2. تذهب إلى صفحة موافقة تيك توك حالةٌ موقّعة (المنشأة، ومستخدم الجلسة، ومهلة عشر دقائق).
+3. تيك توك يعيد المتصفح برمز. لأن كوكي الجلسة SameSite=Strict لا يرافق تلك العودة، تعرض البوابة زر «أكمل الربط» يُرسَل من موقعنا فيحمل الجلسة.
+4. البوابة تتحقق أن الحالة صادرة لهذا المستخدم نفسه، وتبادل الرمز (`grant_type=authorization_code`)، وتشترط صلاحية `video.publish`.
+5. تختم الرمزين، ثم تستدعي `app.link_provider_account` باسم المالك (0028). الدالة تربط لمالك المنشأة نفسها وحده، ولمنشأة واحدة لكل حساب.
+
+**الختم** (`service/token_box.py`، إضافة على ADR-0010):
+- AES-256-GCM بمفتاح منصة على المضيف (`HERMES_TOKEN_KEYS`) لا يدخل القاعدة، فنسخة القاعدة وحدها لا تكشف رمزًا.
+- كل ختم مربوط بصفه (المزوّد والحساب ونوع الرمز)، فلا يُنقل إلى حساب آخر ولا يُستعمل رمز وصول مكان رمز تجديد.
+- دوران المفتاح: الجديد أولًا، والقديم يفتح ما خُتم به حتى يُعاد ختمه عند أول تجديد.
+
+**التجديد:** مصدر رموز ناشر تيك توك (`TikTokTokens`) يعمل تحت عقد مهمة النشر نفسها:
+- يقرأ الصف بقفل، ويعيد رمز الوصول ما بقي له 30 دقيقة.
+- وإلا يجدده (`grant_type=refresh_token`) ويختم الرمزين الجديدين معًا، لأن تيك توك قد يبدّل رمز التجديد.
+- **الفشل:** رفض، أو انقطاع الشبكة، أو انتهاء رمز التجديد، أو حساب آخر. يُسجَّل على الصف فيراه المالك («الرمز يحتاج إعادة ربط»)، ويفشل الإرسال نظيفًا قبل أي إرسال (`NO_ACCOUNT_TOKEN`).
+- `HERMES_TIKTOK_TOKENS` يبقى احتياطيًا.
+
+**الإعداد الحي (كله أو لا شيء):** `HERMES_TIKTOK_CLIENT_KEY` و`HERMES_TIKTOK_CLIENT_SECRET` و`HERMES_TIKTOK_REDIRECT_URI` (https://<التطبيق>/portal/connect/tiktok/callback) و`HERMES_TOKEN_KEYS`.
+
+**على staging:** إجابات تيك توك محاكاة.
+
+الاختبارات:
+- **الوحدات:** في tests/test_service_token_box.py وtests/test_service_tiktok_oauth.py.
+- **الحالة 60.**
+- **المسار الكامل:** الحالة والعودة وزر الإكمال، والربط والختم، ورفض حالة مستخدم آخر، ونشر منشور تيك توك بالرمز المفتوح من ختمه.
+
+الادعاء P20.
+
 ## الملحق أ · رموز الأخطاء
 
 <!-- gen:errors -->
-مولّد من docs/error_codes.yaml (95 رمزًا)، المصدر نفسه لقاموس باب البيانات.
+مولّد من docs/error_codes.yaml (98 رمزًا)، المصدر نفسه لقاموس باب البيانات.
 
 | الرمز | المصدر | منذ | المعنى |
 | --- | --- | --- | --- |
@@ -2316,6 +2354,9 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | KB_APPROVAL_OWNER_ONLY | 0009 | 1.7 | اعتماد الحقيقة المعرفية لمالك المنشأة وحده |
 | CONTENT_ACCOUNT_NOT_LINKED | 0023 | 1.8 | المنشور لحساب غير مربوط بالمنشأة أو غير نشط |
 | CONTENT_IMAGE_REQUIRED | 0023 | 1.8 | منشور إنستغرام يحتاج صورة |
+| LINK_OWNER_ONLY | 0028 | 1.8 | ربط حساب بالمنشأة لمالكها نفسه، من جلسته |
+| LINK_PROVIDER | 0028 | 1.8 | مزوّد غير مدعوم للربط |
+| LINK_ACCOUNT_TAKEN | 0028 | 1.8 | الحساب مربوط بمنشأة أخرى |
 | STANDING_OWNER_ONLY | 0020 | 1.8 | الموافقة الدائمة يمنحها مالك المنشأة نفسه أو يلغيها |
 | STANDING_FACT_NOT_APPROVED | 0020 | 1.8 | الموافقة الدائمة لنص معلومة اعتمدها المالك فقط |
 | STANDING_IMMUTABLE | 0020 | 1.8 | الموافقة الدائمة لا تُعدَّل ولا تُستعاد بعد إلغائها؛ تُمنح من جديد |

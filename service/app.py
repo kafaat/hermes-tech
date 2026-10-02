@@ -11,6 +11,7 @@
                   tokens are verified with HERMES_JWT_SECRET, the project's legacy JWT secret, or with the project's
                   published signing keys, ES256 / RS256, spec 28.26; HERMES_JWT_SECRET also keys the CSRF tokens)
   POST /forms/<site key>          the contact form of a customer's site (service/site_form.py, spec 28.24)
+  GET/POST /portal/connect/tiktok...   linking a TikTok account by the owner's consent (service/tiktok_oauth.py, 28.30)
   POST /email/events              Postmark's delivery / bounce / spam-complaint webhook (spec 28.28), the same basic auth
   POST /email/inbound             Postmark's inbound webhook (service/email_inbound.py, spec 28.25), basic auth with
                   HERMES_EMAIL_INBOUND_SECRETS ("user:password", comma-separated); unset: 404
@@ -35,6 +36,8 @@ from service.health import SIGNALS, assess, authorized
 from service.pg import Database, Ingest, PortalDb
 from service.portal import Portal
 from service.supabase_auth import from_env as supabase_from_env
+from service.tiktok_oauth import SimulatedTikTokOAuth, TikTokOAuth, TikTokTokens
+from service.token_box import TokenBox
 from service.email_inbound import EMAIL_MAX_BYTES, EmailEventHandler, EmailHandler
 from service.site_form import FORM_MAX_BYTES, FormHandler
 from service.webhook import MAX_BODY_BYTES, Handler, verify_subscription
@@ -172,17 +175,35 @@ def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | N
     return H
 
 
+def tiktok_link_from_env(env):
+    """(TikTok OAuth client, token box) for linking accounts (spec 28.30), or (None, box). Live: HERMES_TIKTOK_CLIENT_KEY,
+    HERMES_TIKTOK_CLIENT_SECRET, HERMES_TIKTOK_REDIRECT_URI and HERMES_TOKEN_KEYS, all or none. Staging (simulate):
+    TikTok's answers are simulated; without HERMES_TOKEN_KEYS a key lives in this process only."""
+    box = TokenBox.from_env(env)
+    if env.get("HERMES_TIKTOK_CLIENT_KEY"):
+        if box is None:
+            raise RuntimeError("linking TikTok accounts needs HERMES_TOKEN_KEYS (the tokens are sealed at rest)")
+        from service.crawler import ApiClient
+        return TikTokOAuth(env["HERMES_TIKTOK_CLIENT_KEY"], env.get("HERMES_TIKTOK_CLIENT_SECRET", ""),
+                           env.get("HERMES_TIKTOK_REDIRECT_URI", ""), ApiClient({"open.tiktokapis.com"})), box
+    if env.get("HERMES_GRAPH") == "simulate":
+        return SimulatedTikTokOAuth(), box or TokenBox([os.urandom(32)])
+    return None, box
+
+
 def main():
     handler = logging.StreamHandler(sys.stdout)              # added before install(): the filter goes on the handler,
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))  # so every logger is redacted
     logging.getLogger().addHandler(handler)
     logging.getLogger().setLevel(logging.INFO)
     redact.install()
-    try:
-        adapters = adapters_for(os.environ)
-    except RuntimeError as exc:
-        sys.exit(str(exc))
     url = os.environ["DATABASE_URL"]
+    try:
+        tiktok, box = tiktok_link_from_env(os.environ)
+        tiktok_tokens = TikTokTokens(Database(url, "hermes_worker"), box, tiktok) if tiktok is not None else None
+        adapters = adapters_for(os.environ, tiktok_tokens)
+    except (RuntimeError, ValueError) as exc:
+        sys.exit(str(exc))
     secrets = [s.strip().encode() for s in os.environ["HERMES_WEBHOOK_SECRETS"].split(",") if s.strip()]
     if not secrets:
         sys.exit("HERMES_WEBHOOK_SECRETS is empty")
@@ -210,7 +231,7 @@ def main():
                     staging_login_code=os.environ.get("HERMES_STAGING_LOGIN_CODE", ""),
                     staging_owner_id=os.environ.get("HERMES_STAGING_OWNER_ID", ""),
                     staging_operator_id=os.environ.get("HERMES_STAGING_OPERATOR_ID", ""),
-                    simulate=os.environ.get("HERMES_GRAPH") == "simulate")
+                    simulate=os.environ.get("HERMES_GRAPH") == "simulate", tiktok=tiktok, box=box)
     server = ThreadingHTTPServer(("0.0.0.0", port), make_http_handler(
         webhook, os.environ.get("HERMES_VERIFY_TOKEN", ""), Database(url, "hermes_monitor"),
         os.environ.get("HERMES_MONITOR_TOKEN", ""), portal, FormHandler(ingest), email,

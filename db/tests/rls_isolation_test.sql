@@ -1437,6 +1437,79 @@ end $$;
 reset role;
 select set_config('request.jwt.claim.sub', '', true), set_config('request.jwt.claims', '', true);
 
+-- 60. linking a TikTok account (0028): an owner of the business itself, from the session; one business per account; the
+--     owner sees the link's health, never a token; the leased worker of that business alone reads the sealed tokens
+insert into app.customer_users (customer_id, auth_user_id, role) values
+  ('00000000-0000-0000-0000-00000000000a', '55555555-5555-5555-5555-555555555555', 'staff');
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111', 'aal1');
+set local role authenticated;
+do $$ declare ct bytea := decode(repeat('ab', 40), 'hex'); begin
+  if not app.link_provider_account('00000000-0000-0000-0000-00000000000a', 'tiktok', '_k60TikTokA', 'متجر أ', ct, ct,
+                                   now() + interval '1 day', now() + interval '365 days') then
+    raise exception 'FAIL the owner could not link an account';
+  end if;
+  begin
+    perform app.link_provider_account('00000000-0000-0000-0000-00000000000b', 'tiktok', '_k60TikTokB', 'x', ct, ct, now(), now());
+    raise exception 'FAIL an owner linked an account to another business';
+  exception when insufficient_privilege then if sqlerrm <> 'LINK_OWNER_ONLY' then raise; end if;
+  end;
+  begin
+    perform access_ct from app.provider_tokens;
+    raise exception 'FAIL the owner read a sealed token';
+  exception when insufficient_privilege then null;
+  end;
+  if (select failures from app.provider_tokens where account_id = '_k60TikTokA') <> 0 then
+    raise exception 'FAIL the owner cannot see the health of the link';
+  end if;
+  begin
+    insert into app.provider_tokens (customer_id, provider, account_id, access_ct, refresh_ct, access_expires_at, refresh_expires_at, linked_by)
+    values ('00000000-0000-0000-0000-00000000000a', 'tiktok', '_k60Direct', ct, ct, now(), now(), '11111111-1111-1111-1111-111111111111');
+    raise exception 'FAIL the owner wrote a token row directly';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+select pg_temp.as_user('55555555-5555-5555-5555-555555555555', 'aal1');
+set local role authenticated;
+do $$ begin
+  perform app.link_provider_account('00000000-0000-0000-0000-00000000000a', 'tiktok', '_k60TikTokS', 'x',
+                                    decode(repeat('ab', 40), 'hex'), decode(repeat('ab', 40), 'hex'), now(), now());
+  raise exception 'FAIL a staff member linked an account';
+exception when insufficient_privilege then if sqlerrm <> 'LINK_OWNER_ONLY' then raise; end if;
+end $$;
+reset role;
+select pg_temp.as_user('33333333-3333-3333-3333-333333333333', 'aal1');
+set local role authenticated;
+do $$ begin
+  perform app.link_provider_account('00000000-0000-0000-0000-00000000000b', 'tiktok', '_k60TikTokA', 'x',
+                                    decode(repeat('cd', 40), 'hex'), decode(repeat('cd', 40), 'hex'), now(), now());
+  raise exception 'FAIL another business took a linked account';
+exception when raise_exception then if sqlerrm <> 'LINK_ACCOUNT_TAKEN' then raise; end if;
+end $$;
+reset role;
+select set_config('request.jwt.claim.sub', '', true), set_config('request.jwt.claims', '', true);
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000a');
+set local role hermes_worker;
+do $$ begin
+  if (select count(*) from app.provider_tokens where access_ct = decode(repeat('ab', 40), 'hex')) <> 1 then
+    raise exception 'FAIL the leased worker cannot read its business''s sealed token';
+  end if;
+  update app.provider_tokens set failures = 1 where account_id = '_k60TikTokA';
+end $$;
+reset role;
+select set_config('app.task_id', '', true), set_config('app.task_token', '', true);
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000b');
+set local role hermes_worker;
+do $$ begin
+  if exists (select 1 from app.provider_tokens) then raise exception 'FAIL a worker read another business''s token'; end if;
+  if (select status::text from app.channel_accounts where external_id = '_k60TikTokA') is not null then
+    raise exception 'FAIL a worker saw another business''s channel';
+  end if;
+  raise notice 'PASS linking: owner of the business only, one business per account, tokens sealed and read by its worker alone';
+end $$;
+reset role;
+select set_config('app.task_id', '', true), set_config('app.task_token', '', true), set_config('app.customer_id', '', true);
+
 -- 46. the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)
 do $$ declare got text; bad text; begin
   select string_agg(relname, ',' order by relname collate "C") into got from pg_class
@@ -1454,7 +1527,7 @@ do $$ declare got text; bad text; begin
   if bad is not null then raise exception 'FAIL app functions executable by PUBLIC: %', bad; end if;
   select string_agg(p.proname, ',' order by p.proname collate "C") into got from pg_proc p
    where p.pronamespace = 'app'::regnamespace and p.prosecdef;
-  if got is distinct from 'approve_by_standing,audit_chain,audit_effect,audit_head,audit_verify,bind_task,claim_task,complete_task,current_user_customer_ids,extend_task_lease,health_signals,is_operator,jwt_aal,outbox_before_write,requeue_task,worker_context,worker_customer_id' then raise exception 'FAIL definer functions differ from the inventory: %', got; end if;
+  if got is distinct from 'approve_by_standing,audit_chain,audit_effect,audit_head,audit_verify,bind_task,claim_task,complete_task,current_user_customer_ids,extend_task_lease,health_signals,is_operator,jwt_aal,link_provider_account,outbox_before_write,requeue_task,worker_context,worker_customer_id' then raise exception 'FAIL definer functions differ from the inventory: %', got; end if;
   select string_agg(p.proname, ',') into bad from pg_proc p where p.pronamespace = 'app'::regnamespace and p.prosecdef
      and not exists (select 1 from unnest(coalesce(p.proconfig, '{}'::text[])) c where c like 'search_path=%');
   if bad is not null then raise exception 'FAIL definer functions without a pinned search_path: %', bad; end if;

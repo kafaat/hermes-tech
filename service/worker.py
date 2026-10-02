@@ -13,7 +13,7 @@ The reply text is an owner-approved fact (canned answer, §8.3): no model call o
 task is not caught into a status: the lease expires, recovery re-queues it, and the third expiry dead-letters it.
 """
 from __future__ import annotations
-import json, logging, os, re, sys, time, uuid
+import hashlib, json, logging, os, re, sys, time, uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 from complaints import Matcher, normalize  # noqa: E402
 from content_guard import ContentGuard  # noqa: E402
 
-from service.dispatcher import (EMAIL_ADDRESS, SEND_TIMEOUT_SECONDS, SENT, BeforeSend, Dispatcher,  # noqa: E402
+from service.dispatcher import (CURRENT_BIND, EMAIL_ADDRESS, SEND_TIMEOUT_SECONDS, SENT, BeforeSend, Dispatcher,  # noqa: E402
                                 MetaMessagingAdapter, MetaPublishAdapter, OwnerEmailNotice, PostmarkEmailAdapter,
                                 PublishRouter, ReplyRouter,
                                 TikTokPublishAdapter, WhatsAppCloudAdapter)
@@ -146,7 +146,8 @@ class SimulatedGraph:
             accepted(ref, self.delay, timeout=timeout)
             return 200, {"To": body.get("To"), "MessageID": ref, "ErrorCode": 0, "Message": "OK"}
         if url.startswith("https://open.tiktokapis.com/"):                          # TikTok photo post (0024)
-            ref = "SIM_tt_" + uuid.uuid4().hex
+            token = str(headers.get("Authorization", "")).removeprefix("Bearer ")   # which token published (28.30)
+            ref = "SIM_tt_" + hashlib.sha256(token.encode()).hexdigest()[:8] + "_" + uuid.uuid4().hex
             self.sent.append({"url": url, "to": None, "id": ref})
             accepted(ref, self.delay, timeout=timeout)
             return 200, {"data": {"publish_id": ref}, "error": {"code": "ok", "message": ""}}
@@ -254,7 +255,11 @@ class Worker:
 
     def _dispatch(self, t: Task, outbox_id: int) -> str:
         port = self._outbox_port(self.db, t.bind)
-        outcome = Dispatcher(port, self.adapters).run_once(outbox_id)
+        mark = CURRENT_BIND.set(t.bind)                # a token source reads under this task's lease (TikTokTokens)
+        try:
+            outcome = Dispatcher(port, self.adapters).run_once(outbox_id)
+        finally:
+            CURRENT_BIND.reset(mark)
         if outcome == "not_claimed":             # a previous holder already finished it: report the recorded state
             with self.db.tx(t.bind) as cur:
                 cur.execute("select dispatched_at is not null, needs_human_check from app.outbox where id = %s", (outbox_id,))
@@ -501,7 +506,7 @@ def _json(v):
     return Jsonb(v)
 
 
-def simulated_adapters(delay: float | None = None):
+def simulated_adapters(delay: float | None = None, tiktok_tokens=None):
     """HERMES_SIM_SEND_DELAY_SECONDS delays the provider's reply (staging experiments on interrupted sends; 0 by
     default). Only with HERMES_GRAPH=simulate: there is no real provider to slow down, and none may be."""
     if delay is None:
@@ -514,7 +519,8 @@ def simulated_adapters(delay: float | None = None):
                                       PostmarkEmailAdapter(graph, "staging-simulated-postmark-token",
                                                            lambda account: f"Staging <{account}>")),
             "content.publish": PublishRouter(MetaPublishAdapter(graph, lambda account: "staging-simulated-account-token"),
-                                             TikTokPublishAdapter(graph, lambda account: "staging-simulated-tiktok-token")),
+                                             TikTokPublishAdapter(graph, lambda account: (tiktok_tokens and tiktok_tokens(account))
+                                                                  or "staging-simulated-tiktok-token")),
             "notify.owner": notice}
 
 
@@ -591,7 +597,7 @@ def email_senders(raw: str) -> dict:
     return {str(k): v for k, v in data.items()}
 
 
-def live_adapters(env):
+def live_adapters(env, tiktok_tokens=None):
     """HERMES_GRAPH=live: reply.send goes to the Graph API on the customer's channel, through crawler.ApiClient to
     graph.facebook.com and graph.instagram.com only. WhatsApp uses the system user token HERMES_GRAPH_TOKEN;
     Messenger and Instagram Direct the account's own token (HERMES_GRAPH_ACCOUNT_TOKENS). Missing WhatsApp
@@ -619,17 +625,19 @@ def live_adapters(env):
                                       MetaMessagingAdapter(post, accounts.get, version),
                                       PostmarkEmailAdapter(post, postmark, senders.get)),
             "content.publish": PublishRouter(MetaPublishAdapter(post, accounts.get, version),
-                                             TikTokPublishAdapter(post, tiktok.get, env.get("HERMES_TIKTOK_PRIVACY") or "SELF_ONLY")),
+                                             TikTokPublishAdapter(post, lambda a: (tiktok_tokens and tiktok_tokens(a)) or tiktok.get(a),
+                                                                  env.get("HERMES_TIKTOK_PRIVACY") or "SELF_ONLY")),
             "notify.owner": notice}
 
 
-def adapters_for(env):
-    """simulate (staging) or live; anything else refuses to start."""
+def adapters_for(env, tiktok_tokens=None):
+    """simulate (staging) or live; anything else refuses to start. tiktok_tokens: linked accounts' sealed tokens (28.30),
+    before HERMES_TIKTOK_TOKENS."""
     mode = env.get("HERMES_GRAPH")
     if mode == "simulate":
-        return simulated_adapters()
+        return simulated_adapters(tiktok_tokens=tiktok_tokens)
     if mode == "live":
-        return live_adapters(env)
+        return live_adapters(env, tiktok_tokens)
     raise RuntimeError("HERMES_GRAPH must be 'simulate' or 'live'")
 
 

@@ -12,6 +12,7 @@ Unknown means ambiguous. The database enforces the same rule (0010 outbox_before
 cannot re-send: an expired unconfirmed claim of a non-idempotent topic cannot be taken again.
 """
 from __future__ import annotations
+from contextvars import ContextVar
 from dataclasses import dataclass
 import re
 from typing import Protocol
@@ -23,6 +24,7 @@ SENT, FAILED_PERMANENT, FAILED_BEFORE_SEND, AMBIGUOUS = "sent", "failed_permanen
 # id would be lost (staging rehearsal, spec 28.7): SEND_TIMEOUT < app shutdown wait (25 s) < Railway drain (30 s),
 # and SEND_TIMEOUT < dispatch lease and task lease. tests/test_service_dispatcher.py holds the chain.
 SEND_TIMEOUT_SECONDS = 15
+CURRENT_BIND: ContextVar = ContextVar("hermes_current_bind", default=None)   # the lease of the task sending now (28.30)
 DISPATCH_LEASE_SECONDS = 120
 
 

@@ -16,7 +16,7 @@ Mail to the business's inbound address arrives through the provider, which POSTs
 Permanent refusals answer 403: the provider stops retrying on 403 and shows the message as failed.
 """
 from __future__ import annotations
-import base64, binascii, hmac, json, re
+import base64, binascii, hmac, json, re, unicodedata
 from dataclasses import dataclass, field
 
 EMAIL_MAX_BYTES = 10 * 1024 * 1024
@@ -57,37 +57,67 @@ def strip_quoted(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
 
 
-def automated(headers: dict, sender: str) -> bool:
-    auto = headers.get("auto-submitted", "no").strip().lower()
-    return (auto != "no" or headers.get("precedence", "").strip().lower() in ("bulk", "junk", "list", "auto_reply")
+def clean(text: str, limit: int) -> str:
+    """One line, without control or invisible format characters (RLM, ZWNJ, ...): safe for a reply's subject."""
+    s = "".join(ch if unicodedata.category(ch) not in ("Cc", "Cf") else " " for ch in str(text or ""))
+    return " ".join(s.split())[:limit]
+
+
+def automated(headers: dict, sender: str, own=frozenset()) -> bool:
+    """Never answered, never stored: auto-replies, bounces (empty Return-Path), lists, no-reply senders, and mail from
+    any address the platform itself sends from (a notice or reply forwarded back into the inbound address: a loop)."""
+    first = lambda n: (headers.get(n) or [""])[0].strip().lower()           # noqa: E731
+    return (first("auto-submitted") not in ("", "no") or first("precedence") in ("bulk", "junk", "list", "auto_reply")
             or "list-id" in headers or "list-unsubscribe" in headers or "x-autoreply" in headers
-            or "x-autorespond" in headers or not sender or bool(NO_REPLY.match(sender)))
+            or "x-autorespond" in headers or ("return-path" in headers and first("return-path") in ("<>", ""))
+            or not sender or bool(NO_REPLY.match(sender)) or sender in own)
 
 
-def parse(payload: dict) -> tuple[str, str, dict, bool]:
+def sender_authenticated(headers: dict, sender: str) -> bool:
+    """The From domain is vouched for: SPF passed for an envelope sender of that domain, or a DKIM signature of that
+    domain passed (as reported by the receiving provider). Unauthenticated mail is never answered without the owner."""
+    domain = sender.rpartition("@")[2]
+    if not domain:
+        return False
+    def ours(d: str) -> bool:
+        d = d.strip().strip("<>").rpartition("@")[2].lower().rstrip(".")
+        return d == domain or domain.endswith("." + d) or d.endswith("." + domain)
+    for v in headers.get("received-spf") or []:
+        m = re.search(r"envelope-from=<?([^\s;>]+)", v, re.I)
+        if v.strip().lower().startswith("pass") and m and ours(m.group(1)):
+            return True
+    for v in headers.get("authentication-results") or []:
+        for m in re.finditer(r"dkim=pass[^;]*?header\.(?:d|i)=@?([A-Za-z0-9.-]+)", v, re.I):
+            if ours(m.group(1)):
+                return True
+    return False
+
+
+def parse(payload: dict, own=frozenset()) -> tuple[str, str, dict, bool]:
     """(provider message id, recipient, stored item, automated) from Postmark's inbound JSON; ValueError if unusable."""
     ext = str(payload.get("MessageID") or "")
     recipient = address(payload.get("OriginalRecipient"))
     if not PROVIDER_ID.match(ext) or not recipient:
         raise ValueError("no message id or recipient")
-    headers = {}
+    headers: dict[str, list[str]] = {}                     # every copy: a sender may add its own X-Spam-Status
     for h in payload.get("Headers") or []:
         if isinstance(h, dict) and isinstance(h.get("Name"), str):
-            headers[h["Name"].strip().lower()] = str(h.get("Value") or "")
+            headers.setdefault(h["Name"].strip().lower(), []).append(str(h.get("Value") or ""))
     sender = address((payload.get("FromFull") or {}).get("Email") if isinstance(payload.get("FromFull"), dict) else payload.get("From"))
-    name = " ".join(str((payload.get("FromFull") or {}).get("Name") or "").split())[:80] if isinstance(payload.get("FromFull"), dict) else ""
-    message_id = headers.get("message-id", "").strip()
+    name = clean((payload.get("FromFull") or {}).get("Name"), 80) if isinstance(payload.get("FromFull"), dict) else ""
+    message_id = (headers.get("message-id") or [""])[0].strip()
     stripped = str(payload.get("StrippedTextReply") or "").strip()      # the provider's own cut (English clients only)
     text = stripped or strip_quoted(str(payload.get("TextBody") or ""))
     item = {"email": {
         "from": sender, "name": name,
-        "subject": " ".join(str(payload.get("Subject") or "").split())[:200],
+        "subject": clean(payload.get("Subject"), 200),
         "text": text[:TEXT_MAX],
         "message_id": message_id if MESSAGE_ID.match(message_id) else None,
-        "spam": headers.get("x-spam-status", "").strip().lower().startswith("yes"),
+        "spam": any(v.strip().lower().startswith("yes") for v in headers.get("x-spam-status") or []),
+        "authenticated": sender_authenticated(headers, sender),
         "attachments": len(payload.get("Attachments") or []) if isinstance(payload.get("Attachments"), list) else 0,
     }}
-    return ext, recipient, item, automated(headers, sender) or sender == recipient
+    return ext, recipient, item, automated(headers, sender, own) or sender == recipient
 
 
 def auth_ok(header: str | None, secrets: list[str]) -> bool:
@@ -108,6 +138,7 @@ class EmailHandler:
     secrets: list[str]
     ingest: object                                  # webhook.IngestPort plus channel_active (pg.Ingest)
     counters: Counters = field(default_factory=Counters)
+    own: frozenset = frozenset()                    # the addresses the platform sends from (replies, notices)
 
     def handle(self, headers: dict, raw: bytes) -> tuple[int, str]:
         if len(raw) > EMAIL_MAX_BYTES:
@@ -121,7 +152,7 @@ class EmailHandler:
             payload = json.loads(raw.decode("utf-8"))
             if not isinstance(payload, dict):
                 raise ValueError("not an object")
-            ext, recipient, item, is_auto = parse(payload)
+            ext, recipient, item, is_auto = parse(payload, self.own)
         except (ValueError, UnicodeDecodeError):
             self.counters.refused += 1
             return 403, "unusable"

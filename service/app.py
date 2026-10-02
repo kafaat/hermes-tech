@@ -38,10 +38,10 @@ from service.portal import Portal
 from service.supabase_auth import from_env as supabase_from_env
 from service.tiktok_oauth import SimulatedTikTokOAuth, TikTokOAuth, TikTokTokens
 from service.token_box import TokenBox
-from service.email_inbound import EMAIL_MAX_BYTES, EmailEventHandler, EmailHandler
+from service.email_inbound import EMAIL_MAX_BYTES, EmailEventHandler, EmailHandler, address
 from service.site_form import FORM_MAX_BYTES, FormHandler
 from service.webhook import MAX_BODY_BYTES, Handler, verify_subscription
-from service.worker import Worker, adapters_for, worker_name
+from service.worker import Worker, adapters_for, email_senders, worker_name
 
 log = logging.getLogger("hermes.app")
 COMMIT = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "")
@@ -52,6 +52,15 @@ def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | N
                       portal: Portal | None = None, forms: FormHandler | None = None, email: EmailHandler | None = None,
                       email_events: EmailEventHandler | None = None):
     class H(BaseHTTPRequestHandler):
+        timeout = 30                                   # a client that announces a body and never sends it frees the thread
+
+        def _length(self) -> int:
+            """Content-Length, never negative: read(-1) would read until the client closes (review of 2026-10-02)."""
+            n = int(self.headers.get("Content-Length") or 0)
+            if n < 0:
+                raise ValueError("negative length")
+            return n
+
         def _reply(self, status: int, body: str, ctype: str = "text/plain; charset=utf-8"):
             data = body.encode("utf-8") if isinstance(body, str) else body
             self.send_response(status)
@@ -107,7 +116,7 @@ def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | N
             path = urlsplit(self.path).path
             if portal is not None and path.startswith("/portal/"):
                 try:
-                    length = int(self.headers.get("Content-Length") or 0)
+                    length = self._length()
                 except ValueError:
                     return self._reply(400, "bad length")
                 if length > 4096:
@@ -115,7 +124,7 @@ def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | N
                 return self._portal(self.rfile.read(length))
             if forms is not None and path.startswith("/forms/"):
                 try:
-                    length = int(self.headers.get("Content-Length") or 0)
+                    length = self._length()
                 except ValueError:
                     return self._reply(400, "bad length")
                 if length > FORM_MAX_BYTES:
@@ -130,7 +139,7 @@ def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | N
                 return
             if email_events is not None and path == "/email/events":
                 try:
-                    length = int(self.headers.get("Content-Length") or 0)
+                    length = self._length()
                 except ValueError:
                     return self._reply(400, "bad length")
                 if length > 256 * 1024:
@@ -143,7 +152,7 @@ def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | N
                 return self._reply(status, body)
             if email is not None and path == "/email/inbound":
                 try:
-                    length = int(self.headers.get("Content-Length") or 0)
+                    length = self._length()
                 except ValueError:
                     return self._reply(400, "bad length")
                 if length > EMAIL_MAX_BYTES:
@@ -157,7 +166,7 @@ def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | N
             if path != "/webhook":
                 return self._reply(404, "not found")
             try:
-                length = int(self.headers.get("Content-Length") or 0)
+                length = self._length()
             except ValueError:
                 return self._reply(400, "bad length")
             if length > MAX_BODY_BYTES:
@@ -217,7 +226,9 @@ def main():
     worker_thread.start()
     port = int(os.environ.get("PORT", "8080"))
     email_secrets = [s.strip() for s in os.environ.get("HERMES_EMAIL_INBOUND_SECRETS", "").split(",") if s.strip()]
-    email = EmailHandler(email_secrets, ingest) if email_secrets else None
+    own = frozenset(a for a in (address(v) for v in [*email_senders(os.environ.get("HERMES_EMAIL_SENDERS", "")).values(),
+                                                       os.environ.get("HERMES_NOTIFY_SENDER", "")]) if a)
+    email = EmailHandler(email_secrets, ingest, own=own) if email_secrets else None   # our own mail coming back: a loop
     secret = os.environ.get("HERMES_JWT_SECRET", "")          # Supabase project JWT secret; unset: the portal signs nobody in
     auth = supabase_from_env(os.environ)
     keys = None

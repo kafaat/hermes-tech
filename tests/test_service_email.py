@@ -32,7 +32,9 @@ def mail(**over):
     m = {"MessageID": "a8c1040e-db1f-4e9b-a5a6-9f1c3c0b1f21", "OriginalRecipient": f"Shop <{INBOX.upper()}>",
          "FromFull": {"Email": "Salem@Customer.example", "Name": "سالم  أحمد"}, "Subject": "  سؤال\r\n عن الدوام ",
          "TextBody": "متى تفتحون يوم الجمعة؟\n\nOn Tue, Sep 30, 2026 Shop wrote:\n> old text", "StrippedTextReply": "",
-         "Headers": [{"Name": "Message-ID", "Value": "<CAF123@mail.customer.example>"}, {"Name": "X-Spam-Status", "Value": "No"}],
+         "Headers": [{"Name": "Message-ID", "Value": "<CAF123@mail.customer.example>"}, {"Name": "X-Spam-Status", "Value": "No"},
+                     {"Name": "Received-SPF", "Value": "Pass (sender SPF authorized) identity=mailfrom; client-ip=192.0.2.1;"
+                                                       " helo=mail.customer.example; envelope-from=bounces@mail.customer.example;"}],
          "Attachments": [{"Name": "a.pdf", "Content": "JVBER..."}], "HtmlBody": "<p>secret html</p>"}
     m.update(over)
     return json.dumps(m).encode()
@@ -46,7 +48,7 @@ class TestInbound(unittest.TestCase):
         self.assertEqual((kind, ext, valid, channel), ("email", "a8c1040e-db1f-4e9b-a5a6-9f1c3c0b1f21", True, INBOX))
         self.assertEqual(payload, {"email": {"from": "salem@customer.example", "name": "سالم أحمد", "subject": "سؤال عن الدوام",
                                              "text": "متى تفتحون يوم الجمعة؟", "message_id": "<CAF123@mail.customer.example>",
-                                             "spam": False, "attachments": 1}})
+                                             "spam": False, "authenticated": True, "attachments": 1}})
         self.assertNotIn("html", json.dumps(payload))                 # neither the HTML nor the attachments are kept
         self.assertEqual(EmailHandler(["postmark:s3cret-one"], ingest).handle(AUTH, mail())[0], 200)   # a redelivery
         self.assertEqual(len(ingest.rows), 1)
@@ -89,6 +91,39 @@ class TestInbound(unittest.TestCase):
         self.assertEqual((item["email"]["text"], item["email"]["spam"], item["email"]["message_id"], auto), ("Is it open?", True, None, False))
 
 
+class TestReviewFindings(unittest.TestCase):
+    """The review of 2026-10-02: loops, forged senders, a sender's own spam verdict, invisible characters."""
+
+    def test_our_own_mail_coming_back_is_never_stored(self):
+        ingest = Ingest()
+        h = EmailHandler(["postmark:s3cret-one"], ingest, own=frozenset({"notify@hermes.example", "info@shop.example"}))
+        for over in ({"FromFull": {"Email": "Notify@Hermes.example", "Name": "Hermes"}},     # a notice forwarded back in
+                     {"FromFull": {"Email": "info@shop.example", "Name": "Shop"}},          # a reply forwarded back in
+                     {"Headers": [{"Name": "Return-Path", "Value": "<>"}]}):                 # a bounce
+            with self.subTest(over):
+                self.assertEqual(h.handle(AUTH, mail(**over)), (200, "ignored"))
+        self.assertEqual(ingest.rows, [])
+
+    def test_only_a_vouched_for_sender_is_authenticated(self):
+        def auth(headers, sender="salem@customer.example"):
+            return parse(json.loads(mail(Headers=headers, FromFull={"Email": sender, "Name": ""})))[2]["email"]["authenticated"]
+        spf = lambda env, r="Pass": {"Name": "Received-SPF", "Value": f"{r} (x) identity=mailfrom; envelope-from={env};"}  # noqa: E731
+        self.assertTrue(auth([spf("bounce@customer.example")]))
+        self.assertTrue(auth([{"Name": "Authentication-Results", "Value": "mx.p; dkim=pass header.d=customer.example; spf=none"}]))
+        self.assertFalse(auth([spf("attacker@evil.example")]))                # SPF passed for another domain: forged From
+        self.assertFalse(auth([spf("bounce@customer.example", "Fail")]))
+        self.assertFalse(auth([{"Name": "Authentication-Results", "Value": "mx.p; dkim=pass header.d=evil.example"}]))
+        self.assertFalse(auth([]))
+
+    def test_any_spam_verdict_counts_and_subjects_lose_invisible_characters(self):
+        item = parse(json.loads(mail(Headers=[{"Name": "X-Spam-Status", "Value": "Yes, score=8"},
+                                              {"Name": "X-Spam-Status", "Value": "No"}],
+                                     Subject="\u200fاستفسار\u200c عن\u0007 الدوام")))[2]["email"]
+        self.assertTrue(item["spam"])
+        self.assertEqual(item["subject"], "استفسار عن الدوام")
+        self.assertTrue(reply_subject("\u200fاستفسار").isprintable())
+
+
 class TestReply(unittest.TestCase):
     ROW = {"customer_id": "c", "payload": {"channel": "email", "account_id": INBOX, "to": "salem@customer.example",
                                            "subject": "Re: سؤال عن الدوام", "body": "نفتح من 8 إلى 10", "in_reply_to": "x",
@@ -112,7 +147,8 @@ class TestReply(unittest.TestCase):
         self.assertEqual(body, {"From": "المتجر <info@shop.example>", "To": "salem@customer.example", "ReplyTo": INBOX,
                                 "Subject": "Re: سؤال عن الدوام", "TextBody": "نفتح من 8 إلى 10", "MessageStream": "outbound",
                                 "Metadata": {"hermes_channel": INBOX},
-                                "Headers": [{"Name": "In-Reply-To", "Value": "<CAF123@mail.customer.example>"},
+                                "Headers": [{"Name": "Auto-Submitted", "Value": "auto-replied"},
+                                            {"Name": "In-Reply-To", "Value": "<CAF123@mail.customer.example>"},
                                             {"Name": "References", "Value": "<CAF123@mail.customer.example>"}]})
 
     def test_failures_are_classified_where_they_happened(self):

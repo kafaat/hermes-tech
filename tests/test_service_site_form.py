@@ -58,6 +58,8 @@ class TestForm(unittest.TestCase):
         self.assertEqual(codes, [200, 200, 429])
         self.assertEqual(h.handle(KEY, {**FORM, "X-Forwarded-For": "198.51.100.9"}, body())[0], 200)   # another visitor
         self.assertEqual(len(ingest.rows), 3)
+        spoofed = {**FORM, "X-Forwarded-For": "1.2.3.4, 10.0.0.1"}     # the visitor's own first entry does not buy a new bucket
+        self.assertEqual(h.handle(KEY, spoofed, body())[0], 429)
 
     def test_the_form_for_a_site_template_posts_to_this_service_and_escapes(self):
         html = contact_form("https://hermes-app.example", KEY)

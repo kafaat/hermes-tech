@@ -19,6 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 from complaints import Matcher, normalize  # noqa: E402
+from service.email_inbound import clean  # noqa: E402
 from content_guard import ContentGuard  # noqa: E402
 
 from service.dispatcher import (CURRENT_BIND, EMAIL_ADDRESS, SEND_TIMEOUT_SECONDS, SENT, BeforeSend, Dispatcher,  # noqa: E402
@@ -100,7 +101,7 @@ def email_content(e: dict) -> tuple[str, str, str, str]:
 
 
 def reply_subject(subject: str) -> str:
-    s = " ".join(str(subject or "").split())[:190]
+    s = clean(subject, 190)
     return s if re.match(r"(?i)^(re|رد)\s*:", s) else (f"Re: {s}" if s else "")
 
 
@@ -468,8 +469,10 @@ class Worker:
                             " values (%s, 'customer', 'reply:send', %s, 'agent_replies', %s, now() + make_interval(hours => %s))"
                             " returning id", (t.customer_id, _json(reply), ext, REPLY_WINDOW_HOURS))
                 approval_id = cur.fetchone()[0]
-                cur.execute("select app.approve_by_standing(%s)", (approval_id,))   # the database decides, never the worker (0020)
-                standing = cur.fetchone()[0]
+                standing = False
+                if source_kind != "email" or (email or {}).get("authenticated"):   # a forged From never gets an instant reply
+                    cur.execute("select app.approve_by_standing(%s)", (approval_id,))   # the database decides, never the worker (0020)
+                    standing = cur.fetchone()[0]
                 if not standing:
                     cur.execute("select app.requeue_task(%s, %s, %s)", (t.id, t.token, self.poll))
             if not standing:

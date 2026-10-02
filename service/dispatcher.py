@@ -194,8 +194,9 @@ class PostmarkEmailAdapter:
                    "MessageStream": "outbound"}
         if len(account) <= 80:                          # routes the delivery / bounce event back to this business (28.28)
             request["Metadata"] = {"hermes_channel": account}
+        request["Headers"] = [{"Name": "Auto-Submitted", "Value": "auto-replied"}]   # RFC 3834: no auto-reply comes back
         if message_id:
-            request["Headers"] = [{"Name": "In-Reply-To", "Value": message_id}, {"Name": "References", "Value": message_id}]
+            request["Headers"] += [{"Name": "In-Reply-To", "Value": message_id}, {"Name": "References", "Value": message_id}]
         status, data = self.post(self.URL, request, {"X-Postmark-Server-Token": self.token}, SEND_TIMEOUT_SECONDS)
         code = (data or {}).get("ErrorCode")
         if 200 <= status < 300 and code in (0, None):
@@ -234,7 +235,7 @@ class OwnerEmailNotice:
                                                 else "استفسار يحتاجك")
         body = f"{text}.\n\nافتح البوابة لقراءة الرسالة والرد عليها:\n{self.portal_url}\n\n— Hermes"
         request = {"From": self.sender, "To": ", ".join(to), "Subject": f"Hermes: {text}", "TextBody": body,
-                   "MessageStream": "outbound"}
+                   "MessageStream": "outbound", "Headers": [{"Name": "Auto-Submitted", "Value": "auto-generated"}]}
         status, data = self.post(PostmarkEmailAdapter.URL, request, {"X-Postmark-Server-Token": self.token}, SEND_TIMEOUT_SECONDS)
         code = (data or {}).get("ErrorCode")
         if 200 <= status < 300 and code in (0, None):

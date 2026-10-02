@@ -82,7 +82,8 @@ class FormHandler:
             return _page(415, "طلب غير صالح", "أرسل الرسالة من النموذج.")
         if not self.ingest.channel_active("site_form", site_key):
             return _page(404, "غير موجود", "هذا النموذج غير موجود.")
-        address = (h.get("x-forwarded-for") or "").split(",")[0].strip() or "-"
+        address = (h.get("x-forwarded-for") or "").split(",")[-1].strip() or "-"   # the entry our proxy appended, not
+                                                                                  # the visitor's own (spoofable) first
         if not self.limiter.allow((site_key, address)):
             return _page(429, "مهلًا", "وصلتنا رسائل كثيرة منك الآن. أعد المحاولة بعد قليل.")
         try:

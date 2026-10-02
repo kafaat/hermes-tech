@@ -248,5 +248,22 @@ class TestModes(unittest.TestCase):
         self.assertFalse(live.staging)
 
 
+class TestAfterSend(unittest.TestCase):
+    """The review of 2026-10-02: an answer that cannot be read after the request was written is ambiguous, never a clean
+    failure: the provider may have acted, and a clean failure is claimable again (a second send)."""
+
+    def test_an_unreadable_answer_after_sending_is_ambiguous(self):
+        from service.crawler import ApiClient, AfterSend
+        from service.dispatcher import AMBIGUOUS, classify
+        from service.worker import graph_post
+        for raw in (b"HTTP/1.1 20", b"garbage", b"HTTP/1.1 200 OK\r\n\r\n" + b"x" * (3 * 1024 * 1024)):
+            post = graph_post(ApiClient({"api.postmarkapp.com"}, resolver=lambda h: ["93.184.216.34"],
+                                        connector=lambda plan, req, raw=raw: raw))
+            with self.subTest(raw=raw[:12]):
+                with self.assertRaises(AfterSend) as cm:
+                    post("https://api.postmarkapp.com/email", {}, {}, 5)
+                self.assertEqual(classify(cm.exception).outcome, AMBIGUOUS)
+
+
 if __name__ == "__main__":
     unittest.main()

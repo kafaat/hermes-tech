@@ -41,6 +41,11 @@ def system_resolver(host: str) -> list[str]:
         raise
 
 
+class AfterSend(Exception):
+    """The request was written and the answer could not be read (cut short, too large, not HTTP). The provider may
+    have acted on it: a sender must treat this as AMBIGUOUS, never as a clean failure (review of 2026-10-02)."""
+
+
 class NotSent(OSError):
     """The request never left this host: the connection or the TLS handshake failed before a byte was written.
     A sender may treat it as a clean failure; anything after the first byte stays ambiguous."""
@@ -180,7 +185,10 @@ class ApiClient:
         if body is not None and form is not None:
             raise ValueError("body or form")
         raw = self.connector(plan, _api_request(method, url, plan["host"], body, headers or {}, form))
-        status, _, payload = _parse(raw, plan["max_bytes"])
+        try:
+            status, _, payload = _parse(raw, plan["max_bytes"])
+        except FetchRefused as exc:                              # after sendall: not a refusal any more
+            raise AfterSend(str(exc)) from None
         try:
             data = json.loads(payload.decode("utf-8")) if payload.strip() else {}
         except ValueError:

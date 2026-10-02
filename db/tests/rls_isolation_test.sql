@@ -1413,6 +1413,30 @@ end $$;
 reset role;
 select set_config('app.task_id', '', true), set_config('app.task_token', '', true), set_config('app.customer_id', '', true);
 
+-- 59. build fence (0027): one row, written and read by the worker role only; an owner neither sees nor moves it
+set local role hermes_worker;
+insert into app.service_build (id, commit) values (1, 'aaaa') on conflict (id) do update set commit = excluded.commit, seen_at = now();
+do $$ begin
+  begin
+    insert into app.service_build (id, commit) values (2, 'bbbb');
+    raise exception 'FAIL a second live build row';
+  exception when check_violation or insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111', 'aal1');
+set local role authenticated;
+do $$ begin
+  begin
+    perform 1 from app.service_build;
+    raise exception 'FAIL an owner read the live build';
+  exception when insufficient_privilege then null;
+  end;
+  raise notice 'PASS build fence: one row, the worker role''s alone';
+end $$;
+reset role;
+select set_config('request.jwt.claim.sub', '', true), set_config('request.jwt.claims', '', true);
+
 -- 46. the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)
 do $$ declare got text; bad text; begin
   select string_agg(relname, ',' order by relname collate "C") into got from pg_class
@@ -1469,7 +1493,8 @@ do $$ declare got text; bad text; begin
   if bad is not null then raise exception 'FAIL policy granted to PUBLIC: %', bad; end if;
   select string_agg(tablename || '.' || policyname, ',' order by tablename) into bad from pg_policies
    where schemaname = 'app' and 'hermes_worker' = any(roles) and permissive = 'PERMISSIVE'
-     and policyname not in ('templates_read', 'outbox_topics_read', 'agent_pauses_worker_read')
+     and policyname not in ('templates_read', 'outbox_topics_read', 'agent_pauses_worker_read',
+                            'service_build_worker')            -- 0027: one commit row, no customer data
      and coalesce(qual, '') || coalesce(with_check, '') !~ 'worker_(customer_id|context)';
   if bad is not null then raise exception 'FAIL worker policy not bound to a lease: %', bad; end if;
   raise notice 'PASS every worker policy is bound to a lease';
@@ -1567,7 +1592,7 @@ do $$ declare r record; n bigint; bad text := ''; begin
   for r in select c.relname from pg_class c
             where c.relnamespace = 'app'::regnamespace and c.relkind in ('r', 'v')
               and has_table_privilege('hermes_worker', c.oid, 'SELECT')
-              and c.relname not in ('templates', 'outbox_topics', 'agent_pauses') loop
+              and c.relname not in ('templates', 'outbox_topics', 'agent_pauses', 'service_build') loop   -- platform rows, no tenant
     execute format('select count(*) from app.%I', r.relname) into n;
     if n > 0 then bad := bad || r.relname || '=' || n || ' '; end if;
   end loop;

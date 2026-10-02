@@ -24,7 +24,7 @@ the portal's calls to the Supabase project host, and with HERMES_GRAPH=live the 
 "simulate" or "live" (spec 28.14), and anything else refuses to start.
 """
 from __future__ import annotations
-import json, logging, os, signal, sys, threading
+import json, logging, os, re, signal, sys, threading
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qsl, urlsplit
@@ -174,7 +174,8 @@ def main():
     ingest = Ingest(Database(url, "hermes_ingest"))
     webhook = Handler(secrets, ingest)
     worker = Worker(Database(url, "hermes_worker"), worker_name(), adapters,
-                    approval_poll_seconds=int(os.environ.get("HERMES_APPROVAL_POLL_SECONDS", "60")))
+                    approval_poll_seconds=int(os.environ.get("HERMES_APPROVAL_POLL_SECONDS", "60")), build=COMMIT.lower() if re.fullmatch(r"[0-9a-fA-F]{0,40}", COMMIT) else "")
+    worker.register_build()                                    # the previous build stops claiming (0027, spec 28.29)
     stop = threading.Event()
     worker_thread = threading.Thread(target=worker.loop, kwargs={"stop": stop}, name="worker", daemon=True)
     worker_thread.start()

@@ -30,6 +30,7 @@ log = logging.getLogger("hermes.worker")
 AGENT = "agent_triage"
 KINDS = ("inbound.event", "outbox.resend", "content.propose")      # the task kinds this worker handles; claim_task leaves any other kind to a
                                                 # worker that knows it (0016: an older instance took a new kind mid-deploy)
+BUILD_STALE_SECONDS, BUILD_BEAT_SECONDS = 60, 20   # build fence (0027): a live build not seen for 60 s no longer fences
 POST_DECISION_DAYS = 7          # a post proposal waits a week for the owner, then lapses
 REPLY_WINDOW_HOURS = 19          # a reply:send proposal must be decidable inside the 20 h window (approvals_reply_window)
 
@@ -191,15 +192,48 @@ def accepted(ref: str, delay: float, outbox_id=None, timeout: float | None = Non
 
 
 class Worker:
-    def __init__(self, db, name: str, adapters: dict, lease_seconds: int = 120, approval_poll_seconds: int = 60):
+    def __init__(self, db, name: str, adapters: dict, lease_seconds: int = 120, approval_poll_seconds: int = 60,
+                 build: str | None = None):
         from service.pg import OutboxPort
-        self.db, self.name, self.adapters = db, name, adapters
+        self.db, self.name, self.adapters, self.build = db, name, adapters, build
+        self._beat, self._fenced = 0.0, False
         self.lease, self.poll = lease_seconds, approval_poll_seconds
         self.matcher, self.guard = Matcher(), ContentGuard()
         self._outbox_port = OutboxPort
 
+    # ------------------------------------------------------------ build fence (0027, spec 28.29)
+    def register_build(self):
+        """This build is now the live one: a worker of any other build stops claiming while this one is seen."""
+        with self.db.tx() as cur:
+            cur.execute("insert into app.service_build (id, commit, started_at, seen_at) values (1, %s, now(), now())"
+                        " on conflict (id) do update set commit = excluded.commit, started_at = now(), seen_at = now()", (self.build,))
+        self._beat = time.monotonic()
+
+    def heartbeat(self, force: bool = False):
+        if self.build is None or (not force and time.monotonic() - self._beat < BUILD_BEAT_SECONDS):
+            return
+        with self.db.tx() as cur:                       # only while this build is the live one; never takes it back
+            cur.execute("update app.service_build set seen_at = now() where id = 1 and commit = %s", (self.build,))
+        self._beat = time.monotonic()
+
+    def fenced(self) -> bool:
+        """True while another build is live and alive: a deploy replaced this one."""
+        if self.build is None:
+            return False
+        with self.db.tx() as cur:
+            cur.execute("select commit <> %s and seen_at > now() - make_interval(secs => %s) from app.service_build where id = 1",
+                        (self.build, BUILD_STALE_SECONDS))
+            r = cur.fetchone()
+        fenced = bool(r and r[0])
+        if fenced != self._fenced:
+            log.info("build fence: %s", "a newer build is live, not claiming" if fenced else "claiming")
+            self._fenced = fenced
+        return fenced
+
     # ------------------------------------------------------------ lease plumbing
     def claim(self) -> Task | None:
+        if self.fenced():
+            return None
         with self.db.tx() as cur:
             cur.execute("select task_id, token, fencing, customer_id from app.claim_task(%s, %s, %s, 3, %s)",
                         (AGENT, self.name, self.lease, list(KINDS)))
@@ -240,6 +274,7 @@ class Worker:
 
     def loop(self, idle_seconds: float = 2.0, stop=None):
         while stop is None or not stop.is_set():
+            self.heartbeat()
             if self.run_once() is None:
                 if stop is None:
                     time.sleep(idle_seconds)

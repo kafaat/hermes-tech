@@ -2,6 +2,7 @@
 unless stated; the scheduler (orchestrator timer) records every run and an alert fires on a missed day.
 
   inquiry_body_30d   daily   hermes_jobs    select app.purge_inquiry_bodies()   (claim C4.7; SQL case 45)
+                                                 also wipes webhook_events.payload after 30 days (0030; case 62)
   audit_checkpoint   daily   service_role   tools/audit_checkpoint.py append     (claim A15b)
   outbox_attention   5 min   operator view  app.v_outbox_attention -> alert when non-empty
   competitor_check   daily   hermes_jobs    service/competitor.py: due competitors -> crawler -> facts -> snapshot

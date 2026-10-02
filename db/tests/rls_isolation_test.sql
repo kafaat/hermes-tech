@@ -1545,6 +1545,35 @@ do $$ begin
   raise notice 'PASS relink: a suspended account stays suspended, an inactive business links nothing';
 end $$;
 
+-- 62. the raw copy of an inbound message is wiped after 30 days with the inquiry's text (0030), by a role that cannot
+--     read it; a recent one stays; the row stays (a redelivery is still a duplicate)
+insert into app.webhook_events (kind, external_event_id, signature_valid, payload, received_at)
+values ('site_form', 'form:k62old', true, '{"form": {"name": "سالم", "phone": "+967712345678"}}', now() - interval '40 days'),
+       ('site_form', 'form:k62new', true, '{"form": {"name": "علي", "phone": "+967712345679"}}', now() - interval '2 days');
+set local role hermes_jobs;
+select app.purge_inquiry_bodies();
+do $$ begin
+  begin
+    perform payload from app.webhook_events;
+    raise exception 'FAIL the purge role read a payload';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+do $$ begin
+  if (select payload from app.webhook_events where external_event_id = 'form:k62old') <> '{"purged": true}'::jsonb
+     or (select payload_purged_at from app.webhook_events where external_event_id = 'form:k62old') is null then
+    raise exception 'FAIL an inbound message older than 30 days kept its raw text';
+  end if;
+  if (select payload->'form'->>'phone' from app.webhook_events where external_event_id = 'form:k62new') <> '+967712345679' then
+    raise exception 'FAIL a recent inbound message was wiped';
+  end if;
+  if not exists (select 1 from app.retention_runs where job = 'event_payload_30d') then
+    raise exception 'FAIL the payload purge was not recorded';
+  end if;
+  raise notice 'PASS inbound payloads: wiped after 30 days by a role that cannot read them, recorded, the row kept';
+end $$;
+
 -- 46. the FINAL catalog after all migrations matches the published inventory (grants and policies accumulate)
 do $$ declare got text; bad text; begin
   select string_agg(relname, ',' order by relname collate "C") into got from pg_class

@@ -1,7 +1,7 @@
 {
  "package_version": "1.8",
  "registry_version": "1.8.0",
- "source_id": "4125d19243578bc536b4d9bc1de5769267ab5e7167910880c9e8cf0654ce2ef7",
+ "source_id": "32d7ee1d792543e34390215b665f395a31653aac61f1fddb5f4ebe0e586978e8",
  "file_count": 251,
  "files": {
   ".dockerignore": "51acffa125b3d041889f51bdfe771d46303571b7407c6cc29621dbc9d2c1ce38",
@@ -113,7 +113,7 @@
   "docs/review_response_v15.md": "cc385ebbfb348ee0f5a53732bd3186f02e1205b65ed5ba7ee9fee01aa83317ce",
   "docs/review_response_v17.md": "256a484883fba9f362e9ea91bcc722e8e1f7033b692b542a68911cffafb89804",
   "docs/security_definer_inventory.md": "6bd76673ba78885290bb380003e7fd2348b215b73f3de36cbdef70ba6849d2d6",
-  "docs/setup_guide.md": "de14815222594dd0e7fa53dfeb41d15fa68f6ca1abab77001f2b45e1651086eb",
+  "docs/setup_guide.md": "9653ca232351b55a5db23e80e6b0cac6fcf85fbbe52dc388a614f8a9e646b082",
   "docs/whatsapp_cost_scenarios.md": "0cccecaff3d283c0fdde130eaa986202567bd195d21042432043ffe701368c82",
   "evals/complaints_seed.jsonl": "1943e83f60be881130d52a843ed9cb65ea917bfd8fdb09ee39cef61105a7bcfc",
   "evals/content_guard_golden.jsonl": "af6b8009f590f8877626a0dc7d6901729b7cb7023ad05b2028443b6e515f4acc",

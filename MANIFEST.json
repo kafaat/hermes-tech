@@ -1,7 +1,7 @@
 {
  "package_version": "1.8",
  "registry_version": "1.8.0",
- "source_id": "aaebbce654652aa729542da65dd36edc9fdc5229fcc0ead38c61f068ea5c73f9",
+ "source_id": "1c451794fd2f0dd0269a52e06a3b7b44ca28e826ea89b0da7451b048c09f8e47",
  "file_count": 253,
  "files": {
   ".dockerignore": "51acffa125b3d041889f51bdfe771d46303571b7407c6cc29621dbc9d2c1ce38",
@@ -157,7 +157,7 @@
   "reports/v16_repro_before_fix.txt": "a24d302262e267994d409fdafdfe59635de5436c39dd1d1500dacf67e0342d39",
   "reports/v17_repro_before_fix.txt": "ddb262effc6406f9f9ad502059eea97b0dd7d82420c3bff125c7b05d5ac56744",
   "reports/validation_report.txt": "19565aca7fee54a1ad02dfee62af36c78e14c5bad794fe4141073742532ff781",
-  "requirements-ci.txt": "7923099d98dca72dad0f83bab6b45e3e17c78ee5c848b2de5dcf9533ea7e8ce3",
+  "requirements-ci.txt": "a2cf310cbdd69b5d2983b04d9e71ba958fd7e3af699d4d5860871e12be8259a3",
   "requirements-service.txt": "a8bf3143b468a13714c8c650a1775d21f526f3c60d1475687f58f39681d52a3b",
   "runtime/agent_call.schema.json": "70a637c25d7652000fad94418a863090ba7ab3fd623a338924b3cb992e29fead",
   "runtime/agent_calls.example.jsonl": "b380519aafd3acb66191f1a5ae981260b8dc3ed4ab1b91d6810033fb1d88d5c3",

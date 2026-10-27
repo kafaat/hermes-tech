@@ -35,6 +35,7 @@ import psycopg
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from service.auth import csrf_token, issue_staging_token  # noqa: E402
+from service.worker import KINDS  # noqa: E402
 DB = os.environ["DATABASE_URL"]
 CUSTOMER = "00000000-0000-0000-0000-0000000e2e01"
 OWNER = "00000000-0000-0000-0000-0000000e2e0a"
@@ -100,11 +101,17 @@ def post(url, secret, payload, signature=None):
     sig = signature or "sha256=" + hmac.new(secret, raw, hashlib.sha256).hexdigest()
     req = urllib.request.Request(url + "/webhook", data=raw, method="POST",
                                  headers={"Content-Type": "application/json", "X-Hub-Signature-256": sig})
-    try:
-        with urllib.request.urlopen(req, timeout=15) as r:
-            return r.status
-    except urllib.error.HTTPError as e:
-        return e.code
+    for attempt in range(5):       # as Meta does: a delivery the edge refused (502-504, a reset) is sent again; the
+        try:                       # provider's message id makes a second delivery a duplicate, never a second event
+            with urllib.request.urlopen(req, timeout=15) as r:
+                return r.status
+        except urllib.error.HTTPError as e:
+            if e.code not in (502, 503, 504) or attempt == 4:
+                return e.code
+        except urllib.error.URLError:
+            if attempt == 4:
+                raise
+        time.sleep(2 * (attempt + 1))
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -186,6 +193,17 @@ def main():
                 return False
         check(bool(wait("service healthy", healthy, 300)),
               f"service answers /healthz at {url}" + (f" on commit {want[:7]}" if want else ""))
+        # staging, 12 October: the first answer came while the edge was still switching to the new deployment, and the
+        # next requests were refused; three answers in a row, two seconds apart, before anything is sent
+        check(bool(wait("service stable", lambda: all(healthy() and (time.sleep(2) or True) for _ in range(3)), 120)),
+              "service answers /healthz three times in a row")
+        # and the same day a load run filled the queue ahead of this run's tasks: start only on a quiet queue (no task
+        # of the worker's kinds overdue by more than 30 s), and say so if another load keeps it busy
+        def overdue():
+            return q("select count(*) from app.tasks where status = 'queued' and run_after < now() - interval '30 seconds'"
+                     " and agent_id = 'agent_triage' and kind = any(%s)", (list(KINDS),))[0][0]
+        quiet = bool(wait("a quiet queue", lambda: overdue() == 0, 600))
+        check(quiet, "the queue is quiet before the run" + ("" if quiet else f" ({overdue()} tasks overdue: a load run in progress?)"))
         seed()
         # a run that crashed mid-way can leave a reply proposal pending (its event unprocessed counts as a backlog in
         # /deps): the test owner rejects its own leftovers, as a person would, and waits for those tasks to close

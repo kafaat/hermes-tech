@@ -1,5 +1,6 @@
 # Railway service load-test: k6 against the staging webhook, then verify_load.py against the staging database.
-# Watch pattern ops/load/** (runs when the load test changes, or on a manual redeploy); never restarts.
+# Watch pattern ops/load/** (deploys when the load test changes, or on a manual redeploy); never restarts. It sends
+# load only when armed (HERMES_LOAD_RUN=1, ops/load/run.sh).
 FROM grafana/k6:1.8.1 AS k6
 FROM python:3.12-slim-bookworm
 COPY --from=k6 /usr/bin/k6 /usr/bin/k6

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
-"""External monitor for /deps: runs OUTSIDE Railway (GitHub Actions, .github/workflows/monitor.yml), because Railway
-checks /healthz only at deploy time and never reports a skipped or hung cron run (spec 28.7).
+"""Monitor for /deps, run in two places (spec 28.15, 28.34):
+  - OUTSIDE Railway, GitHub Actions (.github/workflows/monitor.yml): Railway checks /healthz only at deploy time and
+    never reports a skipped or hung cron run (spec 28.7); this one also sees Railway itself gone. It needs the
+    repository secrets, which only the owner can set.
+  - INSIDE Railway, the cron service deps-watch (21,51 * * * *): its two settings are references to hermes-app's own
+    variables, so nothing is copied or published; a red run is a crashed cron run, which Railway emails to the owner.
 
     HERMES_DEPS_URL=https://<app>/deps HERMES_MONITOR_TOKEN=... python ops/monitor/check_deps.py
 

@@ -1592,7 +1592,7 @@ do $$ declare got text; bad text; begin
   if bad is not null then raise exception 'FAIL app functions executable by PUBLIC: %', bad; end if;
   select string_agg(p.proname, ',' order by p.proname collate "C") into got from pg_proc p
    where p.pronamespace = 'app'::regnamespace and p.prosecdef;
-  if got is distinct from 'approve_by_standing,audit_chain,audit_effect,audit_head,audit_verify,bind_task,claim_task,complete_task,current_user_customer_ids,extend_task_lease,health_signals,is_operator,jwt_aal,link_provider_account,outbox_before_write,requeue_task,worker_context,worker_customer_id' then raise exception 'FAIL definer functions differ from the inventory: %', got; end if;
+  if got is distinct from 'activate_service_build,approve_by_standing,audit_chain,audit_effect,audit_head,audit_verify,bind_task,claim_task,claim_task,complete_task,current_user_customer_ids,extend_task_lease,health_signals,heartbeat_service_build,is_operator,jwt_aal,link_provider_account,outbox_before_write,requeue_task,worker_context,worker_customer_id' then raise exception 'FAIL definer functions differ from the inventory: %', got; end if;
   select string_agg(p.proname, ',') into bad from pg_proc p where p.pronamespace = 'app'::regnamespace and p.prosecdef
      and not exists (select 1 from unnest(coalesce(p.proconfig, '{}'::text[])) c where c like 'search_path=%');
   if bad is not null then raise exception 'FAIL definer functions without a pinned search_path: %', bad; end if;

@@ -1,7 +1,7 @@
 {
  "package_version": "1.8",
  "registry_version": "1.8.0",
- "source_id": "4209b80f8cf6ab8dff5730339ae10a5e8ec0ca818304d137d05da74342f72828",
+ "source_id": "4dc1909e75669f29a23f0fd8c5c87838456419dfaa477df53de800131ef47cc5",
  "file_count": 260,
  "files": {
   ".dockerignore": "51acffa125b3d041889f51bdfe771d46303571b7407c6cc29621dbc9d2c1ce38",
@@ -64,7 +64,7 @@
   "db/tests/concurrency_reserve.sh": "ad0a01e25af2c363368f6e153c952fd251801a22f4766cfdc66062598cd0bdae",
   "db/tests/e2e_pilot.py": "ae1ba893c82722329264e71cd5c3dec636c4d5b6f6cb5fb796fa5be1c42bcf37",
   "db/tests/outbox_operator_retry.sql": "0fa2cf7a7b3f26494527710af40a9bb19d31b3d5418951bf81f5780f112befd8",
-  "db/tests/rls_isolation_test.sql": "856e450320fce09105f2f7faa79aed9a4dfb97da9845d13421b120da1c658290",
+  "db/tests/rls_isolation_test.sql": "d1b76eb2c9e79ad8419ea9f47723c760240d1946724f4c8869713314a042367f",
   "db/tests/run_isolation.sh": "ac1620eef000d592c3b72bdf70dfd27c11757f436fef7058ce27a01f9f77cc42",
   "db/tests/run_local.sh": "d0a96b00edb08c6d15e07430b001d447017a931406e2c988db50977930052d55",
   "derived/agent_capabilities.json": "2febb66b91b5231d0f3affae71ceb2659691914bfb17182ed6db1f5761b68468",

@@ -75,3 +75,10 @@ FORCE-EXCEPTIONS: approvals, audit_log, customer_users, operators, outbox_topics
 | outbox_topics | 1.7 | بيانات مرجعية للمحفّز | قراءة فقط لكل الأدوار |
 
 الاستثناء لا يكون ثغرة إلا إن اتصل التطبيق بصفة مالك الجدول. الإصدار 1.8 يشغّل الترحيلات في CI بدور مالك عادي (`hermes_owner`: بلا superuser وبلا bypassrls)، لأن مالكًا متجاوزًا لأمن الصف يجعل FORCE بلا أثر ويخفي دالة definer تقرأ جدولًا مُجبَرًا فلا تجد شيئًا. الحالة 46 تطبع صفات المالك الفعلي في كل تشغيل.
+
+## الترحيل 0031: سلطة الإصدار
+
+- `app.activate_service_build(text, bigint)` للمالك/النشر الإداري فقط، دون PUBLIC أو العامل؛ هوية كاملة وجيل متزايد. لا تفعيل تلقائي عند التسجيل.
+- `app.heartbeat_service_build(text, bigint)` للعامل؛ يحدّث وقت الرصد فقط عند تطابق الإصدار والجيل ولا يغير السلطة.
+- `app.claim_task(text, text, int, int, text[], text, bigint)` للعامل؛ قفل SHARE على سلطة الإصدار طوال معاملة حجز المهمة. توقيع الحجز القديم محجوب عن العامل.
+- سياسة مالك الترحيل على service_build تحفظ عمل الدوال مع FORCE RLS دون superuser؛ الاختبارات في db/tests/build_fence.sql وconcurrency_build_fence.py.

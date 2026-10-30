@@ -15,3 +15,12 @@ echo "$out" | grep -E "NOTICE:  (PASS|FAIL|INFO)" || true
 got=$(grep -c "NOTICE:  PASS" <<<"$out" || true)
 if [ "$got" -ne "$expected" ]; then echo "isolation: $got/$expected PASS notices"; exit 1; fi
 echo "isolation: $got/$expected PASS"
+
+# Supplemental repair regressions must run on real PostgreSQL as well.
+for test in db/tests/build_fence.sql db/tests/outbox_operator_retry.sql; do
+  expected=$(grep -o "raise notice 'PASS" "$test" | wc -l)
+  out=$(psql -v ON_ERROR_STOP=1 -f "$test" 2>&1) || { echo "$out"; exit 1; }
+  got=$(grep -c 'NOTICE:  PASS' <<<"$out" || true)
+  [ "$expected" -gt 0 ] && [ "$got" -eq "$expected" ] || { echo "$out"; exit 1; }
+  echo "$test: $got/$expected PASS"
+done

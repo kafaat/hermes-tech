@@ -39,14 +39,14 @@
 | --- | --- | --- |
 | مخططات JSON والعقود والفهرس والسياسات | 34 فحصًا ناجحًا من 34 | tools/validate.py · الطبقة 1 |
 | قواعد الاتساق المنطقي والسياسة الإحصائية ومعجم الإخفاقات | 136 فحصًا ناجحًا من 136 | tools/validate.py · الطبقة 2 |
-| الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 272 فحصًا ناجحًا من 272 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
-| الاختبارات الآلية | 355 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
+| الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 276 فحصًا ناجحًا من 276 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
+| الاختبارات الآلية | 363 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
 | حالات SQL على Postgres فعلي | 62 حالة و73 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
-المجموع: 442/442 فحصًا ناجحًا في أداة التحقق، و355 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
+المجموع: 446/446 فحصًا ناجحًا في أداة التحقق، و363 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
 
 ### وسوم المصدر
@@ -163,12 +163,12 @@ hermes-tech/
 ├── contracts/            agent_contract.schema.json · registry(.schema).json · 8 × *.contract.json
 ├── runtime/              agent_runtime_state · agent_call · ops_summary (schemas) · examples
 ├── policies/             acceptance_policy.json · acceptance_policy.schema.json · complaint_keywords.json · complaint_keywords.schema.json · content_rules.json · content_rules.schema.json · fetch_policy.json
-├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018 · 0019 · 0020 · 0021 · 0022 · 0023 · 0024 · 0025 · 0026 · 0027 · 0028 · 0029 · 0030   (30 files)
+├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018 · 0019 · 0020 · 0021 · 0022 · 0023 · 0024 · 0025 · 0026 · 0027 · 0028 · 0029 · 0030 · 0031 · 0032   (32 files)
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
-├── db/tests/             concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · rls_isolation_test.sql · run_isolation.sh · run_local.sh
+├── db/tests/             build_fence.sql · concurrency_build_fence.py · concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · outbox_operator_retry.sql · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
 ├── service/              __init__.py · app.py · auth.py · competitor.py · crawler.py · dispatcher.py · email_inbound.py · health.py · jobs.py · jwks.py · media_policy.py · outbox_model.py · pg.py · portal.py · qr.py · redact.py · render.py · site_form.py · site_seo.py · structured.py · supabase_auth.py · telemetry.py · tiktok_oauth.py · token_box.py · webhook.py · worker.py
-├── tests/                45 modules (inventory in §15.2)
+├── tests/                46 modules (inventory in §15.2)
 ├── evals/                complaints_seed.jsonl · content_guard_golden.jsonl · model_admission.json
 ├── docs/                 19 documents · adr/ (11 decisions)
 ├── derived/              policy_matrix.md · agent_capabilities.json · alerts.yaml   (generated)
@@ -197,7 +197,7 @@ hermes-tech/
 المخطط في المساحة app على Supabase Postgres 15 أو أحدث. كل جدول يخص عميلًا يحمل customer_id غير فارغ.
 
 <!-- gen:migrations -->
-الترحيلات 30 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
+الترحيلات 32 ملفات تُطبَّق بالترتيب ولا يُعدَّل أحدها بعد تطبيقه:
 
 - `0001_core` — الأنواع والجداول والقيود
 - `0002_rls` — الأدوار ودوال الهوية وأمن الصف
@@ -229,6 +229,8 @@ hermes-tech/
 - `0028_provider_tokens` — ربط حساب تيك توك بإذن المالك، ورموزه مشفّرة بمفتاح خارج القاعدة وتُجدَّد قبل انتهائها
 - `0029_link_respects_suspension` — إعادة الربط لا تعيد تفعيل حساب أوقفه المشغّل، ولا ربط لمنشأة غير نشطة
 - `0030_purge_event_payloads` — النص الخام لكل رسالة واردة يُمحى بعد 30 يومًا كنص الاستفسار، دون أن يقرأه دور المحو
+- `0031_atomic_build_authority` — تفعيل منفصل بصلاحية المالك وحجز مهام ذري مرتبط بالجيل
+- `0032_outbox_operator_retry` — محاولة إضافية محدودة بقرار المشغل مع حفظ عداد المحاولات
 <!-- /gen:migrations -->
 
 ![الشكل 2 · الكيانات الرئيسية والعلاقات (مبسّط)](diagrams/erd.png)
@@ -359,7 +361,7 @@ create policy kb_facts_worker_rw on app.kb_facts for all to hermes_worker
 <!-- gen:force -->
 أمن الصف مُجبَر (FORCE) على كل جداول app عدا 7: `approvals`، `audit_log`، `customer_users`، `operators`، `outbox_topics`، `task_leases`، `tasks`. سبب كل استثناء وما يعوّضه في docs/security_definer_inventory.md؛ المتحقق يطابق القائمة مع الحالة النهائية للترحيلات، والحالة 46 تطابقها مع الكتالوج الفعلي.
 
-دوال SECURITY DEFINER بعد كل الترحيلات (18): `app.approve_by_standing()`، `app.audit_chain()`، `app.audit_effect()`، `app.audit_head()`، `app.audit_verify()`، `app.bind_task()`، `app.claim_task()`، `app.complete_task()`، `app.current_user_customer_ids()`، `app.extend_task_lease()`، `app.health_signals()`، `app.is_operator()`، `app.jwt_aal()`، `app.link_provider_account()`، `app.outbox_before_write()`، `app.requeue_task()`، `app.worker_context()`، `app.worker_customer_id()`. لكل منها في الجرد ما تقرؤه وتكتبه ولماذا تحتاج صلاحيات المالك ومن ينفّذها والاختبار الذي يغطيها.
+دوال SECURITY DEFINER بعد كل الترحيلات (20): `app.activate_service_build()`، `app.approve_by_standing()`، `app.audit_chain()`، `app.audit_effect()`، `app.audit_head()`، `app.audit_verify()`، `app.bind_task()`، `app.claim_task()`، `app.complete_task()`، `app.current_user_customer_ids()`، `app.extend_task_lease()`، `app.health_signals()`، `app.heartbeat_service_build()`، `app.is_operator()`، `app.jwt_aal()`، `app.link_provider_account()`، `app.outbox_before_write()`، `app.requeue_task()`، `app.worker_context()`، `app.worker_customer_id()`. لكل منها في الجرد ما تقرؤه وتكتبه ولماذا تحتاج صلاحيات المالك ومن ينفّذها والاختبار الذي يغطيها.
 <!-- /gen:force -->
 
 كل دالة definer تثبّت search_path، وصلاحية EXECUTE مسحوبة من PUBLIC على كل دوال المخطط app (الترحيل 0006) مع منح صريح لكل دور. ومخطط app لا يُكشف في PostgREST. الاستثناء لا يكون ثغرة إلا إن اتصل التطبيق بصفة مالك الجداول؛ لذلك تُطبَّق الترحيلات في CI بدور مالك عادي (1.8). [ت]
@@ -426,7 +428,7 @@ create policy kb_facts_worker_rw on app.kb_facts for all to hermes_worker
 56. `posts (0023): the owner drafts only for an active linked account of their own business; Instagram needs an image;`
 57. `email (0025): an inbound address has one spelling, routes a signed event to its business like a phone number id,`
 58. `escalations by email (0026): a member opts in to exactly the address of their own session, for their own business;`
-59. `build fence (0027): one row, written and read by the worker role only; an owner neither sees nor moves it`
+59. `build authority (0031): worker reads and heartbeats only; business owner cannot inspect authority`
 60. `linking a TikTok account (0028): an owner of the business itself, from the session; one business per account; the`
 61. `a relink respects the operator (0029): no re-activating a suspended account, no linking for an inactive business`
 62. `the raw copy of an inbound message is wiped after 30 days with the inquiry's text (0030), by a role that cannot`
@@ -984,8 +986,8 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | --- | --- | --- |
 | المخططات | العقود والفهرس وحالة التشغيل وسجل النداءات والسياسات | 34 |
 | المنطق | قواعد 6.2، وسياسة الشكاوى، وسياسة القبول الواحدة، ومعجم الإخفاقات | 136 |
-| SQL | الحالة النهائية بعد كل الترحيلات: أمن الصف وFORCE والسياسات والمنح والدوال، والحراسات | 272 |
-| **المجموع** | فاشل: 0 | **442** |
+| SQL | الحالة النهائية بعد كل الترحيلات: أمن الصف وFORCE والسياسات والمنح والدوال، والحراسات | 276 |
+| **المجموع** | فاشل: 0 | **446** |
 <!-- /gen:validator -->
 
 طبقة SQL منذ 1.8 تقرأ الحالة النهائية بعد تطبيق كل الترحيلات بالترتيب (tools/sql_state.py): السياسة التي أسقطها ترحيل لاحق غير موجودة، والسحب على مستوى الجدول يزيل منح الأعمدة، و«create or replace» يستبدل. في 1.7 كانت تفحص نص الترحيلات مجتمعة، فنجح فحص كان يشترط نص سياسة حذفها 0009.
@@ -1013,10 +1015,11 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_run_evals_exit | حارس المحتوى يوقف CI دائمًا؛ الشكاوى تقرير إلا مع --gate standing-send | 3 |
 | test_safe_fetch | حارس SSRF: البيانات الوصفية والشبكات الخاصة وIPv6 الحامل لـ IPv4 وإعادة التوجيه | 7 |
 | test_service_boundaries | مسار واحد لكل ضمان: الزاحف وحده يفتح اتصالًا، لا إدراج HTML خام، لا حلقة إعادة في الموزّع | 5 |
-| test_service_build_fence | سياج البناء: لا مطالبة بمهمة من بناء أقدم ما دام الأحدث حيًا، والاستئناف إن توقف نبضه | 3 |
+| test_service_build_authority | تفعيل إصدار معتمد وجيل متزايد؛ حجز ذري يرفض العامل القديم | 4 |
+| test_service_build_identity | رفض هوية إصدار أو جيل مفقود أو غير صالح | 2 |
 | test_service_competitor | فحص المنافسين اليومي: المستحقّون، والحالات الثلاث (حقائق، بلا بيانات منظمة، محجوب)، والفرق المحسوب | 10 |
 | test_service_crawler | الزاحف: العنوان المثبّت، إعادة الحل لكل قفزة، الوكيل الوسيط من البيئة، robots وصفحات الدخول والحجم | 15 |
-| test_service_dispatcher | الموزّع: الغامض لا يُعاد، قبل الإرسال يُحرَّر، الرفض نهائي، مطابقة رموز الآلة للترحيل 0010 | 14 |
+| test_service_dispatcher | الموزّع: الغامض لا يُعاد، قبل الإرسال يُحرَّر، الرفض نهائي، مطابقة رموز الآلة للترحيل 0010 | 19 |
 | test_service_email | البريد عبر Postmark: المصادقة قبل القراءة، تجاهل الردود الآلية، والرد بالموافقة على السلسلة نفسها | 11 |
 | test_service_graph_live | مرسل Graph الحقيقي: مغلق دون إعداد صريح، المضيف الوحيد graph.facebook.com عبر المسار المثبّت، والنتيجة الملتبسة لا تُعاد آليًا | 17 |
 | test_service_jwks | مفاتيح توقيع Supabase: ES256 وRS256 بخوارزمية المفتاح نفسها، ولا تبديل خوارزمية، وإعادة جلب محدودة | 5 |
@@ -1040,7 +1043,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_supply_chain | غياب CODEOWNERS فشل، pull_request_target فشل، والتعليقات لا تُعدّ إجراءات | 4 |
 | test_triage | المرحلة الثانية تضيف ولا تلغي، العتبة، استفسارات المالك | 5 |
 | test_validator_negative | اختبارات طفرات: يُدخل كل عيب وُجد في المراجعات ويتأكد أن المتحقق يرفضه | 13 |
-| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **355** |
+| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **363** |
 <!-- /gen:tests -->
 
 ### 15.3 العيوب التي تمنعها اختبارات الطفرات
@@ -1316,7 +1319,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | P15 | البريد يُصادَق قبل قراءته ويُخزَّن لعنوان نشط وحده، والبريد الآلي لا يُخزَّن ولا يُجاب، والرد بموافقة المالك من مرسل مُعَدّ وفي سلسلة العميل نفسها | متحقق هنا + ينتظر CI |
 | P16 | رموز Supabase غير المتماثلة تُقبل بالمفتاح العام المنشور وبخوارزميته وحدها، ولا يُقبل رمز لم يُتحقق من توقيعه | متحقق هنا |
 | P17 | تنبيه المالك بالبريد يصل إلى عنوان جلسته الموثّق وحده، بسبب التنبيه ورابط البوابة دون نص رسالة العميل | متحقق هنا + ينتظر CI |
-| P18 | أثناء النشر لا يأخذ عامل البناء السابق مهمة ما دام البناء الأحدث حيًا، ويواصل إن توقف نبض الأحدث | متحقق هنا + ينتظر CI |
+| P18 | حجز المهام مرتبط بتفعيل إداري وجيل متزايد؛ لا تعيد نبضة عامل قديم سلطته ولا انتهاء النبض | متحقق هنا + ينتظر CI |
 | P19 | الرد الذي لم يصل أو شُكي منه يُبلَّغ به المالك، وأحداث التسليم تُصادَق قبل قراءتها ولا يُخزَّن منها إلا ما يخص ردودنا | متحقق هنا + ينتظر CI |
 | P20 | حساب تيك توك يُربط بموافقة مالك المنشأة نفسها، ورموزه مختومة بمفتاح خارج القاعدة ومربوطة بصفها، وتتجدد قبل انتهائها والفشل نظيف قبل الإرسال | متحقق هنا + ينتظر CI |
 | P21 | النسخة الخام لكل رسالة واردة تُمحى بعد 30 يومًا مع نص الاستفسار، بدور لا يقرؤها، ويُسجَّل التشغيل | في CI فقط |
@@ -2252,21 +2255,17 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 
 الادعاء P19.
 
-### 28.29 سياج البناء: عامل البناء السابق لا يأخذ مهامًا أثناء النشر
+### 28.29 سلطة الإصدار وحجز المهام الذري
 
-**ما وُجد على staging (0026):** Railway يُبقي النشر السابق يعمل حتى يصح الجديد ويُصرَّف، نحو 80 ثانية. في هذه المدة طالب العامل السابق بمهمة وعالجها بالكود السابق، فخرج تنبيه بلا قائمة العناوين الجديدة. كل نوع مهمة مؤجَّر ومتكرر الأثر بأمان، فلم يحدث أثر مزدوج، لكن السلوك الجديد يجب ألا يلغيه البناء الذي يستبدله.
+الترحيل 0031 يستبدل سلوك 0027: تفعيل بصلاحية مالك النشر لهوية التزام كاملة
+وجيل متزايد. العامل يرسل نبضًا فقط؛ لا يغير الإصدار النشط ولا يستعيد السلطة
+بانتهاء نبض عامل آخر. التراجع إلى شيفرة سابقة يحتاج تفعيلًا بجيل جديد.
 
-**الحل (0027):**
-- **التسجيل:** عند الإقلاع يسجّل كل مثيل التزامه (`RAILWAY_GIT_COMMIT_SHA`) بناءً حيًا، ويجدد نبضه كل 20 ثانية.
-- **المطالبة بمهمة:** العامل يطالب بمهمة ما دام البناء الحي بناءه هو، أو ما دام البناء الحي لم يُرَ منذ 60 ثانية. فالبناء الجديد الذي انهار لا يوقف الطابور أبدًا، ويواصل السابق.
-- **النبض:** نبض البناء السابق لا يستعيد السياج.
-- **الصلاحيات:** صف واحد يكتبه ويقرؤه دور العامل وحده، بلا بيانات عملاء، ومستثنى صراحة في فحص الفهرس (الحالة 46).
-
-الاختبارات:
-- **الوحدات:** في tests/test_service_build_fence.py: التوقف، والاستئناف عند انقطاع النبض، ولا سياج بلا بناء.
-- **الحالة 59.**
-
-الادعاء P18.
+حجز المهمة يقفل صف السلطة ويتحقق من الهوية والجيل داخل المعاملة نفسها.
+التوقيع القديم محجوب عن العامل؛ تستمر العقود السابقة بحدودها القائمة.
+اختبارات الوحدة في test_service_build_authority.py، واختبارات PostgreSQL
+في build_fence.sql وconcurrency_build_fence.py. نجاح المحاكاة وحده لا يثبت السباق.
+يلزم إعداد HERMES_BUILD_GENERATION وتفعيل إداري منسق قبل تشغيل الإصدار.
 
 ### 28.30 ربط حساب تيك توك بموافقة المالك، ورموزه مختومة وتتجدد
 
@@ -2383,7 +2382,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 ## الملحق أ · رموز الأخطاء
 
 <!-- gen:errors -->
-مولّد من docs/error_codes.yaml (99 رمزًا)، المصدر نفسه لقاموس باب البيانات.
+مولّد من docs/error_codes.yaml (102 رمزًا)، المصدر نفسه لقاموس باب البيانات.
 
 | الرمز | المصدر | منذ | المعنى |
 | --- | --- | --- | --- |
@@ -2486,6 +2485,9 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | ROBOTS_DISALLOW | crawler | 1.8 | robots.txt يمنع الجلب |
 | ROBOTS_UNREADABLE | crawler | 1.8 | تعذّرت قراءة robots.txt (شبكة أو خطأ خادم)؛ لا جلب، ويُعاد لاحقًا |
 | LOGIN_PAGE | crawler | 1.8 | صفحة دخول: لا تُجلب |
+| INVALID_BUILD_IDENTITY | 0031 | 1.8 | هوية الإصدار أو الجيل غير صالح |
+| BUILD_GENERATION_NOT_INCREASING | 0031 | 1.8 | التفعيل يتطلب جيلا أكبر من السابق |
+| OUTBOX_RETRY_ALLOWANCE_PROTECTED | 0032 | 1.8 | سماح إعادة المحاولة محمي بقرار المشغل |
 <!-- /gen:errors -->
 
 ## الملحق ب · مسرد المصطلحات

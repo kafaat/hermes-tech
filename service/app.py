@@ -200,6 +200,17 @@ def tiktok_link_from_env(env):
     return None, box
 
 
+def build_identity(env):
+    commit = env.get("RAILWAY_GIT_COMMIT_SHA", "")
+    generation = env.get("HERMES_BUILD_GENERATION", "")
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", commit) or not re.fullmatch(r"[1-9][0-9]{0,18}", generation):
+        raise ValueError("Full commit and positive HERMES_BUILD_GENERATION are required")
+    value = int(generation)
+    if value > 9223372036854775807:
+        raise ValueError("HERMES_BUILD_GENERATION exceeds PostgreSQL bigint")
+    return commit.lower(), value
+
+
 def main():
     handler = logging.StreamHandler(sys.stdout)              # added before install(): the filter goes on the handler,
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))  # so every logger is redacted
@@ -208,6 +219,7 @@ def main():
     redact.install()
     url = os.environ["DATABASE_URL"]
     try:
+        build, generation = build_identity(os.environ)
         tiktok, box = tiktok_link_from_env(os.environ)
         tiktok_tokens = TikTokTokens(Database(url, "hermes_worker"), box, tiktok) if tiktok is not None else None
         adapters = adapters_for(os.environ, tiktok_tokens)
@@ -219,7 +231,7 @@ def main():
     ingest = Ingest(Database(url, "hermes_ingest"))
     webhook = Handler(secrets, ingest)
     worker = Worker(Database(url, "hermes_worker"), worker_name(), adapters,
-                    approval_poll_seconds=int(os.environ.get("HERMES_APPROVAL_POLL_SECONDS", "60")), build=COMMIT.lower() if re.fullmatch(r"[0-9a-fA-F]{0,40}", COMMIT) else "")
+                    approval_poll_seconds=int(os.environ.get("HERMES_APPROVAL_POLL_SECONDS", "60")), build=build, build_generation=generation)
     stop = threading.Event()
     worker_thread = threading.Thread(target=worker.loop, kwargs={"stop": stop}, name="worker", daemon=True)
     port = int(os.environ.get("PORT", "8080"))
@@ -246,8 +258,8 @@ def main():
         os.environ.get("HERMES_MONITOR_TOKEN", ""), portal, FormHandler(ingest), email,
         EmailEventHandler(email_secrets, ingest) if email_secrets else None))
 
-    # the port is bound: only now does this build fence the previous one (a build that fails to start never fences)
-    worker.register_build()                                    # 0027, spec 28.29
+    # Report liveness only; privileged activation is a separate deployment operation.
+    worker.register_build()                                    # 0031, spec 28.29
     threading.Thread(target=worker.beat_forever, args=(stop,), name="build-beat", daemon=True).start()
     worker_thread.start()
 

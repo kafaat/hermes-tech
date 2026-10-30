@@ -43,9 +43,9 @@ pip install --require-hashes -r requirements-service.txt      # مشغّل Postg
 DATABASE_URL=... python db/tests/e2e_pilot.py                 # يشغّل service.app ويقود المسار كاملًا عبر HTTP (28 فحصًا)
 
 **بوابة المالك** (`/portal` على hermes-app، المواصفة 28.8): الردود التي تنتظر الموافقة، والرسائل الأخيرة، والمعلومات المعتمدة. على staging: افتح ‎/portal‎ وادخل برمز `HERMES_STAGING_LOGIN_CODE` من متغيرات hermes-app في Railway. في الإنتاج يدخل المالك عبر Supabase Auth. **فحص المنافسين** (المواصفة 28.11): مهمة يومية `python -m service.jobs competitor_check` بدور hermes_jobs؛ اللقطات في قسم «منافسوك» في البوابة. **لوحة المشغّل** (‎/portal/ops‎، المواصفة 28.9): تحسم صفوف الإرسال الغامض؛ على staging زر «دخول كمشغّل» بالرمز نفسه.
-DATABASE_URL=... HERMES_WEBHOOK_SECRETS=... HERMES_GRAPH=simulate python -m service.app   # نقطة webhook + العامل
+RAILWAY_GIT_COMMIT_SHA=<full-40-hex> HERMES_BUILD_GENERATION=<positive-generation> DATABASE_URL=... HERMES_WEBHOOK_SECRETS=... HERMES_GRAPH=simulate python -m service.app   # نقطة webhook + العامل
 ```
-قبلها تُطبَّق الترحيلات (db/tests/run_isolation.sh أو ops/railway/migrate.sh). واجهة Graph محاكاة؛ الخدمة ترفض أي وضع آخر.
+قبلها تُطبَّق الترحيلات (db/tests/run_isolation.sh أو ops/railway/migrate.sh). الوضع `simulate` محاكاة؛ الوضع `live` مدعوم مع إعداد المزوّد الصريح. اختبارات النقل الوهمية لا تثبت إرسالًا حيًا.
 staging على Railway: الخدمة hermes-app، والمهمة db-migrate (الترحيلات ثم العزل ثم المسار الكامل) مع كل دفع إلى main.
 `validate.py` يستخدم `jsonschema` إن وُجد، وإلا مدققًا مدمجًا يغطي كل الكلمات المستخدمة في المخططات.
 الترحيلات لا تُطبَّق يدويًا بدور superuser: `db/tests/run_isolation.sh` يطبّقها بدور `hermes_owner` كما يجب في الإنتاج.
@@ -59,3 +59,13 @@ staging على Railway: الخدمة hermes-app، والمهمة db-migrate (ا�
 6. قناة واتساب رسمية فقط (Cloud API)؛ Hermes Agent أداة داخلية للمؤسس فقط (docs/adr).
 7. لا مكوّن خارجي يدخل قبل تسجيل ترخيصه في docs/licensing_matrix.md.
 8. أي جلب من الخادم عبر `service/crawler.py` وحارس `tools/safe_fetch.py` وحدهما؛ أي نص مالك في صفحة عبر `service/render.py` وحده.
+
+### نشر إصلاح سياج البناء (0031)
+
+يلزم تنسيق النشر: تطبيق الترحيل يمنع توقيع حجز العامل القديم. اضبط هوية
+الالتزام كاملة و`HERMES_BUILD_GENERATION`، ثم نفّذ `app.activate_service_build(commit, generation)`
+بدور مالك النشر المعتمد. لا تمنح هذه الدالة للعامل. كل تفعيل، بما فيه التراجع
+إلى شيفرة سابقة، يحتاج جيلا أكبر؛ انتهاء النبض لا يعيد إصدارًا قديمًا تلقائيًا.
+لا تُفعّل هوية قبل تجهيز عاملها. هذا التغيير لا يعدّل إعدادات Railway أو
+يطبق الترحيلات على قاعدة حية تلقائيًا من أداة الإصلاح. راجع خطة النشر قبل دمج
+إصلاح التشغيل إذا كان main متصلًا بنشر تلقائي.

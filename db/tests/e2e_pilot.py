@@ -167,7 +167,11 @@ def task_status(ext):
 def start_app():
     s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
     secret = uuid.uuid4().hex
+    generation = q("select coalesce(max(generation), 0) + 1 from app.service_build")[0][0]
+    commit = "e" * 40
+    q("select app.activate_service_build(%s, %s)", (commit, generation))
     env = {**os.environ, "HERMES_WEBHOOK_SECRETS": secret, "HERMES_GRAPH": "simulate", "PORT": str(port),
+           "RAILWAY_GIT_COMMIT_SHA": commit, "HERMES_BUILD_GENERATION": str(generation),
            "HERMES_MONITOR_TOKEN": MONITOR_TOKEN, "HERMES_JWT_SECRET": JWT_SECRET,
            "HERMES_APPROVAL_POLL_SECONDS": "1", "HERMES_VERIFY_TOKEN": "e2e", "HERMES_EMAIL_INBOUND_SECRETS": EMAIL_SECRET}
     proc = subprocess.Popen([sys.executable, "-m", "service.app"], cwd=ROOT, env=env)

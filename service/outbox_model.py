@@ -1,8 +1,8 @@
-"""Executable mirror of the outbox state machine in 0010 (app.outbox_before_write + dispatch functions).
+"""Executable mirror of the outbox state machine in 0010 + 0032 (app.outbox_before_write + dispatch functions).
 
 Used by the dispatcher tests as the fake database, so the Python tests exercise the SAME transition rules
 the trigger enforces. tests/test_service_dispatcher.py checks that every error code raised here also exists
-in 0010; the SQL itself is exercised by db/tests (cases 40, 41) and db/tests/concurrency_outbox.sh.
+in the migrations; the SQL itself is exercised by db/tests (cases 40, 41) and db/tests/concurrency_outbox.sh.
 """
 from __future__ import annotations
 import itertools, uuid
@@ -24,6 +24,7 @@ class Row:
     sending_until: float | None = None
     sending_token: str | None = None
     attempts: int = 0
+    operator_attempt_limit: int = 0
     dispatched_at: float | None = None
     provider_message_id: str | None = None
     failed_at: float | None = None
@@ -95,6 +96,13 @@ class OutboxModel:
                 raise DbError("OUTBOX_AMBIGUOUS_NEEDS_HUMAN")
         if n.dispatched_at is not None and n.failed_at is not None:
             raise DbError("outbox_one_outcome")
+        if n.operator_attempt_limit != old.operator_attempt_limit:
+            raise DbError("OUTBOX_RETRY_ALLOWANCE_PROTECTED")
+        if (old.needs_human_check and not n.needs_human_check and n.resolution == "resend"
+                and operator and old.dispatched_at is None and old.failed_at is None
+                and old.attempts >= old.operator_attempt_limit
+                and (old.last_error == "MAX_ATTEMPTS" or old.attempts >= 5)):
+            n.operator_attempt_limit = old.attempts + 1
         self.rows[r.id] = n
 
     # --------------------------------------------------------- the functions (DbPort)
@@ -108,7 +116,7 @@ class OutboxModel:
             if o.topic not in self.idempotent_topics:
                 self._update(o, needs_human_check=True, last_error="AMBIGUOUS_LEASE_EXPIRED")
                 return None
-        if o.attempts >= self.max_attempts:
+        if o.attempts >= max(min(self.max_attempts, 5), o.operator_attempt_limit):
             self._update(o, needs_human_check=True, last_error="MAX_ATTEMPTS")
             return None
         tok = str(uuid.uuid4())

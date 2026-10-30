@@ -21,11 +21,15 @@ begin
   -- and reason, and clears the old claim. Never grant an automatic retry of an
   -- unresolved/expired send. A fresh operator decision is still required.
   if old.needs_human_check and not new.needs_human_check
-     and new.resolution = 'resend' and app.is_operator()
+     and new.resolution = 'resend'
      and old.dispatched_at is null and old.failed_at is null
      and old.attempts >= old.operator_attempt_limit
      and (old.last_error = 'MAX_ATTEMPTS' or old.attempts >= 5) then
-    new.operator_attempt_limit := old.attempts + 1;
+    -- Keep the restricted authority helper out of ordinary worker updates.
+    -- SQL boolean expressions may reorder evaluation; PL/pgSQL IF may not.
+    if app.is_operator() then
+      new.operator_attempt_limit := old.attempts + 1;
+    end if;
   end if;
   return new;
 end $$;

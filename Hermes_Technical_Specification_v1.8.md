@@ -40,13 +40,13 @@
 | مخططات JSON والعقود والفهرس والسياسات | 34 فحصًا ناجحًا من 34 | tools/validate.py · الطبقة 1 |
 | قواعد الاتساق المنطقي والسياسة الإحصائية ومعجم الإخفاقات | 136 فحصًا ناجحًا من 136 | tools/validate.py · الطبقة 2 |
 | الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 276 فحصًا ناجحًا من 276 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
-| الاختبارات الآلية | 363 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
+| الاختبارات الآلية | 365 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
 | حالات SQL على Postgres فعلي | 62 حالة و73 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
-المجموع: 446/446 فحصًا ناجحًا في أداة التحقق، و363 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
+المجموع: 446/446 فحصًا ناجحًا في أداة التحقق، و365 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
 
 ### وسوم المصدر
@@ -167,7 +167,7 @@ hermes-tech/
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
 ├── db/tests/             build_fence.sql · concurrency_build_fence.py · concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · outbox_operator_retry.sql · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
-├── service/              __init__.py · app.py · auth.py · competitor.py · crawler.py · dispatcher.py · email_inbound.py · health.py · jobs.py · jwks.py · media_policy.py · outbox_model.py · pg.py · portal.py · qr.py · redact.py · render.py · site_form.py · site_seo.py · structured.py · supabase_auth.py · telemetry.py · tiktok_oauth.py · token_box.py · webhook.py · worker.py
+├── service/              __init__.py · app.py · auth.py · build_identity.py · competitor.py · crawler.py · dispatcher.py · email_inbound.py · health.py · jobs.py · jwks.py · media_policy.py · outbox_model.py · pg.py · portal.py · qr.py · redact.py · render.py · site_form.py · site_seo.py · structured.py · supabase_auth.py · telemetry.py · tiktok_oauth.py · token_box.py · webhook.py · worker.py
 ├── tests/                46 modules (inventory in §15.2)
 ├── evals/                complaints_seed.jsonl · content_guard_golden.jsonl · model_admission.json
 ├── docs/                 19 documents · adr/ (11 decisions)
@@ -1016,7 +1016,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_safe_fetch | حارس SSRF: البيانات الوصفية والشبكات الخاصة وIPv6 الحامل لـ IPv4 وإعادة التوجيه | 7 |
 | test_service_boundaries | مسار واحد لكل ضمان: الزاحف وحده يفتح اتصالًا، لا إدراج HTML خام، لا حلقة إعادة في الموزّع | 5 |
 | test_service_build_authority | تفعيل إصدار معتمد وجيل متزايد؛ حجز ذري يرفض العامل القديم | 4 |
-| test_service_build_identity | رفض هوية إصدار أو جيل مفقود أو غير صالح | 2 |
+| test_service_build_identity | رفض هوية إصدار أو جيل مفقود أو غير صالح | 4 |
 | test_service_competitor | فحص المنافسين اليومي: المستحقّون، والحالات الثلاث (حقائق، بلا بيانات منظمة، محجوب)، والفرق المحسوب | 10 |
 | test_service_crawler | الزاحف: العنوان المثبّت، إعادة الحل لكل قفزة، الوكيل الوسيط من البيئة، robots وصفحات الدخول والحجم | 15 |
 | test_service_dispatcher | الموزّع: الغامض لا يُعاد، قبل الإرسال يُحرَّر، الرفض نهائي، مطابقة رموز الآلة للترحيل 0010 | 19 |
@@ -1043,7 +1043,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_supply_chain | غياب CODEOWNERS فشل، pull_request_target فشل، والتعليقات لا تُعدّ إجراءات | 4 |
 | test_triage | المرحلة الثانية تضيف ولا تلغي، العتبة، استفسارات المالك | 5 |
 | test_validator_negative | اختبارات طفرات: يُدخل كل عيب وُجد في المراجعات ويتأكد أن المتحقق يرفضه | 13 |
-| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **363** |
+| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **365** |
 <!-- /gen:tests -->
 
 ### 15.3 العيوب التي تمنعها اختبارات الطفرات

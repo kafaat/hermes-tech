@@ -33,6 +33,7 @@ from urllib.parse import parse_qsl, urlsplit
 
 from service import redact
 from service.health import SIGNALS, assess, authorized
+from service.build_identity import build_identity
 from service.pg import Database, Ingest, PortalDb
 from service.portal import Portal
 from service.supabase_auth import from_env as supabase_from_env
@@ -198,17 +199,6 @@ def tiktok_link_from_env(env):
     if env.get("HERMES_GRAPH") == "simulate":
         return SimulatedTikTokOAuth(), box or TokenBox([os.urandom(32)])
     return None, box
-
-
-def build_identity(env):
-    commit = env.get("RAILWAY_GIT_COMMIT_SHA", "")
-    generation = env.get("HERMES_BUILD_GENERATION", "")
-    if not re.fullmatch(r"[0-9a-fA-F]{40}", commit) or not re.fullmatch(r"[1-9][0-9]{0,18}", generation):
-        raise ValueError("Full commit and positive HERMES_BUILD_GENERATION are required")
-    value = int(generation)
-    if value > 9223372036854775807:
-        raise ValueError("HERMES_BUILD_GENERATION exceeds PostgreSQL bigint")
-    return commit.lower(), value
 
 
 def main():

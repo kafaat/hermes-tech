@@ -31,7 +31,7 @@ log = logging.getLogger("hermes.worker")
 AGENT = "agent_triage"
 KINDS = ("inbound.event", "outbox.resend", "content.propose")      # the task kinds this worker handles; claim_task leaves any other kind to a
                                                 # worker that knows it (0016: an older instance took a new kind mid-deploy)
-BUILD_STALE_SECONDS, BUILD_BEAT_SECONDS = 60, 20   # build fence (0027): a live build not seen for 60 s no longer fences
+BUILD_STALE_SECONDS, BUILD_BEAT_SECONDS = 60, 20   # stale heartbeat is diagnostic; never reactivates an old build
 POST_DECISION_DAYS = 7          # a post proposal waits a week for the owner, then lapses
 REPLY_WINDOW_HOURS = 19          # a reply:send proposal must be decidable inside the 20 h window (approvals_reply_window)
 
@@ -195,8 +195,9 @@ def accepted(ref: str, delay: float, outbox_id=None, timeout: float | None = Non
 
 class Worker:
     def __init__(self, db, name: str, adapters: dict, lease_seconds: int = 120, approval_poll_seconds: int = 60,
-                 build: str | None = None):
+                 build: str | None = None, build_generation: int | None = None):
         self.db, self.name, self.adapters, self.build = db, name, adapters, build
+        self.build_generation = build_generation
         self._beat, self._fenced = 0.0, False
         self.lease, self.poll = lease_seconds, approval_poll_seconds
         self.matcher, self.guard = Matcher(), ContentGuard()
@@ -206,51 +207,44 @@ class Worker:
         from service.pg import OutboxPort                # psycopg: imported where the outbox is used, not at construction
         return OutboxPort(db, bind)
 
-    # ------------------------------------------------------------ build fence (0027, spec 28.29)
+    # ------------------------------------------------------------ build fence (0031)
     def register_build(self):
-        """This build is now the live one: a worker of any other build stops claiming while this one is seen."""
-        with self.db.tx() as cur:
-            cur.execute("insert into app.service_build (id, commit, started_at, seen_at) values (1, %s, now(), now())"
-                        " on conflict (id) do update set commit = excluded.commit, started_at = now(), seen_at = now()", (self.build,))
-        self._beat = time.monotonic()
+        """Register liveness only. A deployment authority activates generations separately."""
+        self.heartbeat(force=True)
 
     def heartbeat(self, force: bool = False):
-        if self.build is None or (not force and time.monotonic() - self._beat < BUILD_BEAT_SECONDS):
+        if self.build is None or self.build_generation is None or (not force and time.monotonic() - self._beat < BUILD_BEAT_SECONDS):
             return
-        with self.db.tx() as cur:                       # only while this build is the live one; never takes it back
-            cur.execute("update app.service_build set seen_at = now() where id = 1 and commit = %s", (self.build,))
+        with self.db.tx() as cur:
+            cur.execute("select app.heartbeat_service_build(%s, %s)", (self.build, self.build_generation))
         self._beat = time.monotonic()
 
     def beat_forever(self, stop):
-        """The heartbeat on its own thread: a task longer than BUILD_STALE_SECONDS must not let the fence lapse."""
+        """Liveness reporting does not grant authority or allow stale-build fallback."""
         while not stop.is_set():
             try:
                 self.heartbeat(force=True)
-            except Exception as exc:                    # noqa: BLE001 - a missed beat only lets the fence lapse
+            except Exception as exc:                    # noqa: BLE001
                 log.warning("build fence: beat failed: %s", type(exc).__name__)
             stop.wait(BUILD_BEAT_SECONDS)
 
     def fenced(self) -> bool:
-        """True while another build is live and alive: a deploy replaced this one."""
-        if self.build is None:
-            return False
+        """Diagnostic only; claim authority is checked atomically in PostgreSQL."""
+        if self.build is None or self.build_generation is None:
+            return True
         with self.db.tx() as cur:
-            cur.execute("select commit <> %s and seen_at > now() - make_interval(secs => %s) from app.service_build where id = 1",
-                        (self.build, BUILD_STALE_SECONDS))
+            cur.execute("select exists(select 1 from app.service_build where id = 1 and commit = %s and generation = %s)",
+                        (self.build, self.build_generation))
             r = cur.fetchone()
-        fenced = bool(r and r[0])
-        if fenced != self._fenced:
-            log.info("build fence: %s", "a newer build is live, not claiming" if fenced else "claiming")
-            self._fenced = fenced
-        return fenced
+        return not bool(r and r[0])
 
     # ------------------------------------------------------------ lease plumbing
     def claim(self) -> Task | None:
-        if self.fenced():
+        if self.build is None or self.build_generation is None:
             return None
         with self.db.tx() as cur:
-            cur.execute("select task_id, token, fencing, customer_id from app.claim_task(%s, %s, %s, 3, %s)",
-                        (AGENT, self.name, self.lease, list(KINDS)))
+            cur.execute("select task_id, token, fencing, customer_id from app.claim_task(%s, %s, %s, 3, %s, %s, %s)",
+                        (AGENT, self.name, self.lease, list(KINDS), self.build, self.build_generation))
             r = cur.fetchone()
         return Task(str(r[0]), str(r[1]), r[2], str(r[3])) if r else None
 

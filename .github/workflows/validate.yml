@@ -41,6 +41,8 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0 (node24)
         with: { python-version: "3.12" }
       - run: pip install -r requirements-service.txt   # the Postgres driver, hashed lock
+      - run: python db/tests/concurrency_build_fence.py
+        env: { DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres" }
       # P1 end to end: service.app over HTTP (webhook -> routed task -> worker -> owner approval -> outbox -> dispatch -> receipt)
       - run: python db/tests/e2e_pilot.py
         env: { DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres" }

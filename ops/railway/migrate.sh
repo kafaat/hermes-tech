@@ -40,6 +40,10 @@ for f in db/migrations/*.sql; do
     echo "== $name already applied"; continue
   fi
   [ "$(held)" = 1 ] || { echo "migrations: the lock was lost before $name; stopping"; exit 1; }   # never apply unlocked
+  if [ "$name" = "0031_atomic_build_authority.sql" ]; then
+    # Stop automatic predeploy BEFORE revoking the old worker claim contract.
+    python3 -m service.build_identity
+  fi
   echo "== $name (as hermes_owner)"
   PGOPTIONS="-c role=hermes_owner" db -f "$f"      # db() appends client_min_messages
   db -c "insert into public.schema_migrations (name) values ('$name')"

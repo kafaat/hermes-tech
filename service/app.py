@@ -33,6 +33,7 @@ from urllib.parse import parse_qsl, urlsplit
 
 from service import redact
 from service.health import SIGNALS, assess, authorized
+from service.build_identity import build_identity
 from service.pg import Database, Ingest, PortalDb
 from service.portal import Portal
 from service.supabase_auth import from_env as supabase_from_env
@@ -208,6 +209,7 @@ def main():
     redact.install()
     url = os.environ["DATABASE_URL"]
     try:
+        build, generation = build_identity(os.environ)
         tiktok, box = tiktok_link_from_env(os.environ)
         tiktok_tokens = TikTokTokens(Database(url, "hermes_worker"), box, tiktok) if tiktok is not None else None
         adapters = adapters_for(os.environ, tiktok_tokens)
@@ -219,7 +221,7 @@ def main():
     ingest = Ingest(Database(url, "hermes_ingest"))
     webhook = Handler(secrets, ingest)
     worker = Worker(Database(url, "hermes_worker"), worker_name(), adapters,
-                    approval_poll_seconds=int(os.environ.get("HERMES_APPROVAL_POLL_SECONDS", "60")), build=COMMIT.lower() if re.fullmatch(r"[0-9a-fA-F]{0,40}", COMMIT) else "")
+                    approval_poll_seconds=int(os.environ.get("HERMES_APPROVAL_POLL_SECONDS", "60")), build=build, build_generation=generation)
     stop = threading.Event()
     worker_thread = threading.Thread(target=worker.loop, kwargs={"stop": stop}, name="worker", daemon=True)
     port = int(os.environ.get("PORT", "8080"))
@@ -246,8 +248,8 @@ def main():
         os.environ.get("HERMES_MONITOR_TOKEN", ""), portal, FormHandler(ingest), email,
         EmailEventHandler(email_secrets, ingest) if email_secrets else None))
 
-    # the port is bound: only now does this build fence the previous one (a build that fails to start never fences)
-    worker.register_build()                                    # 0027, spec 28.29
+    # Report liveness only; privileged activation is a separate deployment operation.
+    worker.register_build()                                    # 0031, spec 28.29
     threading.Thread(target=worker.beat_forever, args=(stop,), name="build-beat", daemon=True).start()
     worker_thread.start()
 

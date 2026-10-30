@@ -2,6 +2,7 @@
 --   psql -v ON_ERROR_STOP=1 -f db/tests/rls_isolation_test.sql
 -- Every block must end with NOTICE 'PASS …'. Any EXCEPTION is a failure.
 begin;
+select app.activate_service_build(repeat('a',40), 1);
 insert into app.customers (id, public_ref, business_name, sector, city, currency_zone, status) values
   ('00000000-0000-0000-0000-00000000000a', 'cust_aaaa', 'مطعم أ', 'restaurant', 'city_1', 'zone_a', 'active'),
   ('00000000-0000-0000-0000-00000000000b', 'cust_bbbb', 'ورشة ب', 'home_services', 'city_1', 'zone_a', 'active');
@@ -125,7 +126,7 @@ insert into app.tasks (public_ref, customer_id, agent_id, kind, idempotency_key,
 select set_config('app.task_id', '', true), set_config('app.task_token', '', true), set_config('app.customer_id', '', true);
 set local role hermes_worker;
 do $$ declare r record; c uuid; begin
-  select * into r from app.claim_task('agent_content', 'w1', 300);
+  select * into r from app.claim_task('agent_content', 'w1', 300, 3, NULL, repeat('a',40), 1);
   if r.customer_id is distinct from '00000000-0000-0000-0000-00000000000a' then raise exception 'FAIL wrong first task'; end if;
   c := app.bind_task(r.task_id, r.token);
   if c is distinct from '00000000-0000-0000-0000-00000000000a' or app.worker_customer_id() is distinct from c then
@@ -370,7 +371,7 @@ insert into app.tasks (public_ref, customer_id, agent_id, kind, idempotency_key)
 select set_config('app.task_id', '', true), set_config('app.task_token', '', true), set_config('app.customer_id', '', true);
 set local role hermes_worker;
 do $$ declare r1 record; r2 record; begin
-  select * into r1 from app.claim_task('agent_competitor', 'w1', 60);
+  select * into r1 from app.claim_task('agent_competitor', 'w1', 60, 3, NULL, repeat('a',40), 1);
   if not app.extend_task_lease(r1.task_id, r1.token, 60) then raise exception 'FAIL heartbeat'; end if;
   perform set_config('test.task', r1.task_id::text, true), set_config('test.tok1', r1.token::text, true), set_config('test.f1', r1.fencing::text, true);
 end $$;
@@ -378,7 +379,7 @@ reset role;
 update app.task_leases set lease_until = now() - interval '1 second' where task_id = current_setting('test.task')::uuid;   -- w1 died
 set local role hermes_worker;
 do $$ declare r2 record; begin
-  select * into r2 from app.claim_task('agent_competitor', 'w2', 60);
+  select * into r2 from app.claim_task('agent_competitor', 'w2', 60, 3, NULL, repeat('a',40), 1);
   if r2.task_id <> current_setting('test.task')::uuid then raise exception 'FAIL expired lease not recovered'; end if;
   if app.complete_task(r2.task_id, current_setting('test.tok1')::uuid, current_setting('test.f1')::bigint, 'succeeded') then
     raise exception 'FAIL stale worker completed the task';
@@ -392,7 +393,7 @@ insert into app.tasks (public_ref, customer_id, agent_id, kind, idempotency_key,
 insert into app.task_leases (task_id, customer_id, agent_id, token, worker, fencing, lease_until)
 select id, customer_id, agent_id, gen_random_uuid(), 'dead', nextval('app.fencing_seq'), now() - interval '1 minute' from app.tasks where public_ref = 't_l2';
 set local role hermes_worker;
-do $$ begin perform * from app.claim_task('agent_competitor', 'w3', 60); end $$;
+do $$ begin perform * from app.claim_task('agent_competitor', 'w3', 60, 3, NULL, repeat('a',40), 1); end $$;
 reset role;
 do $$ begin
   if (select status::text || '/' || error_code from app.tasks where public_ref = 't_l2') <> 'failed/DEAD_LETTER' then
@@ -647,7 +648,7 @@ insert into app.tasks (public_ref, customer_id, agent_id, kind, idempotency_key)
 select set_config('app.task_id', '', true), set_config('app.task_token', '', true);
 set local role hermes_worker;
 do $$ declare r1 record; begin
-  select * into r1 from app.claim_task('agent_site_builder', 'w1', 60);
+  select * into r1 from app.claim_task('agent_site_builder', 'w1', 60, 3, NULL, repeat('a',40), 1);
   perform set_config('test.r_task', r1.task_id::text, true), set_config('test.r_tok', r1.token::text, true),
           set_config('test.r_f', r1.fencing::text, true);
 end $$;
@@ -657,7 +658,7 @@ set local role hermes_worker;
 do $$ declare r2 record; t uuid := current_setting('test.r_task')::uuid; tok1 uuid := current_setting('test.r_tok')::uuid;
               f1 bigint := current_setting('test.r_f')::bigint; begin
   if app.complete_task(t, tok1, f1, 'succeeded') then raise exception 'FAIL expired holder completed before recovery'; end if;
-  select * into r2 from app.claim_task('agent_site_builder', 'w2', 60);
+  select * into r2 from app.claim_task('agent_site_builder', 'w2', 60, 3, NULL, repeat('a',40), 1);
   if r2.task_id is distinct from t then raise exception 'FAIL expired task not recovered'; end if;
   if app.extend_task_lease(t, tok1, 60) then raise exception 'FAIL stale heartbeat accepted'; end if;
   if app.requeue_task(t, tok1, 5) then raise exception 'FAIL stale holder re-queued the task'; end if;
@@ -995,11 +996,11 @@ insert into app.tasks (public_ref, customer_id, agent_id, kind, idempotency_key,
   ('t_k51old', '00000000-0000-0000-0000-00000000000a', 'agent_kindtest', 'inbound.event', 'k51:old', 0);
 set local role hermes_worker;
 do $$ declare r record; begin                     -- the worker cannot read tasks itself (RLS): record, compare below
-  select * into r from app.claim_task('agent_kindtest', 'w51', 60, 3, array['inbound.event']);
+  select * into r from app.claim_task('agent_kindtest', 'w51', 60, 3, array['inbound.event'], repeat('a',40), 1);
   perform set_config('test.k51_first', coalesce(r.task_id::text, ''), true);
-  select * into r from app.claim_task('agent_kindtest', 'w51', 60, 3, array['inbound.event']);
+  select * into r from app.claim_task('agent_kindtest', 'w51', 60, 3, array['inbound.event'], repeat('a',40), 1);
   perform set_config('test.k51_second', coalesce(r.task_id::text, ''), true);
-  select * into r from app.claim_task('agent_kindtest', 'w51', 60);
+  select * into r from app.claim_task('agent_kindtest', 'w51', 60, 3, NULL, repeat('a',40), 1);
   perform set_config('test.k51_any', coalesce(r.task_id::text, ''), true);
 end $$;
 reset role;
@@ -1413,9 +1414,9 @@ end $$;
 reset role;
 select set_config('app.task_id', '', true), set_config('app.task_token', '', true), set_config('app.customer_id', '', true);
 
--- 59. build fence (0027): one row, written and read by the worker role only; an owner neither sees nor moves it
+-- 59. build authority (0031): worker reads and heartbeats only; business owner cannot inspect authority
 set local role hermes_worker;
-insert into app.service_build (id, commit) values (1, 'aaaa') on conflict (id) do update set commit = excluded.commit, seen_at = now();
+select app.heartbeat_service_build(repeat('a',40), 1);
 do $$ begin
   begin
     insert into app.service_build (id, commit) values (2, 'bbbb');
@@ -1432,7 +1433,7 @@ do $$ begin
     raise exception 'FAIL an owner read the live build';
   exception when insufficient_privilege then null;
   end;
-  raise notice 'PASS build fence: one row, the worker role''s alone';
+  raise notice 'PASS build authority: one row, worker heartbeat only';
 end $$;
 reset role;
 select set_config('request.jwt.claim.sub', '', true), set_config('request.jwt.claims', '', true);
@@ -1591,7 +1592,7 @@ do $$ declare got text; bad text; begin
   if bad is not null then raise exception 'FAIL app functions executable by PUBLIC: %', bad; end if;
   select string_agg(p.proname, ',' order by p.proname collate "C") into got from pg_proc p
    where p.pronamespace = 'app'::regnamespace and p.prosecdef;
-  if got is distinct from 'approve_by_standing,audit_chain,audit_effect,audit_head,audit_verify,bind_task,claim_task,complete_task,current_user_customer_ids,extend_task_lease,health_signals,is_operator,jwt_aal,link_provider_account,outbox_before_write,requeue_task,worker_context,worker_customer_id' then raise exception 'FAIL definer functions differ from the inventory: %', got; end if;
+  if got is distinct from 'activate_service_build,approve_by_standing,audit_chain,audit_effect,audit_head,audit_verify,bind_task,claim_task,claim_task,complete_task,current_user_customer_ids,extend_task_lease,health_signals,heartbeat_service_build,is_operator,jwt_aal,link_provider_account,outbox_before_write,requeue_task,worker_context,worker_customer_id' then raise exception 'FAIL definer functions differ from the inventory: %', got; end if;
   select string_agg(p.proname, ',') into bad from pg_proc p where p.pronamespace = 'app'::regnamespace and p.prosecdef
      and not exists (select 1 from unnest(coalesce(p.proconfig, '{}'::text[])) c where c like 'search_path=%');
   if bad is not null then raise exception 'FAIL definer functions without a pinned search_path: %', bad; end if;

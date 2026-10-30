@@ -103,3 +103,6 @@ codes:
   ROBOTS_DISALLOW:               {kind: error, since: "1.8", src: crawler, ar: "robots.txt يمنع الجلب"}
   ROBOTS_UNREADABLE:             {kind: error, since: "1.8", src: crawler, ar: "تعذّرت قراءة robots.txt (شبكة أو خطأ خادم)؛ لا جلب، ويُعاد لاحقًا"}
   LOGIN_PAGE:                    {kind: error, since: "1.8", src: crawler, ar: "صفحة دخول: لا تُجلب"}
+  INVALID_BUILD_IDENTITY: {kind: error, since: "1.8", src: "0031", ar: "هوية الإصدار أو الجيل غير صالح"}
+  BUILD_GENERATION_NOT_INCREASING: {kind: error, since: "1.8", src: "0031", ar: "التفعيل يتطلب جيلا أكبر من السابق"}
+  OUTBOX_RETRY_ALLOWANCE_PROTECTED: {kind: error, since: "1.8", src: "0032", ar: "سماح إعادة المحاولة محمي بقرار المشغل"}

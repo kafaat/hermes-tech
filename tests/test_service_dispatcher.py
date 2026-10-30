@@ -99,6 +99,7 @@ class TestDispatcher(unittest.TestCase):
         with self.assertRaises(DbError):
             self.db.resolve(self.id, "resend", "ok", operator=True)          # reason too short
         self.db.resolve(self.id, "resend", "customer says nothing arrived", operator=True)
+        self.assertEqual(self.db.rows[self.id].operator_attempt_limit, 0)
         out, _ = self.run_with(lambda n: "wamid.R")
         self.assertEqual(out, SENT)
 
@@ -108,6 +109,69 @@ class TestDispatcher(unittest.TestCase):
             Dispatcher(self.db, {"reply.send": a}).run_once(self.id)
         self.assertEqual(Dispatcher(self.db, {"reply.send": a}).run_once(self.id), "not_claimed")
         self.assertEqual((a.calls, self.db.rows[self.id].last_error), (5, "MAX_ATTEMPTS"))
+
+    def exhaust(self):
+        a = Counting(lambda n: BeforeSend("dns"))
+        d = Dispatcher(self.db, {"reply.send": a})
+        for _ in range(5):
+            self.assertEqual(d.run_once(self.id), FAILED_BEFORE_SEND)
+        self.assertEqual(d.run_once(self.id), "not_claimed")
+        return d, a
+
+    def test_operator_resend_after_exhaustion_allows_one_attempt_without_reset(self):
+        self.exhaust()
+        self.db.resolve(self.id, "resend", "provider confirms no delivery")
+        self.assertEqual(self.db.rows[self.id].attempts, 5)
+        out, a = self.run_with(lambda n: "wamid.RETRY")
+        self.assertEqual((out, a.calls, self.db.rows[self.id].attempts), (SENT, 1, 6))
+
+    def test_operator_resend_respects_lower_attempt_cap(self):
+        self.db.max_attempts = 3
+        a = Counting(lambda n: BeforeSend("dns"))
+        d = Dispatcher(self.db, {"reply.send": a})
+        for _ in range(3):
+            self.assertEqual(d.run_once(self.id), FAILED_BEFORE_SEND)
+        self.assertEqual(d.run_once(self.id), "not_claimed")
+        self.db.resolve(self.id, "resend", "operator approves one more attempt")
+        self.assertEqual(self.db.rows[self.id].operator_attempt_limit, 4)
+        self.assertEqual(d.run_once(self.id), FAILED_BEFORE_SEND)
+        self.assertEqual(d.run_once(self.id), "not_claimed")
+        self.assertEqual((a.calls, self.db.rows[self.id].attempts), (4, 4))
+
+    def test_operator_allowance_cannot_accumulate_or_be_reused(self):
+        d, a = self.exhaust()
+        self.db.resolve(self.id, "resend", "provider confirms no delivery")
+        with self.assertRaisesRegex(DbError, "OUTBOX_NOT_WAITING_FOR_HUMAN"):
+            self.db.resolve(self.id, "resend", "duplicate operator request")
+        self.assertEqual(d.run_once(self.id), FAILED_BEFORE_SEND)
+        self.assertEqual(d.run_once(self.id), "not_claimed")
+        self.assertEqual((a.calls, self.db.rows[self.id].attempts), (6, 6))
+        self.db.resolve(self.id, "resend", "new explicit operator decision")
+        self.assertEqual(d.run_once(self.id), FAILED_BEFORE_SEND)
+        self.assertEqual(d.run_once(self.id), "not_claimed")
+        self.assertEqual(a.calls, 7)
+
+    def test_allowance_does_not_bypass_ambiguous_send_or_old_token(self):
+        self.exhaust()
+        self.db.resolve(self.id, "resend", "provider confirms no delivery")
+        old_token = self.db.claim(self.id)
+        self.db.now += 121
+        self.assertIsNone(self.db.claim(self.id))
+        self.assertEqual(self.db.rows[self.id].last_error, "AMBIGUOUS_LEASE_EXPIRED")
+        self.db.resolve(self.id, "resend", "operator reconciled expired attempt")
+        new_token = self.db.claim(self.id)
+        self.assertNotEqual(old_token, new_token)
+        self.assertFalse(self.db.finish(self.id, old_token, SENT, "old.receipt"))
+        self.assertTrue(self.db.finish(self.id, new_token, SENT, "new.receipt"))
+
+    def test_allowance_is_protected_and_caller_limit_cannot_enlarge_budget(self):
+        self.db.max_attempts = 999
+        self.exhaust()
+        with self.assertRaisesRegex(DbError, "OUTBOX_RETRY_ALLOWANCE_PROTECTED"):
+            self.db._update(self.db.rows[self.id], operator_attempt_limit=999)
+        with self.assertRaisesRegex(DbError, "OPERATOR_AAL2_ONLY"):
+            self.db.resolve(self.id, "resend", "not an operator", operator=False)
+        self.assertEqual(self.db.rows[self.id].operator_attempt_limit, 0)
 
     def test_whatsapp_adapter_maps_responses(self):
         ok = WhatsAppCloudAdapter(lambda u, j, h, t: (200, {"messages": [{"id": "wamid.A"}]}), lambda c: "tok")
@@ -127,7 +191,7 @@ class TestDispatcher(unittest.TestCase):
         raise AssertionError("no exception")
 
     def test_model_error_codes_exist_in_the_migration(self):
-        sql = (ROOT / "db/migrations/0010_v18_closure.sql").read_text()
+        sql = "\n".join(p.read_text() for p in sorted((ROOT / "db/migrations").glob("*.sql")))
         src = (ROOT / "service/outbox_model.py").read_text()
         for code in set(re.findall(r'DbError\("([A-Z_0-9]+)"\)', src)):
             self.assertIn(f"'{code}'", sql, code)

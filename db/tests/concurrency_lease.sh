@@ -14,6 +14,8 @@ insert into app.task_leases (task_id, customer_id, agent_id, token, worker, fenc
 values ('$T', '$C', 'agent_competitor', '$K', 'A', nextval('app.fencing_seq'), clock_timestamp() + interval '2 seconds')
 on conflict (task_id) do update set token = excluded.token, lease_until = excluded.lease_until;
 SQL
+generation=$(psql -qtA -v ON_ERROR_STOP=1 -c "select coalesce(max(generation),0)+1 from app.service_build")
+psql -q -v ON_ERROR_STOP=1 -c "select app.activate_service_build(repeat('a',40), $generation)"
 session_a() {
   psql -qtA -v ON_ERROR_STOP=1 <<SQL
 begin; set local role hermes_worker; select app.bind_task('$T', '$K');
@@ -26,7 +28,7 @@ SQL
 }
 session_b() {
   sleep 2.5
-  psql -qtA -v ON_ERROR_STOP=1 -c "set role hermes_worker; select 'CLAIMED=' || task_id from app.claim_task('agent_competitor', 'B', 60);"
+  psql -qtA -v ON_ERROR_STOP=1 -c "set role hermes_worker; select 'CLAIMED=' || task_id from app.claim_task('agent_competitor', 'B', 60, 3, NULL, repeat('a',40), $generation);"
 }
 set +e
 session_a > /tmp/la.out 2>&1 & pa=$!

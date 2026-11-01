@@ -78,3 +78,65 @@ class TestSitemapAndRobots(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSiteBuilder(unittest.TestCase):
+    """service/site_builder.py (28.39): the whole one-page site, from approved facts only."""
+    BUSINESS = {"name": "مطعم \"الريف\"", "sector": "restaurant", "city": "صنعاء"}
+    FACTS = {"hours": "يوميًا من ٩ إلى ١١", "location": "شارع الزبيري", "payment": "نقدًا", "phone": "+967 712 345 678",
+             "internal_note": "رقم المورد السري 777"}
+
+    def build(self, facts=None, **kw):
+        from service.site_builder import site_files
+        args = dict(base_url="https://alreef.example", today=date(2026, 11, 1), app_url="https://hermes.example",
+                    site_key="K" * 32)
+        args.update(kw)
+        return site_files(self.BUSINESS, self.FACTS if facts is None else facts, **args)
+
+    def test_only_known_approved_topics_are_published_and_the_build_is_deterministic(self):
+        from service.site_builder import content_hash
+        page = self.build()["index.html"].decode()
+        for text in ("ساعات العمل", "يوميًا من ٩ إلى ١١", "شارع الزبيري", "نقدًا"):
+            self.assertIn(text, page)
+        self.assertNotIn("777", page)                         # a topic the site does not know is never shown
+        self.assertEqual(content_hash(self.build()), content_hash(self.build()))
+        self.assertNotEqual(content_hash(self.build()), content_hash(self.build({**self.FACTS, "payment": "تحويل"})))
+
+    def test_what_the_site_publishes_reads_back_and_every_value_is_escaped(self):
+        files = self.build({**self.FACTS, "about": "<script>alert(1)</script>"})
+        page = files["index.html"].decode()
+        self.assertNotIn("<script>alert", page)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", page)
+        self.assertIn("<title>مطعم &quot;الريف&quot; · صنعاء</title>", page)
+        facts = extract(files["index.html"])
+        self.assertEqual((facts["business"]["name"], facts["business"]["type"], facts["business"]["telephone"]),
+                         ("مطعم \"الريف\"", "restaurant", "+967 712 345 678"))
+
+    def test_a_light_page_with_no_script_no_plain_http_and_links_only_where_expected(self):
+        files = self.build()
+        page = files["index.html"].decode()
+        self.assertTrue(page.startswith("<!doctype html>\n<html lang=\"ar\" dir=\"rtl\">"))
+        self.assertLess(sum(len(v) for v in files.values()), 50_000)
+        self.assertNotIn("http://", page)
+        self.assertNotIn("<script src", page)
+        self.assertNotIn("-9999", page)                       # the form's trap field widens no right-to-left page
+        hosts = {re.sub(r"^https://([^/]+).*$", r"\1", u) for u in re.findall(r'(?:href|action)="(https://[^"]+)"', page)}
+        self.assertEqual(hosts, {"alreef.example", "wa.me", "hermes.example"})
+        self.assertIn('<a href="tel:+967712345678" dir="ltr">+967 712 345 678</a>', page)
+        self.assertIn("form-action https://hermes.example", files["_headers"].decode())
+        self.assertIn("<loc>https://alreef.example/</loc>", files["sitemap.xml"].decode())
+
+    def test_no_form_without_this_service_and_no_link_to_a_number_whatsapp_cannot_dial(self):
+        files = self.build({"hours": "٩-١١", "phone": "12345"}, app_url=None, site_key=None)
+        page = files["index.html"].decode()
+        self.assertNotIn("<form", page)
+        self.assertNotIn("wa.me", page)
+        self.assertIn("form-action 'none'", files["_headers"].decode())
+
+    def test_bad_inputs_are_refused_not_guessed(self):
+        for kw in ({"base_url": "http://alreef.example"}, {"base_url": "https://alreef.example/menu"}):
+            with self.subTest(kw), self.assertRaises(ValueError):
+                self.build(**kw)
+        from service.site_builder import site_files
+        with self.assertRaises(ValueError):
+            site_files({**self.BUSINESS, "sector": "bank"}, self.FACTS, base_url="https://a.example", today=date(2026, 11, 1))

@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from service.auth import AuthError, csrf_token, issue_staging_token, verify_session_token  # noqa: E402
-from service.portal import COOKIE, Portal  # noqa: E402
+from service.portal import COOKIE, SECURITY_HEADERS, Portal  # noqa: E402
 
 SECRET, OWNER, NOW = "s" * 40, "00000000-0000-0000-0000-0000000e2e0a", 1_790_000_000
 
@@ -230,6 +230,22 @@ class TestPortal(unittest.TestCase):
         self.assertIn("<tr><td>وسيط وقت قرارك</td><td>9 دقيقة</td><td>—</td></tr>", page)
         self.assertIn("<tr><td>ردود فورية بموافقتك الدائمة</td><td>3</td><td>0</td></tr>", page)
         self.assertNotIn("تقرير الشهر", portal().handle("GET", "/portal", cookie(sign(GOOD)), b"")[2].decode())
+
+    def test_the_owner_previews_the_site_built_from_approved_facts(self):
+        class Store(FakeStore):
+            page = b"<!doctype html><html lang=\"ar\" dir=\"rtl\"><body>site</body></html>"
+
+            def site_preview(self, claims):
+                self.calls.append(("site", claims["sub"]))
+                return self.page
+        store = Store()
+        status, headers, body = portal(store).handle("GET", "/portal/site", cookie(sign(GOOD)), b"")
+        self.assertEqual((status, body), (200, Store.page))
+        self.assertEqual(dict(headers)["Content-Security-Policy"], dict(SECURITY_HEADERS)["Content-Security-Policy"])
+        self.assertEqual(portal(store).handle("GET", "/portal/site", {}, b"")[0], 303)     # no session: to sign-in
+        store.page = None
+        self.assertIn("اعتمد معلومات منشأتك".encode(), portal(store).handle("GET", "/portal/site", cookie(sign(GOOD)), b"")[2])
+        self.assertIn('href="/portal/site"', portal().handle("GET", "/portal", cookie(sign(GOOD)), b"")[2].decode())
 
     def test_a_standing_approval_is_offered_for_low_risk_topics_only_and_toggles(self):
         store = FakeStore()

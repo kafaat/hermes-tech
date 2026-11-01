@@ -27,6 +27,7 @@ An access token within five minutes of expiry, or expired, is replaced with the 
   POST /portal/standing/pause      customer=<id> paused=1|0 csrf=<token>   the one switch (0022): pause every instant reply
   POST /portal/notify/email        customer=<id> on=1|0 csrf=<token>       escalations by email to this login's address (0026)
   POST /portal/connect/tiktok      customer=<id> csrf=<token>               to TikTok's consent page with a signed state (28.30)
+  GET  /portal/site               the owner's site as it would be published from the approved facts (28.39)
   GET  /portal/connect/tiktok/callback   code=... state=...                 TikTok sends the browser back: a "finish" button
   POST /portal/connect/tiktok/finish     code=... state=...                 exchange, seal, link (app.link_provider_account)
                                    (the session cookie is SameSite=Strict, so TikTok's redirect cannot carry it: the
@@ -82,7 +83,8 @@ class StorePort(Protocol):
     def link_tiktok(self, claims: dict, customer_id: str, open_id: str, name: str, access_ct: bytes, refresh_ct: bytes,
                     access_in: int, refresh_in: int) -> bool: ...
     def draft_post(self, claims: dict, kind: str, account_id: str, body: str, image_url: str | None) -> bool: ...
-    def ops_overview(self, claims: dict) -> dict | None: ...                 # None: not an operator in this session
+    def ops_overview(self, claims: dict) -> dict | None: ...
+    def site_preview(self, claims: dict) -> bytes | None: ...                # the built index.html, or None                 # None: not an operator in this session
     def resolve(self, claims: dict, outbox_id: str, resolution: str, reason: str) -> None: ...
 
 
@@ -149,6 +151,8 @@ INQUIRY = """<div class="card"><div class="meta">{{when}} · {{category}}{{flag}
 COMPETITORS_H = """<h2>منافسوك ({{count}})</h2><p class="meta">فحص أسبوعي لما ينشره موقع المنافس من قائمة وأسعار وساعات وتقييم.</p>"""
 COMPETITOR = """<div class="card"><div class="meta">{{label}} · {{when}} · {{state}}</div><div class="body">{{summary}}</div></div>"""
 SNAPSHOT_STATE = {"ok": "تمت المتابعة", "unverifiable": "لا متابعة آلية", "blocked": "الموقع يمنع الفحص", None: "لم يُفحص بعد"}
+SITE_LINK = """<h2>موقعك</h2><p class="meta">موقعك يُبنى من المعلومات التي اعتمدتها أدناه وحدها.
+<a href="/portal/site">معاينة موقعك كما سيُنشر</a></p>"""
 FACTS_H = """<h2>معلومات منشأتك ({{count}})</h2><p class="meta">لا يُرد على عميل إلا بمعلومة اعتمدتها أنت.</p>"""
 FACT = """<div class="card"><div class="meta">{{topic}} · {{state}}</div><div class="body">{{fact}}</div></div>"""
 FACT_STANDING = """<div class="card"><div class="meta">{{topic}} · معتمدة · {{state}}</div><div class="body">{{fact}}</div>
@@ -394,9 +398,9 @@ class Portal:
         headers = {k.lower(): v for k, v in headers.items()}
         route = urlsplit(path).path.rstrip("/") or "/"
         done = parse_qs(urlsplit(path).query).get("done", [""])[0]
-        if method == "GET" and route in ("/portal", "/portal/ops", "/portal/mfa"):
+        if method == "GET" and route in ("/portal", "/portal/ops", "/portal/mfa", "/portal/site"):
             token, claims, renew = self._session(headers)
-            page = {"/portal": self._home, "/portal/ops": self._ops, "/portal/mfa": self._mfa}[route]
+            page = {"/portal": self._home, "/portal/ops": self._ops, "/portal/mfa": self._mfa, "/portal/site": self._site}[route]
             return self._with(page(token, claims, done), renew)
         if method == "GET" and route == "/portal/connect/tiktok/callback" and self.tiktok is not None:
             q = {k: v[0] for k, v in parse_qs(urlsplit(path).query).items()}
@@ -555,6 +559,20 @@ class Portal:
         log.info("portal staging login as %s", "operator" if as_operator else "owner")
         return self._redirect(where, [self._cookie(token, verify_session_token(token, self.secret, self.now(), self.keys))])
 
+    def _site(self, token, claims, done: str):
+        """The owner's site as it would be published from the facts approved today (service/site_builder.py, 28.39):
+        nothing is published from here; the page is the built index.html itself, under the portal's headers."""
+        if claims is None:
+            return self._redirect("/portal")
+        try:
+            page = self.store.site_preview(claims)
+        except Exception as exc:                           # noqa: BLE001
+            log.error("site preview failed: %s", type(exc).__name__)
+            return self._page(503, _r(NONE, text="تعذّرت المعاينة الآن. أعد المحاولة بعد قليل."))
+        if page is None:
+            return self._page(200, _r(NONE, text="لا تكفي المعلومات المعتمدة لبناء موقعك بعد: اعتمد معلومات منشأتك أولًا."))
+        return 200, [("Content-Type", "text/html; charset=utf-8"), *SECURITY_HEADERS], page
+
     def _ops(self, token, claims, done: str):
         if claims is None:
             return self._redirect("/portal")
@@ -696,6 +714,7 @@ class Portal:
                 out.append(_r(NOTIFY, name=c["name"], customer=c["id"], csrf=csrf, on="0" if mine else "1",
                               state=f"تصل إلى {mine}" if mine else "في البوابة فقط", cls="no" if mine else "ok",
                               label="أوقف التنبيهات بالبريد" if mine else f"أرسل التنبيهات إلى {str(claims['email']).lower()}"))
+        out.append(SITE_LINK)
         out.append(_r(FACTS_H, count=len(data["facts"])))
         paused = {sw["customer_id"] for sw in data.get("switches", []) if sw["paused"]}
         for sw in data.get("switches", []):

@@ -239,6 +239,8 @@ COMMANDS = {
                                                                         note=_text(500))),
     "logs.export":         Command("founder", True, "logs.exported", _a(customer=(CUSTOMER, R), since=SINCE)),
     # ---- from payment to an active subscription (spec 8.1): a human verifies every payment
+    # ---- the customer's site, built from the approved facts (service/site_builder.py, 28.39)
+    "site.build":          Command("ops", args=_a(customer=(CUSTOMER, R), base_url=(_pattern(r"https://[a-z0-9-]+(\.[a-z0-9-]+)+/?"), R))),
     "billing.list":        Command("read", args=_a(customer=(CUSTOMER, R))),
     "billing.subscribe":   Command("finance", True, "subscription.created", _a(
                                customer=(CUSTOMER, R), price_usd=(_money, R), start=(_date, R), end=(_date, R),

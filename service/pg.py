@@ -275,6 +275,25 @@ class PortalDb:
                         " now() + make_interval(secs => %s))", (customer_id, open_id, name, access_ct, refresh_ct, access_in, refresh_in))
             return bool(cur.fetchone()[0])
 
+    def site_preview(self, claims: dict) -> bytes | None:
+        """The owner's first business, built from its approved facts (policies: the owner's own rows only). The address
+        is the published one when the site has one; the contact form is left out of a preview."""
+        from datetime import date
+        from service.site_builder import site_files
+        with self.db.tx(claims=claims) as cur:
+            cur.execute("select id from app.customers order by business_name limit 1")
+            row = cur.fetchone()
+            if row is None:
+                return None
+            business, facts, _ = site_inputs(cur, str(row[0]))
+            cur.execute("select coalesce(prod_url, 'https://' || domain) from app.sites where customer_id = %s", (str(row[0]),))
+            url = cur.fetchone()
+        try:
+            files = site_files(business, facts, base_url=(url and url[0]) or "https://preview.invalid", today=date.today())
+        except ValueError:
+            return None
+        return files["index.html"]
+
     def ops_overview(self, claims: dict) -> dict | None:
         """None unless app.is_operator() holds in this session (an active operator AND aal2); the operator
         policies then open the outbox, customers, retention and webhook rows."""
@@ -324,6 +343,20 @@ class PortalDb:
         human; 'resend' also queues the task that sends it again (0015)."""
         with self.db.tx(claims=claims) as cur:
             cur.execute("select app.resolve_outbox(%s, %s, %s)", (int(outbox_id), resolution, reason))
+
+
+def site_inputs(cur, customer_id: str):
+    """(business, approved facts by topic, the active site-form key) for service/site_builder.py, read in the caller's
+    session: the latest approved, still valid fact per topic, as the worker answers with (the latest wins)."""
+    cur.execute("select business_name, sector::text, city from app.customers where id = %s", (customer_id,))
+    name, sector, city = cur.fetchone()
+    cur.execute("select distinct on (topic) topic, fact from app.kb_facts where customer_id = %s and approved_by_owner"
+                " and (valid_until is null or valid_until >= current_date) order by topic, updated_at desc, id desc", (customer_id,))
+    facts = dict(cur.fetchall())
+    cur.execute("select external_id from app.channel_accounts where customer_id = %s and kind = 'site_form' and status = 'active'"
+                " order by created_at limit 1", (customer_id,))
+    key = cur.fetchone()
+    return {"name": name, "sector": sector, "city": city}, facts, key[0] if key else None
 
 
 class CompetitorDb:

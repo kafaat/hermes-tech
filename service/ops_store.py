@@ -50,8 +50,8 @@ def _db_error(exc) -> OpsError:
 
 
 class OpsStore:
-    def __init__(self, db):
-        self.db = db
+    def __init__(self, db, public_url: str | None = None):
+        self.db, self.public_url = db, public_url          # this service's https address: the site form posts here
 
     def run(self, claims: dict, name: str, args: dict):
         import psycopg
@@ -427,6 +427,24 @@ class OpsStore:
                     " and ts > now() - %s::interval order by ts", (cid, since))
         return {"audit": audit, "agent_calls": _rows(cur), "_customer": cid, "_target": cid,
                 "_details": {"audit_rows": len(audit)}}
+
+    # ------------------------------------------------------------------ the site (28.39)
+    def _site_build(self, cur, claims, args, role):
+        """The files to publish, from the facts the owner approved; the operator uploads them (Cloudflare Pages). A read:
+        nothing is written, and the same facts give the same content hash."""
+        from datetime import date
+        from service.pg import site_inputs
+        from service.site_builder import content_hash, site_files
+        cid = self._customer(cur, args["customer"])
+        business, facts, key = site_inputs(cur, cid)
+        try:
+            files = site_files(business, facts, base_url=args["base_url"], today=date.today(),
+                               app_url=self.public_url, site_key=key if self.public_url else None)
+        except ValueError:
+            raise OpsError(409, "site_invalid") from None
+        return {"content_hash": content_hash(files), "bytes": sum(len(v) for v in files.values()),
+                "topics": sorted(facts), "contact_form": bool(key and self.public_url),
+                "files": {p: v.decode("utf-8") for p, v in files.items()}}
 
     # ------------------------------------------------------------------ billing (spec 8.1)
     def _billing_list(self, cur, claims, args, role):

@@ -29,7 +29,7 @@ FORM = """<form method="post" action="{{url:action}}" accept-charset="utf-8">
 <label>الاسم <input type="text" name="name" maxlength="80" autocomplete="name"></label>
 <label>رقم واتساب للتواصل <input type="tel" name="phone" maxlength="20" autocomplete="tel" dir="ltr"></label>
 <label>رسالتك <textarea name="message" maxlength="2000" required rows="4"></textarea></label>
-<input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px">
+<input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap">
 <button>إرسال</button></form>"""
 
 

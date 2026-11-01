@@ -224,7 +224,8 @@ def ops_from_env(env, url: str, secret: str, keys):
     if not secret and keys is None:
         return None
     simulate = env.get("HERMES_GRAPH") == "simulate"
-    return OpsApi(OpsStore(Database(url, "authenticated")), secret, keys,
+    public = env.get("HERMES_PUBLIC_URL") or (f"https://{env['RAILWAY_PUBLIC_DOMAIN']}" if env.get("RAILWAY_PUBLIC_DOMAIN") else None)
+    return OpsApi(OpsStore(Database(url, "authenticated"), public), secret, keys,
                   staging_login_code=env.get("HERMES_STAGING_LOGIN_CODE", "") if simulate else "",
                   staging_operator_id=env.get("HERMES_STAGING_OPERATOR_ID", "") if simulate else "")
 

@@ -200,7 +200,7 @@ class CliTests(unittest.TestCase):
                     argv += ["--" + arg.replace("_", "-"), "1"]
             if cmd.reason_required:
                 argv += ["--reason", "a reason"]
-            if name == "logs.export":
+            if name in ("logs.export", "site.build"):
                 argv += ["--to", "x"]
             self.assertEqual(parser.parse_args(argv).command, name)
 

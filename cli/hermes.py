@@ -241,6 +241,8 @@ def build_parser() -> argparse.ArgumentParser:
                             help="why (5+ characters); required unless an incident is open")
         if name == "logs.export":
             sp.add_argument("--to", required=True, help="the file the evidence is written to (0600)")
+        if name == "site.build":
+            sp.add_argument("--to", required=True, help="a new directory for the site's files (upload it as is)")
     return p
 
 
@@ -278,6 +280,13 @@ def run(args) -> int:
         with os.fdopen(fd, "w") as f:
             json.dump(data, f, ensure_ascii=False, indent=2, default=str)
         data = {"written": args.to, "audit_rows": len(data["audit"]), "agent_calls": len(data["agent_calls"])}
+    if name == "site.build":
+        os.makedirs(args.to)                                                  # a new directory: never mixed with old files
+        for path, text in data["files"].items():
+            with open(os.path.join(args.to, path), "w", encoding="utf-8") as f:
+                f.write(text)
+        data = {"written": args.to, "content_hash": data["content_hash"], "bytes": data["bytes"],
+                "topics": ", ".join(data["topics"]), "contact_form": data["contact_form"]}
     show(data, args.json)
     return 0
 
@@ -294,7 +303,7 @@ def main(argv=None) -> int:
         print(f"hermes: {e}", file=sys.stderr)
         return e.code
     except FileExistsError as e:
-        print(f"hermes: {e.filename} exists; evidence is never overwritten", file=sys.stderr)
+        print(f"hermes: {e.filename} exists; nothing is ever overwritten", file=sys.stderr)
         return 2
 
 

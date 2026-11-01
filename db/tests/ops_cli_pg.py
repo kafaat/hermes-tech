@@ -46,7 +46,7 @@ def q(sql, args=()):
 
 
 def serve():
-    api = OpsApi(OpsStore(Database(DB, "authenticated")), SECRET)
+    api = OpsApi(OpsStore(Database(DB, "authenticated"), "https://hermes.example"), SECRET)
 
     class H(BaseHTTPRequestHandler):                       # the /ops/api/ branch of service.app's handler
         def do_POST(self):
@@ -143,6 +143,21 @@ def main():
                               "--label", "rival 3", "--reason", "a third")
         check(code == 5 and "COMPETITOR_LIMIT_REACHED" in err, "a third active competitor: exit 5 with the database's code")
 
+        # ---- the site (28.39): built from what the owner approved, nothing else
+        site_dir = TMP / "site"
+        code, built, _ = hermes(ops, "site", "build", "--customer", ref, "--base-url", "https://pilot.example", "--to", str(site_dir))
+        page = (site_dir / "index.html").read_text() if site_dir.exists() else ""
+        check(code == 0 and "من ٩ إلى ١١" not in page and built["contact_form"] is True
+              and f"/forms/{form['external_id']}" in page, "site build: an unapproved fact is not published; the form posts here")
+        with Database(DB, "authenticated").tx(claims={"sub": OWNER, "role": "authenticated", "aal": "aal1"}) as cur:
+            cur.execute("update app.kb_facts set approved_by_owner = true where id = %s", (fact["id"],))   # the owner's act
+        code, again, _ = hermes(ops, "site", "build", "--customer", ref, "--base-url", "https://pilot.example",
+                                "--to", str(TMP / "site2"))
+        check(code == 0 and "من ٩ إلى ١١" in (TMP / "site2" / "index.html").read_text()
+              and again["content_hash"] != built["content_hash"], "site build: the approved fact appears; a new content hash")
+        check(hermes(ops, "site", "build", "--customer", ref, "--base-url", "https://pilot.example", "--to", str(site_dir))[0] == 2,
+              "site build: an existing directory is never overwritten")
+
         # ---- billing: a human verifies the payment before anything is active (spec 8.1)
         sub_args = ["billing", "subscribe", "--customer", ref, "--price-usd", "240", "--start", "2026-11-01",
                     "--end", "2027-11-01", "--reason", "annual plan"]
@@ -226,7 +241,7 @@ def main():
         bad = [r for r in reads if hermes(fin, *r)[0] != 0]
         check(not bad, f"every read command answers for any operator role ({len(reads)} commands){bad or ''}")
         code, shown, _ = hermes(ops, "customers", "show", "--customer", ref)
-        check(code == 0 and shown["owners"] == 1 and shown["facts"] == {"approved": 0, "total": 1}
+        check(code == 0 and shown["owners"] == 1 and shown["facts"] == {"approved": 1, "total": 1}
               and shown["subscription"]["status"] == "active", "customers show: the onboarding state in one answer")
 
         # ---- evidence and the chain

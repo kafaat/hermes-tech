@@ -126,7 +126,7 @@ LAST_COOKIES = {}
 def portal(url, token, method="GET", form=None, cookies=None):
     """(status, location, page) as a browser holding the owner's session cookie would see them; the cookies the answer
     set are kept in LAST_COOKIES."""
-    target = (form or {}).pop("_path", None) or {"GET": "/portal", "GET_OPS": "/portal/ops"}.get(method)
+    target = (form or {}).pop("_path", None) or {"GET": "/portal", "GET_OPS": "/portal/ops", "GET_SITE": "/portal/site"}.get(method)
     if method.startswith("GET"):
         form = None
     req = urllib.request.Request(url + target, method="GET" if method.startswith("GET") else method,
@@ -661,6 +661,9 @@ def main():
             check("تقرير الشهر" in page and f"<tr><td>رسائل وصلت</td><td>{n}</td>" in page
                   and f"<tr><td>فحوص المنافسين</td><td>{checks_n}</td>" in page,
                   f"portal: the monthly report counts this month's {n} messages and {checks_n} competitor checks (28.36)")
+            status, _, site = portal(url, issue_staging_token(OWNER, JWT_SECRET), "GET_SITE")
+            check(status == 200 and HOURS in site and 'lang="ar" dir="rtl"' in site and "application/ld+json" in site,
+                  "portal: the owner previews the site built from the approved facts (28.39)")
         finally:
             q("update app.competitors set active = false where id = %s", (comp_id,))   # the daily job must not fetch it
         real = os.environ.get("HERMES_E2E_COMPETITOR_URL")

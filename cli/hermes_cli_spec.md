@@ -29,6 +29,7 @@ python -m cli.hermes logout
 | `channels verify` / `suspend` | `--id CHANNEL` | تفعيل بعد تحقق Meta، أو إيقاف | ops | `channel.verified` / `channel.suspended` |
 | `facts list` / `add` | `--customer [--topic --fact --valid-until]` | حقيقة بانتظار موافقة المالك في البوابة | read / ops | `fact.added` |
 | `competitors list` / `add` / `remove` | `--customer [--url --label]` / `--id` | منافسان نشطان حدًا (0003) | read / ops | `competitor.added` / `competitor.removed` |
+| `site build` | `--customer --base-url https://<domain> --to DIR` | ملفات الموقع من المعلومات المعتمدة، في مجلد جديد، ببصمتها؛ يرفعها المشغّل كما هي (28.39) | ops | — |
 | `billing list` | `--customer` | الاشتراكات والفواتير والدفعات | read | — |
 | `billing subscribe` | `--customer --price-usd --start --end [--plan]` | اشتراك معلّق؛ المنشأة بانتظار الدفع | finance | `subscription.created` |
 | `billing invoice` | `--subscription --amount --currency [--fx-rate-to-usd]` | فاتورة صادرة برقمها السنوي | finance | `invoice.issued` |
@@ -71,7 +72,7 @@ python -m cli.hermes logout
 | `approvals execute` | الصندوق الصادر ينفّذ الأثر الموافق عليه ويستهلك موافقته مرة (0009، 0010)؛ مسار تنفيذ يدوي ثانٍ يفتح بابًا للتكرار |
 | `campaign pause` / `resume` | لا حملات جماعية مبنية |
 | `worker add` / `remove` | عدد النسخ إعداد في Railway، لا في القاعدة |
-| `deploy` / `rollback` | نشر المواقع على Cloudflare Pages غير مبني بعد |
+| `deploy` / `rollback` | النشر الآلي غير مبني: حد Cloudflare Pages 100 مشروع لكل حساب، وCloudflare توصي بـ Workers للجديد؛ يُقرَّر المسار أولًا (28.39). الآن: `site build` ثم رفع يدوي |
 | `secrets revoke` / `rotate` | مخزن الأسرار غير مربوط؛ الرموز المختومة (0028) تدور بـ`HERMES_TOKEN_KEYS` |
-| `sessions terminate` | يحتاج مفتاح خدمة Supabase على الخادم؛ مؤجل حتى ربط مشروع Supabase فعلي |
+| `sessions terminate` | لا نقطة إدارية في Supabase لإنهاء جلسات مستخدم برقمه (مصدر supabase/auth): الخيار حذف صفوفه في `auth.sessions` أو حظره؛ والرمز الصادر يبقى صالحًا حتى انتهائه. مؤجل حتى ربط مشروع Supabase فعلي |
 | `evals run` | `tools/run_evals.py` يعمل في CI؛ تسجيله في `app.eval_runs` لم يُربط |

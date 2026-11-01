@@ -40,13 +40,13 @@
 | مخططات JSON والعقود والفهرس والسياسات | 34 فحصًا ناجحًا من 34 | tools/validate.py · الطبقة 1 |
 | قواعد الاتساق المنطقي والسياسة الإحصائية ومعجم الإخفاقات | 136 فحصًا ناجحًا من 136 | tools/validate.py · الطبقة 2 |
 | الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 276 فحصًا ناجحًا من 276 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
-| الاختبارات الآلية | 365 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
+| الاختبارات الآلية | 384 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
 | حالات SQL على Postgres فعلي | 62 حالة و73 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
-المجموع: 446/446 فحصًا ناجحًا في أداة التحقق، و365 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
+المجموع: 446/446 فحصًا ناجحًا في أداة التحقق، و384 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
 
 ### وسوم المصدر
@@ -165,10 +165,10 @@ hermes-tech/
 ├── policies/             acceptance_policy.json · acceptance_policy.schema.json · complaint_keywords.json · complaint_keywords.schema.json · content_rules.json · content_rules.schema.json · fetch_policy.json
 ├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018 · 0019 · 0020 · 0021 · 0022 · 0023 · 0024 · 0025 · 0026 · 0027 · 0028 · 0029 · 0030 · 0031 · 0032   (32 files)
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
-├── db/tests/             build_fence.sql · concurrency_build_fence.py · concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · outbox_operator_retry.sql · rls_isolation_test.sql · run_isolation.sh · run_local.sh
+├── db/tests/             build_fence.sql · concurrency_build_fence.py · concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · ops_cli_pg.py · outbox_operator_retry.sql · rls_isolation_test.sql · run_isolation.sh · run_local.sh
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
-├── service/              __init__.py · app.py · auth.py · build_identity.py · competitor.py · crawler.py · dispatcher.py · email_inbound.py · health.py · jobs.py · jwks.py · media_policy.py · outbox_model.py · pg.py · portal.py · qr.py · redact.py · render.py · site_form.py · site_seo.py · structured.py · supabase_auth.py · telemetry.py · tiktok_oauth.py · token_box.py · webhook.py · worker.py
-├── tests/                46 modules (inventory in §15.2)
+├── service/              __init__.py · app.py · auth.py · build_identity.py · competitor.py · crawler.py · dispatcher.py · email_inbound.py · health.py · jobs.py · jwks.py · media_policy.py · ops_api.py · ops_store.py · outbox_model.py · pg.py · portal.py · qr.py · redact.py · render.py · site_form.py · site_seo.py · structured.py · supabase_auth.py · telemetry.py · tiktok_oauth.py · token_box.py · webhook.py · worker.py
+├── tests/                47 modules (inventory in §15.2)
 ├── evals/                complaints_seed.jsonl · content_guard_golden.jsonl · model_admission.json
 ├── docs/                 19 documents · adr/ (11 decisions)
 ├── derived/              policy_matrix.md · agent_capabilities.json · alerts.yaml   (generated)
@@ -948,6 +948,8 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 
 كل أمر يتطلب جلسة مشغّل بتوثيق متعدد، ويمر بطبقة الفرض، ويكتب حدثًا في سجل التدقيق. رموز الخروج: 0 نجاح، 2 مدخلات غير صالحة، 3 مرفوض بالصلاحية، 4 غير موجود، 5 تعارض حالة، 10 خطأ خادم.
 
+**بُنيت بعد الإصدار (28.35):** `cli/hermes.py` عميلٌ لواجهة المشغّل في hermes-app، بلا اعتماد قاعدة بيانات على جهاز المشغّل. أُضيفت أوامر التهيئة والتحصيل (منشأة، مالك، قنوات، حقائق، منافسون، اشتراك وفاتورة ودفعة وتفعيل). القائمة الحالية وما لم يُبنَ ولماذا في cli/hermes_cli_spec.md؛ الجدول أدناه هو تصميم 1.8.
+
 | الأمر | الأثر | الدور | حدث التدقيق |
 | --- | --- | --- | --- |
 | agent status [--agent ID] [--customer CUST] | حالة الدائرة والإنفاق والنداءات | ops | — |
@@ -1024,6 +1026,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_service_graph_live | مرسل Graph الحقيقي: مغلق دون إعداد صريح، المضيف الوحيد graph.facebook.com عبر المسار المثبّت، والنتيجة الملتبسة لا تُعاد آليًا | 17 |
 | test_service_jwks | مفاتيح توقيع Supabase: ES256 وRS256 بخوارزمية المفتاح نفسها، ولا تبديل خوارزمية، وإعادة جلب محدودة | 5 |
 | test_service_media_policy | صور المنشورات: صورة المالك كما هي، وصورة المخزون أو المولّدة لا تُنشر إلا بوسم «صورة توضيحية» ومصدر مرخّص | 5 |
+| test_service_ops_api | واجهة المشغّل وhermes: جلسة موثقة بعامل ثانٍ، وحجج مقيّدة ترفض المجهول، ورموز خروج المواصفة، وجلسة 0600 | 19 |
 | test_service_owner_notify | تنبيه المالك بالبريد: سبب ورابط للبوابة بلا نص العميل، ومن مرسل المنصة المُعَدّ | 4 |
 | test_service_portal | بوابة المالك: رمز الجلسة يُتحقق بصرامة، الإجراء مربوط بالجلسة (CSRF والأصل)، لا سكربت، كل قيمة مُهرَّبة | 22 |
 | test_service_postmark_events | أحداث Postmark: التسليم يطابق صف الإرسال، والارتداد يُبلغ المالك، والمصادقة قبل القراءة | 3 |
@@ -1043,7 +1046,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_supply_chain | غياب CODEOWNERS فشل، pull_request_target فشل، والتعليقات لا تُعدّ إجراءات | 4 |
 | test_triage | المرحلة الثانية تضيف ولا تلغي، العتبة، استفسارات المالك | 5 |
 | test_validator_negative | اختبارات طفرات: يُدخل كل عيب وُجد في المراجعات ويتأكد أن المتحقق يرفضه | 13 |
-| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **365** |
+| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **384** |
 <!-- /gen:tests -->
 
 ### 15.3 العيوب التي تمنعها اختبارات الطفرات
@@ -1291,7 +1294,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 ### 21.3 شروط ما قبل التجربة (مولّدة منذ 1.8)
 
 <!-- gen:conditions -->
-قائمة مولّدة من docs/claims.yaml (كل ادعاء قراره fix_before_pilot) وحالته المحسوبة الآن. «في CI فقط» تعني أن الاختبار مكتوب ولم يُشغَّل؛ الشرط الأول مشترك بينها كلها: أول تشغيل ناجح لمهمة database على Postgres فعلي يغطي 68 ادعاءً بجزء إنتاجي ينتظر CI، ومنها كل حالات السلطة والعزل.
+قائمة مولّدة من docs/claims.yaml (كل ادعاء قراره fix_before_pilot) وحالته المحسوبة الآن. «في CI فقط» تعني أن الاختبار مكتوب ولم يُشغَّل؛ الشرط الأول مشترك بينها كلها: أول تشغيل ناجح لمهمة database على Postgres فعلي يغطي 69 ادعاءً بجزء إنتاجي ينتظر CI، ومنها كل حالات السلطة والعزل.
 
 | الادعاء | الشرط | الحالة الآن |
 | --- | --- | --- |
@@ -1323,6 +1326,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | P19 | الرد الذي لم يصل أو شُكي منه يُبلَّغ به المالك، وأحداث التسليم تُصادَق قبل قراءتها ولا يُخزَّن منها إلا ما يخص ردودنا | متحقق هنا + ينتظر CI |
 | P20 | حساب تيك توك يُربط بموافقة مالك المنشأة نفسها، ورموزه مختومة بمفتاح خارج القاعدة ومربوطة بصفها، وتتجدد قبل انتهائها والفشل نظيف قبل الإرسال | متحقق هنا + ينتظر CI |
 | P21 | النسخة الخام لكل رسالة واردة تُمحى بعد 30 يومًا مع نص الاستفسار، بدور لا يقرؤها، ويُسجَّل التشغيل | في CI فقط |
+| P22 | أوامر المشغّل عبر hermes بجلسته الموثقة بعامل ثانٍ دون اعتماد قاعدة البيانات على جهازه، وكل كتابة تُسجَّل في التدقيق بسببها في المعاملة نفسها، والدور يحدد الأمر | متحقق هنا + ينتظر CI |
 | P3 | سعر واتساب لليمن وترخيص صور FLUX التجاري مؤكدان كتابيًا | إجرائي |
 
 خارج المصفوفة ولا يُولَّد: اختبار القبول للشكاوى ليس شرطًا للتجربة بل لأي سياسة إرسال دون موافقة لكل رد (22.2).
@@ -1695,14 +1699,14 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 <!-- gen:claims -->
 | الحالة | العدد |
 | --- | --- |
-| متحقق هنا | 52 |
+| متحقق هنا | 53 |
 | في CI فقط | 43 |
 | بنيوي فقط | 4 |
 | تشغيل مسجّل | 1 |
 | إجرائي | 4 |
-| **المجموع** | **104** |
+| **المجموع** | **105** |
 
-منها 68 بجزء إنتاجي ينتظر أول تشغيل في CI. ادعاءات بقرار «مقبول» معلن لا تحجب الإصدار: C9.4، A26، A35؛ منها A35 حد ثقة مسمّى (27.5) لا نقص تنفيذ.
+منها 69 بجزء إنتاجي ينتظر أول تشغيل في CI. ادعاءات بقرار «مقبول» معلن لا تحجب الإصدار: C9.4، A26، A35؛ منها A35 حد ثقة مسمّى (27.5) لا نقص تنفيذ.
 <!-- /gen:claims -->
 
 ### 27.7 ما بقي مفتوحًا
@@ -2378,6 +2382,23 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 - **التنبيه:** الخدمة غير المتاحة أو المتدهورة تجعل التشغيلة حمراء («Deployment crashed»)، وRailway يرسلها بالبريد إلى المالك.
 
 **حدّها:** لا ترى توقف Railway نفسه (5 أكتوبر). مراقبة GitHub تبقى لازمة لذلك متى ضبط المالك السرّين.
+
+### 28.35 واجهة الأوامر hermes: التهيئة والتشغيل بجلسة المشغّل، لا باعتماد القاعدة
+
+**الفجوة:** القسم 14 وصف أداة المؤسس، ولم تُبنَ. تهيئة منشأة تجريبية كانت تتم بـSQL يدوي، وكذلك ربط المالك والقنوات والتحقق من الدفعة. فلا تدقيق ولا دور ولا سبب.
+
+**ما لم يُفعل عن قصد:** لم تتصل الأداة بالقاعدة مباشرة. من يحمل اعتماد القاعدة يضبط هوية الجلسة كما يشاء (`request.jwt.claims`)، فيصير التحقق الثنائي شكليًا، ويصير جهاز المؤسس حاملًا لمفتاح القاعدة.
+
+**البناء:**
+- **الأداة** (`cli/hermes.py`): تدخل بـSupabase (رمز بالبريد ثم رمز تطبيق التحقق، aal2)، وتحفظ الجلسة في ملف بصلاحية 0600 وترفض ملفًا يقرؤه غيره. تجدد الرمز قبل انتهائه. HTTPS وحده، وhttp على الجهاز المحلي فقط.
+- **واجهة المشغّل** (`service/ops_api.py`، `POST /ops/api/<command>`): تتحقق من الرمز كما تتحقق البوابة، وترفض ما دون aal2. كل وسيط مقيد بنوعه وطوله، والوسيط المجهول يُرفض. الأخطاء رموز قصيرة، لا نص استثناء.
+- **التنفيذ** (`service/ops_store.py`): معاملة واحدة في جلسة المشغّل نفسه، فتقرر `app.is_operator()` والسياسات. فوقها الدور (`app.operators.role`)، والسبب المكتوب لكل كتابة خارج حادث مفتوح، وصف التدقيق في المعاملة نفسها. الكتابة المرفوضة لا تترك تغييرًا ولا صف تدقيق.
+- **المال خط منفصل:** أوامر التحصيل لدور finance والمؤسس. التحقق من الإيصال يسجّل المشغّل الذي تحقق. التفعيل ترفضه القاعدة دون دفعة مطابقة (0003).
+- **التجميد:** يوقف المنشأة وكل قنواتها النشطة، والتوجيه لا يصل إلا قناة نشطة (0010)، فلا يصل جديد. الرفع يقرأ صف التجميد في التدقيق فيعيد الحالة السابقة والقنوات التي أوقفها وحدها. لا يوقف أثرًا وافق عليه المالك قبله؛ ذلك يظهر في `outbox attention`.
+
+**التحقق:** tests/test_service_ops_api.py (الواجهة والأداة بلا قاعدة). db/tests/ops_cli_pg.py: الأداة عمليةً حقيقية ضد Postgres، من منشأة جديدة إلى اشتراك نشط، مع كل رفض متوقع. يجري في CI، وفي staging داخل قاعدة العزل المؤقتة. وفي e2e_pilot فحص الواجهة على الخدمة العاملة نفسها. الادعاء P22.
+
+**ما لم يُبنَ:** `approvals execute`، والحملات، وتوسيع العمال، ونشر المواقع، والأسرار، وإنهاء الجلسات، وتسجيل التقييمات. لكل منها سببه في cli/hermes_cli_spec.md.
 
 ## الملحق أ · رموز الأخطاء
 

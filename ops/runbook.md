@@ -147,3 +147,16 @@ journalctl -u hermes-orchestrator -n 200 --since "30 min ago"
 - **إعدادها:** متغيراها مرجعان إلى متغيرات `hermes-app` نفسها، لا نسختان: `HERMES_DEPS_URL = https://${{hermes-app.RAILWAY_PUBLIC_DOMAIN}}/deps` و`HERMES_MONITOR_TOKEN = ${{hermes-app.HERMES_MONITOR_TOKEN}}`. دوران الرمز في `hermes-app` يصل إليها في تشغيلتها التالية.
 - **التنبيه:** التشغيلة الحمراء (الخدمة متوقفة أو متدهورة) تظهر «Deployment crashed»، وRailway يرسلها بالبريد إلى المالك. السجل يسمّي الإشارة الفاشلة.
 - **حدّها:** لا ترى توقف Railway نفسه، كإزالة كل النشرات في 5 أكتوبر، لأنها تتوقف معه. لذلك تبقى مراقبة GitHub (`deps-monitor`) لازمة متى ضُبط سرّا المستودع.
+
+## تهيئة منشأة تجريبية بواجهة hermes (2026-11-01)
+كل خطوة أمر بجلسة المشغّل (aal2) وسبب مكتوب، ويُسجَّل في التدقيق (المواصفة 28.35، cli/hermes_cli_spec.md). لا SQL يدوي.
+1. `python -m cli.hermes login --url https://<hermes-app> --email <بريد المشغّل>`: رمز البريد ثم رمز تطبيق التحقق. أول مرة يُسجَّل تطبيق التحقق من `/portal/mfa`.
+2. `customers add --name ... --sector restaurant --city ... --zone zone_a --reason "..."`؛ احفظ `public_ref`.
+3. أنشئ مستخدم المالك في Supabase (Authentication ← Add user)، ثم `owners link --customer <ref> --user-id <uuid>`.
+4. `channels add` لكل قناة: رقم واتساب (`phone_number_id`)، وصفحة فيسبوك، وحساب إنستغرام، وعنوان البريد الوارد. نموذج الموقع يولّد مفتاحه بلا `--external-id`. ثم `channels verify --id` بعد تحقق Meta فقط.
+5. `facts add` لساعات العمل والموقع والدفع. المالك يوافق عليها في البوابة، ولا يُرد بحقيقة لم يوافق عليها.
+6. `competitors add` لمنافسين اثنين على الأكثر.
+7. دور finance: `billing subscribe`، ثم `billing invoice`، ثم `billing payment` حين يصل الإيصال. بعد التحقق من الإيصال عند الجهة: `billing match`، ثم `billing activate`.
+8. `customers show --customer <ref>`: مالك واحد على الأقل، القنوات نشطة، الحقائق موافق عليها، الاشتراك نشط.
+
+إيقاف منشأة فورًا: `freeze --customer <ref> --reason "..."`؛ والرفع `unfreeze`. ما وافق عليه المالك قبل التجميد يظهر في `outbox attention`.

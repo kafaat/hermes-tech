@@ -19,7 +19,7 @@ check each step. Seeding is idempotent and uses a fixed staging tenant; every ru
   7. audit: enqueue by the leased agent and the owner's decision, in the chain
   8. operator console: a row waiting for a human (the state an interrupted send leaves) is shown only to an aal2
      operator, not to the owner nor to the operator without a second factor; "resend" with a reason queues its
-     task and the worker sends it
+     task and the worker sends it; the operator API of the hermes command line answers the aal2 operator only
   9. competitor check (workflow, 28.11): the daily job as hermes_jobs finds the due competitor, reads the Arabic
      restaurant fixture (no network in CI), files an 'ok' snapshot with the inventory, is not due again the same week,
      and the owner sees it in the portal. HERMES_E2E_COMPETITOR_URL (staging) adds one real page for the daily job.
@@ -579,6 +579,26 @@ def main():
         check(bool(wait("resend task done", lambda: q("select 1 from app.tasks where idempotency_key like %s and status = 'succeeded'",
                                                         (f"resend:{ob}:%",)))),       # sent first, completed in the next transaction
               "operator resend -> its task succeeded")
+
+        # 8b. the operator API behind the hermes command line, on this same service (spec 28.35); the commands
+        #     themselves run in db/tests/ops_cli_pg.py
+        def ops_api(name, tok, args=None):
+            req = urllib.request.Request(url + "/ops/api/" + name, data=json.dumps({"args": args or {}}).encode(),
+                                         method="POST", headers={"Content-Type": "application/json",
+                                                                 "Authorization": f"Bearer {tok}"})
+            try:
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    return r.status, json.load(r)
+            except urllib.error.HTTPError as e:
+                return e.code, json.loads(e.read() or b"{}")
+        status, doc = ops_api("whoami", op2)
+        check(status == 200 and doc["data"]["role"] == "founder", "operator API: whoami in the aal2 operator's session")
+        check(ops_api("whoami", issue_staging_token(OPERATOR, JWT_SECRET))[0] == 403,
+              "operator API: refused to the operator without a second factor")
+        check(ops_api("customers.show", issue_staging_token(OWNER, JWT_SECRET, aal="aal2"), {"customer": "cust_e2e1"})[0] == 403,
+              "operator API: the owner, even with aal2, is not an operator")
+        status, doc = ops_api("customers.show", op2, {"customer": "cust_e2e1"})
+        check(status == 200 and doc["data"]["status"] == "active", "operator API: customers show for the staging tenant")
 
         from service import competitor
         from service.pg import CompetitorDb, Database

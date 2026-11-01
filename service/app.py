@@ -10,6 +10,8 @@
                   through Supabase Auth when HERMES_SUPABASE_URL and HERMES_SUPABASE_ANON_KEY are set (the access
                   tokens are verified with HERMES_JWT_SECRET, the project's legacy JWT secret, or with the project's
                   published signing keys, ES256 / RS256, spec 28.26; HERMES_JWT_SECRET also keys the CSRF tokens)
+  POST /ops/api/<command>         the operator API behind the `hermes` command line (service/ops_api.py, spec 28.35):
+                  a Bearer session token verified as the portal's, an operator with aal2, one transaction per command
   POST /forms/<site key>          the contact form of a customer's site (service/site_form.py, spec 28.24)
   GET/POST /portal/connect/tiktok...   linking a TikTok account by the owner's consent (service/tiktok_oauth.py, 28.30)
   POST /email/events              Postmark's delivery / bounce / spam-complaint webhook (spec 28.28), the same basic auth
@@ -36,6 +38,8 @@ from service.health import SIGNALS, assess, authorized
 from service.build_identity import build_identity
 from service.pg import Database, Ingest, PortalDb
 from service.portal import Portal
+from service.ops_api import MAX_BODY_BYTES as OPS_MAX_BYTES, OpsApi
+from service.ops_store import OpsStore
 from service.supabase_auth import from_env as supabase_from_env
 from service.tiktok_oauth import SimulatedTikTokOAuth, TikTokOAuth, TikTokTokens
 from service.token_box import TokenBox
@@ -51,7 +55,7 @@ SHUTDOWN_WAIT_SECONDS = 25        # for the task in hand after SIGTERM: above a 
 
 def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | None = None, monitor_token: str = "",
                       portal: Portal | None = None, forms: FormHandler | None = None, email: EmailHandler | None = None,
-                      email_events: EmailEventHandler | None = None):
+                      email_events: EmailEventHandler | None = None, ops: OpsApi | None = None):
     class H(BaseHTTPRequestHandler):
         timeout = 30                                   # a client that announces a body and never sends it frees the thread
 
@@ -115,6 +119,21 @@ def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | N
 
         def do_POST(self):
             path = urlsplit(self.path).path
+            if ops is not None and path.startswith("/ops/api/"):    # the hermes command line (service/ops_api.py)
+                try:
+                    length = self._length()
+                except ValueError:
+                    return self._reply(400, "bad length")
+                if length > OPS_MAX_BYTES:
+                    return self._reply(413, "too large")
+                status, headers, data = ops.handle("POST", path, dict(self.headers.items()), self.rfile.read(length))
+                self.send_response(status)
+                for k, v in headers:
+                    self.send_header(k, v)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
             if portal is not None and path.startswith("/portal/"):
                 try:
                     length = self._length()
@@ -185,6 +204,17 @@ def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | N
     return H
 
 
+def ops_from_env(env, url: str, secret: str, keys):
+    """The operator API (service/ops_api.py) when sessions can be verified; its staging login exactly where the
+    portal's is allowed (HERMES_GRAPH=simulate, a login code and a staging operator)."""
+    if not secret and keys is None:
+        return None
+    simulate = env.get("HERMES_GRAPH") == "simulate"
+    return OpsApi(OpsStore(Database(url, "authenticated")), secret, keys,
+                  staging_login_code=env.get("HERMES_STAGING_LOGIN_CODE", "") if simulate else "",
+                  staging_operator_id=env.get("HERMES_STAGING_OPERATOR_ID", "") if simulate else "")
+
+
 def tiktok_link_from_env(env):
     """(TikTok OAuth client, token box) for linking accounts (spec 28.30), or (None, box). Live: HERMES_TIKTOK_CLIENT_KEY,
     HERMES_TIKTOK_CLIENT_SECRET, HERMES_TIKTOK_REDIRECT_URI and HERMES_TOKEN_KEYS, all or none. Staging (simulate):
@@ -246,7 +276,7 @@ def main():
     server = ThreadingHTTPServer(("0.0.0.0", port), make_http_handler(
         webhook, os.environ.get("HERMES_VERIFY_TOKEN", ""), Database(url, "hermes_monitor"),
         os.environ.get("HERMES_MONITOR_TOKEN", ""), portal, FormHandler(ingest), email,
-        EmailEventHandler(email_secrets, ingest) if email_secrets else None))
+        EmailEventHandler(email_secrets, ingest) if email_secrets else None, ops_from_env(os.environ, url, secret, keys)))
 
     # Report liveness only; privileged activation is a separate deployment operation.
     worker.register_build()                                    # 0031, spec 28.29

@@ -66,6 +66,7 @@ out=$(psql "$iso_url" -v ON_ERROR_STOP=1 -f db/tests/rls_isolation_test.sql 2>&1
 got=$(grep -c "NOTICE:  PASS" <<<"$out" || true)
 [ "$got" -eq "$expected" ] || { echo "$out"; echo "isolation: $got/$expected PASS notices"; exit 1; }
 echo "isolation: $got/$expected PASS"
+DATABASE_URL="$iso_url" python3 db/tests/ops_cli_pg.py | tail -1   # the hermes command line, in the scratch database
 
 if [ -n "${HERMES_APP_URL:-}" ]; then
   echo "== e2e against $HERMES_APP_URL"

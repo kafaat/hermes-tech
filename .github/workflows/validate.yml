@@ -46,6 +46,9 @@ jobs:
       # P1 end to end: service.app over HTTP (webhook -> routed task -> worker -> owner approval -> outbox -> dispatch -> receipt)
       - run: python db/tests/e2e_pilot.py
         env: { DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres" }
+      # the hermes command line end to end: CLI process -> operator API -> the operator's own session (spec 28.35)
+      - run: python db/tests/ops_cli_pg.py
+        env: { DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres" }
   workflow-guard:
     # A change to ANY gate path (checkers, policies, claims, inventories, tests of the database, CI) is judged
     # by the checkers of the BASE commit, run on the change's data. The guard program itself comes from base.

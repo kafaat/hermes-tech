@@ -27,7 +27,10 @@ class TestSupplyChain(unittest.TestCase):
     def test_pull_request_target_fails(self):
         def m(t):
             p = t / ".github/workflows/validate.yml"
-            p.write_text(p.read_text().replace("on: [push, pull_request]", "on: [push, pull_request_target]"))
+            before = p.read_text()
+            after = before.replace("\n  pull_request:\n", "\n  pull_request_target:\n", 1)
+            self.assertNotEqual(after, before, "the mutation must change the trigger, or the test proves nothing")
+            p.write_text(after)
         self.assertEqual(run(m)[0], 1)
 
 

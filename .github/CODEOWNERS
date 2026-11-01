@@ -1,5 +1,6 @@
 # Changes to CI, the release gate, its checkers, the policies they enforce, the claims and inventories they
-# compare against, and the database tests need the owner's review (ADR-0008). In a one-person project the
+# compare against, the database tests, and the instructions every coding agent reads first (AGENTS.md,
+# CLAUDE.md) need the owner's review (ADR-0008). In a one-person project the
 # workflow-guard job (base checkers judge the change) is what actually holds; CODEOWNERS adds the review
 # once a second account exists. Owner set during first setup (docs/setup_guide.md, step 3).
 /.github/                              @kafaat
@@ -14,3 +15,5 @@
 /docs/security_definer_inventory.md    @kafaat
 /requirements-ci.txt                   @kafaat
 /VERSION                               @kafaat
+/AGENTS.md                              @kafaat
+/CLAUDE.md                              @kafaat

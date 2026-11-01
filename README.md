@@ -34,7 +34,7 @@ python tools/check_supply_chain.py     # إجراءات غير مثبّتة وت
 python tools/check_claims.py           # كل ادعاء «يجب» مقابل ما يفرضه، بحالة محسوبة
 python tools/check_spec.py --check     # كل رقم وجرد في المواصفة مطابق لمصدره
 python tools/build_manifest.py --check # الملفات والتقارير تخص الإصدار المعلن في VERSION
-bash db/tests/run_local.sh             # أول بوابة قبل التجربة: الترحيلات بمالك عادي، كل الحالات، ثلاثة سباقات (Docker)
+bash db/tests/run_local.sh             # مهمة database كاملة محليًا: العزل والسباقات والمسار الكامل وواجهة الأوامر (Docker، أو PGHOST=... لخادم قائم)
 ```
 
 ### الخدمة والمسار الكامل (P1، القسم 28 من المواصفة)

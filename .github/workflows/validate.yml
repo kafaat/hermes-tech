@@ -1,5 +1,11 @@
 name: validate
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  # weekly, with no change at all: a vulnerability published after the last push turns this run red within a
+  # week, instead of surfacing on the next unrelated push
+  schedule:
+    - cron: "41 4 * * 1"
 permissions:
   contents: read
 # Every action is pinned to a full commit SHA (ADR-0008); tools/check_supply_chain.py reports unpinned ones.
@@ -14,6 +20,7 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install -r requirements-ci.txt
       - run: pip-audit -r requirements-ci.txt --strict   # fails on any known vulnerability
+      - run: pip-audit -r requirements-service.txt --strict   # the running service's own lock, not only the CI tools
       - run: python tools/validate.py
       - run: python tools/derive.py --check
       - run: python -m unittest discover -s tests -v

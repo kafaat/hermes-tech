@@ -30,7 +30,7 @@ from service.dispatcher import (CURRENT_BIND, EMAIL_ADDRESS, SEND_TIMEOUT_SECOND
 
 log = logging.getLogger("hermes.worker")
 AGENT = "agent_triage"
-KINDS = ("inbound.event", "outbox.resend", "content.propose")      # the task kinds this worker handles; claim_task leaves any other kind to a
+KINDS = ("inbound.event", "outbox.resend", "content.propose", "reply.owner")      # the task kinds this worker handles; claim_task leaves any other kind to a
                                                 # worker that knows it (0016: an older instance took a new kind mid-deploy)
 BUILD_STALE_SECONDS, BUILD_BEAT_SECONDS = 60, 20   # stale heartbeat is diagnostic; never reactivates an old build
 POST_DECISION_DAYS = 7          # a post proposal waits a week for the owner, then lapses
@@ -107,6 +107,30 @@ def email_content(e: dict) -> tuple[str, str, str, str]:
 def reply_subject(subject: str) -> str:
     s = clean(subject, 190)
     return s if re.match(r"(?i)^(re|رد)\s*:", s) else (f"Re: {s}" if s else "")
+
+
+def reply_payload(source_kind: str, channel: str, sender: str, body: str, ext: str, email: dict | None, topic: str) -> dict:
+    """reply:send to the customer who wrote, on the channel they wrote on (the one shape the dispatcher sends)."""
+    if source_kind == "whatsapp_cloud":
+        return {"phone_number_id": channel, "to": sender, "body": body, "in_reply_to": ext, "topic": topic}
+    if source_kind == "email":                          # back to the sender, in the same thread
+        return {"channel": "email", "account_id": channel, "to": sender, "subject": reply_subject((email or {}).get("subject")),
+                "body": body, "in_reply_to": ext, "message_id": (email or {}).get("message_id"), "topic": topic}
+    return {"channel": source_kind, "account_id": channel, "to": sender, "body": body, "in_reply_to": ext,
+            "topic": topic}                             # the same channel the customer wrote on (Messenger, Instagram Direct)
+
+
+def addressee(kind: str, payload: dict) -> str | None:
+    """Who to answer for a stored inbound event, or None where no answer may go (a form, unauthenticated mail)."""
+    if kind == "whatsapp_cloud":
+        return str((payload.get("message") or {}).get("from") or "") or None
+    if kind in ("facebook_page", "instagram_business"):
+        return messaging_content(payload.get("messaging") or {})[2] or None
+    if kind == "email":
+        e = payload.get("email") or {}
+        sender = email_content(e)[2]
+        return sender if e.get("authenticated") and not e.get("spam") and EMAIL_ADDRESS.fullmatch(sender or "") else None
+    return None
 
 
 def decide(text: str, route: dict, facts: dict, guard: ContentGuard, norm_rules: dict) -> dict:
@@ -305,6 +329,8 @@ class Worker:
             return self._resend(t, int(key.split(":")[1]))
         if key.startswith("content:"):                    # the owner's draft post (0023): 'content:<content id>'
             return self._content(t, key[len("content:"):])
+        if key.startswith("owner_reply:"):                # the owner's answer to a customer (0034): 'owner_reply:<id>'
+            return self._owner_reply(t, key[len("owner_reply:"):])
         with self.db.tx(t.bind) as cur:
             _, kind, ext = key.split(":", 2)                                   # 'wh:<kind>:<external id>'
             cur.execute("select id, payload, channel_external_id from app.webhook_events where kind = %s and external_event_id = %s",
@@ -401,6 +427,63 @@ class Worker:
             cur.execute("select app.enqueue_outbox('notify.owner', %s, null, %s)", (_json({**notice, **({"notify_to": to} if to else {})}), ext))
             return cur.fetchone()[0]
 
+    def _owner_reply(self, t: Task, reply_id: str) -> str:
+        """The owner's own answer (0034, spec 28.41), the way of a post (0023): checked by the guard and proposed to the
+        customer who wrote, on the channel they wrote on; the owner confirms it in the portal; the outbox sends it once.
+        The addressee comes from the message's own event, so no copy of a number or address is kept for this."""
+        target = "owner:" + reply_id
+        with self.db.tx(t.bind) as cur:
+            cur.execute("select r.body, r.status, i.event_ref, i.received_at + interval '23 hours' > now() + interval '1 minute',"
+                        " least(now() + make_interval(hours => %s), i.received_at + interval '23 hours')"
+                        " from app.owner_replies r join app.inquiries i on i.id = r.inquiry_id where r.id = %s",
+                        (REPLY_WINDOW_HOURS, reply_id))
+            row = cur.fetchone()
+            cur.execute("select id, decision, payload, expires_at <= now() from app.approvals"
+                        " where proposal_action = 'reply:send' and target_id = %s", (target,))
+            proposal = cur.fetchone()
+        if row is None:
+            self._complete(t, "cancelled", "OWNER_REPLY_MISSING")
+            return "closed"
+        body, status, ext, open_window, expires = row
+
+        def mark(state: str):
+            with self.db.tx(t.bind) as cur:
+                cur.execute("update app.owner_replies set status = %s where id = %s", (state, reply_id))
+        if proposal is None:
+            with self.db.tx(t.bind) as cur:
+                cur.execute("select kind::text, payload, channel_external_id from app.webhook_events where external_event_id = %s",
+                            (ext,))
+                event = cur.fetchone()
+            to = addressee(event[0], event[1] or {}) if event else None
+            if not open_window or to is None or self.guard.verdict(body, "reply") == "block":
+                mark("refused")
+                self._complete(t, "cancelled", "OWNER_REPLY_" + ("WINDOW" if not open_window else "NO_ADDRESSEE" if to is None
+                                                                  else "GUARD"))
+                return "refused"
+            payload = reply_payload(event[0], event[2], to, body, ext, (event[1] or {}).get("email"), "owner")
+            with self.db.tx(t.bind) as cur:
+                cur.execute("insert into app.approvals (customer_id, scope, proposal_action, payload, requested_by_agent, target_id, expires_at)"
+                            " values (%s, 'customer', 'reply:send', %s, 'owner', %s, %s)", (t.customer_id, _json(payload), target, expires))
+                cur.execute("update app.owner_replies set status = 'proposed' where id = %s", (reply_id,))
+                cur.execute("select app.requeue_task(%s, %s, %s)", (t.id, t.token, self.poll))
+            return "proposed"                           # the owner confirms exactly this text and addressee in the portal
+        approval_id, decision, payload, expired = proposal
+        if decision == "pending" and not expired:
+            with self.db.tx() as cur:
+                cur.execute("select app.requeue_task(%s, %s, %s)", (t.id, t.token, self.poll))
+            return "awaiting_approval"
+        if decision != "approved":
+            mark("refused")
+            self._complete(t, "cancelled", "PROPOSAL_" + ("EXPIRED" if expired else str(decision).upper()))
+            return "closed"
+        with self.db.tx(t.bind) as cur:
+            cur.execute("select app.enqueue_outbox('reply.send', %s, %s, %s)", (_json(payload), approval_id, target))
+            outbox_id = cur.fetchone()[0]
+        outcome = self._dispatch(t, outbox_id)
+        mark("sent" if outcome == SENT else "failed")
+        self._complete(t, "succeeded" if outcome == SENT else "escalated", None if outcome == SENT else "SEND_" + outcome.upper())
+        return "sent" if outcome == SENT else outcome
+
     def _resend(self, t: Task, outbox_id: int) -> str:
         """The same dispatcher and claim as any send: the database refuses a row that is not pending again, and a
         second ambiguous result goes back to the operator."""
@@ -473,13 +556,7 @@ class Worker:
         else:
             d = decide(text, route, facts, self.guard, self.matcher.rules)
         def reply_to(body: str, topic: str) -> dict:
-            if source_kind == "whatsapp_cloud":
-                return {"phone_number_id": channel, "to": sender, "body": body, "in_reply_to": ext, "topic": topic}
-            if source_kind == "email":                  # back to the sender, in the same thread
-                return {"channel": "email", "account_id": channel, "to": sender, "subject": reply_subject((email or {}).get("subject")),
-                        "body": body, "in_reply_to": ext, "message_id": (email or {}).get("message_id"), "topic": topic}
-            return {"channel": source_kind, "account_id": channel, "to": sender, "body": body, "in_reply_to": ext,
-                    "topic": topic}                     # the same channel the customer wrote on (Messenger, Instagram Direct)
+            return reply_payload(source_kind, channel, sender, body, ext, email, topic)
         if d["action"] == "propose":
             reply = reply_to(d["body"], d["topic"])
             with self.db.tx(t.bind) as cur:

@@ -596,6 +596,36 @@ def main():
                     wait("complaint handled", lambda: (task_status(ac_ext) or ("queued",))[0] == "escalated")
                     check(not q("select 1 from app.approvals where target_id = %s", (f"ack:{ac_ext}",)),
                           "acknowledgement: never to a complaint")
+
+                    # the owner answers the customer from the portal (0034, 28.41): writes, confirms, sent once
+                    inq = q("select id from app.inquiries where customer_id = %s and event_ref = %s", (CUSTOMER, a_ext))
+                    answer = "نعم نوصل لحي حدة، والطلب يصل خلال ساعة."
+                    status, where, _ = portal(url, token, "POST", {"_path": "/portal/reply", "inquiry": str(inq[0][0]) if inq else "",
+                                                                   "body": answer, "csrf": csrf_token(token, JWT_SECRET)})
+                    check(status == 303 and where == "/portal?done=reply", "owner reply: the owner writes an answer in the portal")
+                    rid = q("select id from app.owner_replies where inquiry_id = %s", (inq[0][0],)) if inq else []
+                    prop = wait("owner reply proposed", lambda: q("select id, decision::text, payload from app.approvals where target_id = %s",
+                                                                  (f"owner:{rid[0][0]}" if rid else "-",)))
+                    check(bool(prop) and prop[0][1] == "pending" and prop[0][2]["body"] == answer and prop[0][2]["to"] == who,
+                          "owner reply: checked and proposed to the customer who wrote, waiting for the owner's confirmation")
+                    if prop:
+                        _, _, page = portal(url, token)
+                        check(answer in page, "owner reply: the portal shows exactly the text to confirm")
+                        portal(url, token, "POST", {"_path": "/portal/decide", "approval": str(prop[0][0]), "decision": "approved",
+                                                    "csrf": csrf_token(token, JWT_SECRET)})
+                        sent = wait("owner reply sent", lambda: q("select 1 from app.outbox where target_id = %s and dispatched_at is not null",
+                                                                  (f"owner:{rid[0][0]}",)))
+                        marked = wait("owner reply marked sent", lambda: q("select 1 from app.owner_replies where id = %s and status = 'sent'",
+                                                                           (rid[0][0],)))   # marked just after the send
+                        check(bool(sent) and bool(marked) and len(q("select 1 from app.outbox where target_id = %s",
+                                                                    (f"owner:{rid[0][0]}",))) == 1,
+                              "owner reply: confirmed, sent once through the outbox, marked sent")
+                    form_inq = q("select id from app.inquiries where customer_id = %s and source = 'site_form' order by received_at desc limit 1",
+                                 (CUSTOMER,))
+                    if form_inq:
+                        status, where, _ = portal(url, token, "POST", {"_path": "/portal/reply", "inquiry": str(form_inq[0][0]),
+                                                                       "body": "x", "csrf": csrf_token(token, JWT_SECRET)})
+                        check(where == "/portal?done=error", "owner reply: a site form cannot be answered from here (no channel)")
                 finally:
                     q(revoke, (OWNER, CUSTOMER), claims=owner_claims)
                 n_ext = f"wamid.E2E.{run}.ackn"                 # the grant revoked, the approved text still there

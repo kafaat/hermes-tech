@@ -1739,4 +1739,64 @@ do $$ declare r record; n bigint; bad text := ''; begin
 end $$;
 reset role;
 
+-- 63. the owner's answer (0034): an owner answers a message of their own business from the last 23 hours, on a
+--     channel that can be answered, as themselves; never another business's customer, an older message, a site form,
+--     and the only task they may queue is reply.owner for a reply of their own
+select set_config('request.jwt.claim.sub', '', true);
+insert into app.inquiries (id, customer_id, source, received_at, body, event_ref) values
+  ('63000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000a', 'whatsapp', now() - interval '1 hour', 'q63', 'wamid.63a'),
+  ('63000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-00000000000b', 'whatsapp', now() - interval '1 hour', 'q63b', 'wamid.63b'),
+  ('63000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-00000000000a', 'whatsapp', now() - interval '30 hours', 'old', 'wamid.63o'),
+  ('63000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-00000000000a', 'site_form', now() - interval '1 hour', 'f', 'form:63');
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111', 'aal1');
+set local role authenticated;
+do $$ declare r uuid; a constant uuid := '00000000-0000-0000-0000-00000000000a'; me constant uuid := '11111111-1111-1111-1111-111111111111';
+begin
+  insert into app.owner_replies (customer_id, inquiry_id, body, written_by)
+  values (a, '63000000-0000-0000-0000-00000000000a', 'reply 63', me) returning id into r;
+  insert into app.tasks (public_ref, customer_id, agent_id, kind, idempotency_key)
+  values ('t_63a', a, 'agent_triage', 'reply.owner', 'owner_reply:' || r);
+  begin
+    insert into app.owner_replies (customer_id, inquiry_id, body, written_by)
+    values ('00000000-0000-0000-0000-00000000000b', '63000000-0000-0000-0000-00000000000b', 'x', me);
+    raise exception 'FAIL an owner answered another business''s customer';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into app.owner_replies (customer_id, inquiry_id, body, written_by) values (a, '63000000-0000-0000-0000-00000000000b', 'x', me);
+    raise exception 'FAIL an owner answered through another business''s message';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into app.owner_replies (customer_id, inquiry_id, body, written_by) values (a, '63000000-0000-0000-0000-0000000000a2', 'x', me);
+    raise exception 'FAIL an answer outside the 23-hour window was accepted';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into app.owner_replies (customer_id, inquiry_id, body, written_by) values (a, '63000000-0000-0000-0000-0000000000a3', 'x', me);
+    raise exception 'FAIL an answer to a site form (no channel to answer on) was accepted';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into app.owner_replies (customer_id, inquiry_id, body, written_by)
+    values (a, '63000000-0000-0000-0000-00000000000a', 'x', '22222222-2222-2222-2222-222222222222');
+    raise exception 'FAIL an answer written in another user''s name was accepted';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into app.tasks (public_ref, customer_id, agent_id, kind, idempotency_key)
+    values ('t_63b', a, 'agent_triage', 'reply.owner', 'owner_reply:' || gen_random_uuid());
+    raise exception 'FAIL an owner queued a reply task for a reply that is not theirs';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into app.tasks (public_ref, customer_id, agent_id, kind, idempotency_key)
+    values ('t_63c', a, 'agent_triage', 'outbox.resend', 'resend:63:0');
+    raise exception 'FAIL an owner queued a task of another kind';
+  exception when insufficient_privilege then null;
+  end;
+  raise notice 'PASS the owner answers only their own customers, as themselves, inside the window, on a channel that can be answered';
+end $$;
+reset role;
+
 rollback;

@@ -111,11 +111,14 @@ class PortalDb:
                         " and (expires_at is null or expires_at > now()) order by requested_at", (ids,))
             approvals = [{"id": str(r[0]), "customer_id": str(r[1]), "action": r[2], "payload": r[3] or {},
                           "expires_at": r[4]} for r in cur.fetchall()]
-            cur.execute("select received_at, matched_category::text, owner_inquiry, body, message_type, source::text from app.inquiries"
+            cur.execute("select received_at, matched_category::text, owner_inquiry, body, message_type, source::text, id,"
+                        " case when received_at > now() - interval '23 hours' and event_ref is not null"
+                        "   and source::text in ('whatsapp', 'facebook', 'instagram', 'email')"
+                        "   then received_at + interval '23 hours' end from app.inquiries"
                         " where customer_id = any(%s::uuid[]) and received_at > now() - interval '7 days'"
                         " order by received_at desc limit 50", (ids,))
-            inquiries = [{"received_at": r[0], "category": r[1], "owner_inquiry": r[2], "body": r[3], "type": r[4], "source": r[5]}
-                         for r in cur.fetchall()]
+            inquiries = [{"received_at": r[0], "category": r[1], "owner_inquiry": r[2], "body": r[3], "type": r[4], "source": r[5],
+                          "id": str(r[6]), "reply_until": r[7]} for r in cur.fetchall()]
             cur.execute("select id, topic, fact, approved_by_owner, customer_id from app.kb_facts where customer_id = any(%s::uuid[])"
                         " order by approved_by_owner, topic limit 200", (ids,))
             facts = [{"id": str(r[0]), "topic": r[1], "fact": r[2], "approved": r[3], "customer_id": str(r[4])} for r in cur.fetchall()]
@@ -248,6 +251,22 @@ class PortalDb:
             cur.execute("insert into app.tasks (public_ref, customer_id, agent_id, kind, idempotency_key)"
                         " values ('t_' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 16), %s, 'agent_triage',"
                         " 'content.propose', %s)", (row[0], f"content:{content_id}"))
+            return True
+
+    def owner_reply(self, claims: dict, inquiry_id: str, body: str) -> bool:
+        """The owner's answer (0034): the policies refuse another business's message, one older than 23 hours, and a
+        channel that cannot be answered; the reply and its task are one transaction."""
+        with self.db.tx(claims=claims) as cur:
+            cur.execute("select customer_id from app.inquiries where id = %s", (inquiry_id,))
+            row = cur.fetchone()
+            if row is None:
+                return False
+            cur.execute("insert into app.owner_replies (customer_id, inquiry_id, body, written_by) values (%s, %s, %s, %s)"
+                        " returning id", (row[0], inquiry_id, body, claims["sub"]))
+            reply_id = cur.fetchone()[0]
+            cur.execute("insert into app.tasks (public_ref, customer_id, agent_id, kind, idempotency_key)"
+                        " values ('t_' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 16), %s, 'agent_triage',"
+                        " 'reply.owner', %s)", (row[0], f"owner_reply:{reply_id}"))
             return True
 
     def set_standing_pause(self, claims: dict, customer_id: str, paused: bool) -> bool:

@@ -27,6 +27,8 @@ An access token within five minutes of expiry, or expired, is replaced with the 
   POST /portal/standing/pause      customer=<id> paused=1|0 csrf=<token>   the one switch (0022): pause every instant reply
   POST /portal/notify/email        customer=<id> on=1|0 csrf=<token>       escalations by email to this login's address (0026)
   POST /portal/connect/tiktok      customer=<id> csrf=<token>               to TikTok's consent page with a signed state (28.30)
+  POST /portal/reply              inquiry=<id> body=<text> csrf=<token>     the owner's own answer to a customer of the last
+                                   23 hours (0034): checked, then shown above for the owner to confirm, then sent once
   GET  /portal/site               the owner's site as it would be published from the approved facts (28.39)
   GET  /portal/connect/tiktok/callback   code=... state=...                 TikTok sends the browser back: a "finish" button
   POST /portal/connect/tiktok/finish     code=... state=...                 exchange, seal, link (app.link_provider_account)
@@ -45,7 +47,7 @@ session's CSRF token. No script runs on these pages (Content-Security-Policy: sc
 is written through service.render, whose templates are checked at render time (claim A24).
 """
 from __future__ import annotations
-import hmac, logging, secrets, time
+import hmac, logging, re, secrets, time
 from typing import Protocol
 from urllib.parse import parse_qs, urlsplit
 
@@ -84,7 +86,8 @@ class StorePort(Protocol):
                     access_in: int, refresh_in: int) -> bool: ...
     def draft_post(self, claims: dict, kind: str, account_id: str, body: str, image_url: str | None) -> bool: ...
     def ops_overview(self, claims: dict) -> dict | None: ...
-    def site_preview(self, claims: dict) -> bytes | None: ...                # the built index.html, or None                 # None: not an operator in this session
+    def site_preview(self, claims: dict) -> bytes | None: ...                # the built index.html, or None
+    def owner_reply(self, claims: dict, inquiry_id: str, body: str) -> bool: ...   # the owner's answer, queued (0034)                 # None: not an operator in this session
     def resolve(self, claims: dict, outbox_id: str, resolution: str, reason: str) -> None: ...
 
 
@@ -148,6 +151,10 @@ REPORT_LINES = (("رسائل وصلت", "inquiries"), ("حسب القناة", No
                 ("فحوص المنافسين", "competitor_checks"))
 INQUIRIES_H = """<h2>رسائل الأيام السبعة الأخيرة ({{count}})</h2>"""
 INQUIRY = """<div class="card"><div class="meta">{{when}} · {{category}}{{flag}}</div><div class="body">{{body}}</div></div>"""
+INQUIRY_REPLY = """<div class="card"><div class="meta">{{when}} · {{category}}{{flag}}</div><div class="body">{{body}}</div>
+<form method="post" action="/portal/reply"><input type="hidden" name="inquiry" value="{{id}}"><input type="hidden" name="csrf" value="{{csrf}}">
+<textarea name="body" aria-label="ردك على الزبون" rows="2" maxlength="1000" required style="width:100%;box-sizing:border-box"></textarea>
+<button>اكتب ردك</button><span class="meta"> يُفحص ثم تؤكد إرساله؛ متاح حتى {{until}}</span></form></div>"""
 COMPETITORS_H = """<h2>منافسوك ({{count}})</h2><p class="meta">فحص أسبوعي لما ينشره موقع المنافس من قائمة وأسعار وساعات وتقييم.</p>"""
 COMPETITOR = """<div class="card"><div class="meta">{{label}} · {{when}} · {{state}}</div><div class="body">{{summary}}</div></div>"""
 SNAPSHOT_STATE = {"ok": "تمت المتابعة", "unverifiable": "لا متابعة آلية", "blocked": "الموقع يمنع الفحص", None: "لم يُفحص بعد"}
@@ -224,6 +231,7 @@ STAGING_OPERATOR = """<div class="card"><p class="meta">مشغّل بيئة ال
 AUTH_FAILED = {"invalid": "الرمز غير صحيح أو انتهت صلاحيته.", "rate_limited": "محاولات كثيرة. انتظر دقيقة ثم أعد المحاولة.",
                "unavailable": "خدمة الدخول لا تستجيب الآن. أعد المحاولة بعد قليل."}
 MESSAGES = {"approved": "تمت الموافقة. يُرسل الرد خلال دقيقة.", "rejected": "رُفض المقترح ولن يُرسل.",
+            "reply": "استلمنا ردك: يُفحص الآن ثم يظهر أعلاه لتؤكد إرساله إلى الزبون.",
             "fact": "اعتُمدت المعلومة.", "standing_on": "سيُرسل هذا الرد فورًا لكل من يسأل عنه، حتى توقفه.",
             "standing_off": "أُوقف الإرسال الفوري لهذا الموضوع: ستعود الردود إليك للموافقة.",
             "post": "استلمنا المنشور: يُفحص الآن ثم يظهر أعلاه لتوافق عليه قبل نشره.",
@@ -470,6 +478,11 @@ class Portal:
             if route == "/portal/facts/standing" and form.get("on") in ("1", "0"):
                 ok = self.store.set_standing(claims, form.get("fact", ""), form["on"] == "1")
                 return self._redirect("/portal?done=" + (("standing_on" if form["on"] == "1" else "standing_off") if ok else "gone"))
+            if route == "/portal/reply":                # the owner's own answer to a customer (0034, spec 28.41)
+                body = (form.get("body") or "").strip()
+                ok = 0 < len(body) <= 1000 and bool(re.fullmatch(r"[0-9a-f-]{36}", form.get("inquiry", ""))) \
+                    and self.store.owner_reply(claims, form["inquiry"], body)
+                return self._redirect("/portal?done=" + ("reply" if ok else "error"))
             if route == "/portal/facts/approve":
                 ok = self.store.approve_fact(claims, form.get("fact", ""))
                 return self._redirect("/portal?done=" + ("fact" if ok else "gone"))
@@ -691,9 +704,12 @@ class Portal:
                 out.append(REPORT_CLOSE)
         out.append(_r(INQUIRIES_H, count=len(data["inquiries"])))
         for q in data["inquiries"]:
-            out.append(_r(INQUIRY, when=_when(q["received_at"]), category=CATEGORY_AR.get(q["category"] or "", "بلا تصنيف"),
-                          flag=" · سؤال لك" if q["owner_inquiry"] else "",
-                          body=_inquiry_body(q)))
+            fields = dict(when=_when(q["received_at"]), category=CATEGORY_AR.get(q["category"] or "", "بلا تصنيف"),
+                          flag=" · سؤال لك" if q["owner_inquiry"] else "", body=_inquiry_body(q))
+            if q.get("reply_until") and q.get("id"):    # inside the 24-hour window, on a channel that can be answered
+                out.append(_r(INQUIRY_REPLY, id=q["id"], csrf=csrf, until=_when(q["reply_until"]), **fields))
+            else:
+                out.append(_r(INQUIRY, **fields))
         comps = data.get("competitors", [])
         if comps:
             out.append(_r(COMPETITORS_H, count=len(comps)))

@@ -2,6 +2,7 @@
 every value escaped. The database path (owner session, policies, the decision reaching the outbox) runs in
 db/tests/e2e_pilot.py against Postgres."""
 import base64, hashlib, hmac, json, sys, unittest
+from urllib.parse import urlencode
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -230,6 +231,35 @@ class TestPortal(unittest.TestCase):
         self.assertIn("<tr><td>وسيط وقت قرارك</td><td>9 دقيقة</td><td>—</td></tr>", page)
         self.assertIn("<tr><td>ردود فورية بموافقتك الدائمة</td><td>3</td><td>0</td></tr>", page)
         self.assertNotIn("تقرير الشهر", portal().handle("GET", "/portal", cookie(sign(GOOD)), b"")[2].decode())
+
+    def test_the_owner_answers_a_recent_message_and_only_with_a_bounded_text(self):
+        class Store(FakeStore):
+            def overview(self, claims):
+                data = FakeStore.overview(self, claims)
+                data["inquiries"][0].update(id="6a000000-0000-0000-0000-00000000000a",
+                                            reply_until=datetime(2026, 10, 1, 9, tzinfo=timezone.utc))
+                return data
+
+            def owner_reply(self, claims, inquiry_id, body):
+                self.calls.append(("reply", claims["sub"], inquiry_id, body))
+                return True
+        store = Store()
+        tok = sign(GOOD)
+        page = portal(store).handle("GET", "/portal", cookie(tok), b"")[2].decode()
+        self.assertIn('action="/portal/reply"', page)
+        self.assertIn('value="6a000000-0000-0000-0000-00000000000a"', page)
+        form = lambda body: urlencode({"inquiry": "6a000000-0000-0000-0000-00000000000a", "body": body,
+                                       "csrf": csrf_token(tok, SECRET)}).encode()
+        status, headers, _ = portal(store).handle("POST", "/portal/reply", {**cookie(tok), "Origin": "https://hermes.example"},
+                                                  form("نعم عندنا توصيل"))
+        self.assertEqual((status, dict(headers)["Location"]), (303, "/portal?done=reply"))
+        self.assertEqual(store.calls[-1], ("reply", GOOD["sub"], "6a000000-0000-0000-0000-00000000000a", "نعم عندنا توصيل"))
+        for body in ("", "x" * 1001):
+            status, headers, _ = portal(store).handle("POST", "/portal/reply", {**cookie(tok), "Origin": "https://hermes.example"},
+                                                      form(body))
+            self.assertEqual(dict(headers)["Location"], "/portal?done=error")
+        self.assertEqual(len([c for c in store.calls if c[0] == "reply"]), 1)
+        self.assertNotIn('action="/portal/reply"', portal().handle("GET", "/portal", cookie(tok), b"")[2].decode())
 
     def test_the_owner_previews_the_site_built_from_approved_facts(self):
         class Store(FakeStore):

@@ -33,6 +33,8 @@
 | المرحلة الثانية لرصد الشكاوى | `HERMES_MODEL=live`، `HERMES_OPENAI_API_KEY` (مفتاح مشروع بسقف إنفاق شهري) | OpenAI | 28.37 |
 | واجهة المشغّل (hermes) | لا متغير جديد: تعمل متى ضُبط دخول المالك. يدخل المشغّل من جهازه بـ `python -m cli.hermes login` | — | 28.35 |
 
+**staging وحده:** `HERMES_BUILD_AUTO_ACTIVATE=staging` و`HERMES_BUILD_GENERATION=auto` على hermes-app، ومعهما `HERMES_GRAPH=simulate`. كل نشر يفعّل نفسه بالجيل التالي (28.38). في الإنتاج لا يُضبطان: جيل رقمي وتفعيل يدوي كما في README.
+
 `HERMES_MODEL`: دونه لا يُستدعى أي نموذج، والكلمات المفتاحية وحدها تصنّف. `simulate` لـ staging وCI. `live` يحتاج المفتاح، ولا يبدأ دونه. قبل `live`: سقف إنفاق في حساب OpenAI، وقراءة صفحة النموذج في وثائق OpenAI لتأكيد شكل الطلب (28.37).
 
 `HERMES_TOKEN_KEYS`: مفتاح أو أكثر، كل منها 32 بايتًا بترميز base64، مفصولة بفواصل والأحدث أولًا. يولَّد بـ `python3 -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())"`، ولا يُحفظ إلا في متغيرات الخدمة.

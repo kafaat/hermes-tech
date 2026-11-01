@@ -2,7 +2,7 @@ import unittest
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from service.build_identity import build_identity
+from service.build_identity import build_identity, staging_auto
 
 class BuildIdentityTests(unittest.TestCase):
     def test_exact_identity(self):
@@ -12,6 +12,29 @@ class BuildIdentityTests(unittest.TestCase):
         for commit, generation in [('', '1'), ('abcd', '1'), ('a'*40, ''), ('a'*40, '0'), ('a'*40, '-1'), ('a'*40, '9223372036854775808')]:
             with self.subTest(commit=commit, generation=generation), self.assertRaises(ValueError):
                 build_identity({'RAILWAY_GIT_COMMIT_SHA': commit, 'HERMES_BUILD_GENERATION': generation})
+
+    def test_auto_generation_is_staging_only(self):
+        c = {'RAILWAY_GIT_COMMIT_SHA': 'B'*40, 'HERMES_BUILD_GENERATION': 'auto'}
+        self.assertEqual(build_identity({**c, 'HERMES_BUILD_AUTO_ACTIVATE': 'staging', 'HERMES_GRAPH': 'simulate'}), ('b'*40, None))
+        self.assertFalse(staging_auto({}))
+        for extra in [{}, {'HERMES_BUILD_AUTO_ACTIVATE': 'staging', 'HERMES_GRAPH': 'live'},
+                      {'HERMES_BUILD_AUTO_ACTIVATE': 'staging'}, {'HERMES_BUILD_AUTO_ACTIVATE': 'yes', 'HERMES_GRAPH': 'simulate'}]:
+            with self.subTest(extra=extra), self.assertRaises(ValueError):
+                build_identity({**c, **extra})
+        with self.assertRaises(ValueError):
+            build_identity({'RAILWAY_GIT_COMMIT_SHA': 'abc', 'HERMES_BUILD_GENERATION': 'auto',
+                            'HERMES_BUILD_AUTO_ACTIVATE': 'staging', 'HERMES_GRAPH': 'simulate'})
+
+    def test_staging_auto_cli_names_the_commit_or_refuses(self):
+        import subprocess
+        root = Path(__file__).resolve().parents[1]
+        base = {'RAILWAY_GIT_COMMIT_SHA': 'C'*40, 'HERMES_BUILD_AUTO_ACTIVATE': 'staging'}
+        p = subprocess.run([sys.executable, '-m', 'service.build_identity', '--staging-auto'], env={**base, 'HERMES_GRAPH': 'simulate'},
+                           cwd=root, capture_output=True, text=True)
+        self.assertEqual((p.returncode, p.stdout.strip()), (0, 'c'*40), p.stderr)
+        for env in [{**base, 'HERMES_GRAPH': 'live'}, {'RAILWAY_GIT_COMMIT_SHA': 'c'*40, 'HERMES_GRAPH': 'simulate'}]:
+            p = subprocess.run([sys.executable, '-m', 'service.build_identity', '--staging-auto'], env=env, cwd=root, capture_output=True)
+            self.assertNotEqual(p.returncode, 0)
 
     def test_rollout_cli_refuses_default_and_invalid_identity(self):
         import subprocess

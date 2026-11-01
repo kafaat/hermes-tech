@@ -170,9 +170,10 @@ def start_app():
     secret = uuid.uuid4().hex
     generation = q("select coalesce(max(generation), 0) + 1 from app.service_build")[0][0]
     commit = "e" * 40
-    q("select app.activate_service_build(%s, %s)", (commit, generation))
+    q("select app.activate_service_build(%s, %s)", (commit, generation))   # what staging's pre-deploy step does (28.38);
+                                                                            # the app reads the generation back
     env = {**os.environ, "HERMES_WEBHOOK_SECRETS": secret, "HERMES_GRAPH": "simulate", "PORT": str(port),
-           "RAILWAY_GIT_COMMIT_SHA": commit, "HERMES_BUILD_GENERATION": str(generation),
+           "RAILWAY_GIT_COMMIT_SHA": commit, "HERMES_BUILD_GENERATION": "auto", "HERMES_BUILD_AUTO_ACTIVATE": "staging",
            "HERMES_MONITOR_TOKEN": MONITOR_TOKEN, "HERMES_JWT_SECRET": JWT_SECRET,
            "HERMES_APPROVAL_POLL_SECONDS": "1", "HERMES_VERIFY_TOKEN": "e2e", "HERMES_MODEL": "simulate", "HERMES_EMAIL_INBOUND_SECRETS": EMAIL_SECRET}
     proc = subprocess.Popen([sys.executable, "-m", "service.app"], cwd=ROOT, env=env)

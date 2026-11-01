@@ -48,6 +48,15 @@ for f in db/migrations/*.sql; do
   PGOPTIONS="-c role=hermes_owner" db -f "$f"      # db() appends client_min_messages
   db -c "insert into public.schema_migrations (name) values ('$name')"
 done
+if [ "${MIGRATE_ONLY:-}" = 1 ] && [ -n "${HERMES_BUILD_AUTO_ACTIVATE:-}" ]; then
+  # Staging only (spec 28.38): this build becomes the one authority with the next generation, still under the lock,
+  # as the deployment owner; the process reads the generation back (HERMES_BUILD_GENERATION=auto). Production: README.
+  commit=$(python3 -m service.build_identity --staging-auto)
+  PGOPTIONS="-c role=hermes_owner" db -v c="$commit" <<'SQL'
+select app.activate_service_build(:'c', coalesce((select generation from app.service_build where id = 1), 0) + 1);
+SQL
+  echo "build: $commit activated, generation $(db -tAc "select generation from app.service_build where id = 1") (staging)"
+fi
 exec 9>&-; wait "$lock_pid" 2>/dev/null || true       # released: the next runner finds every migration recorded
 
 if [ "${MIGRATE_ONLY:-}" = 1 ]; then echo "migrations: up to date"; exit 0; fi   # hermes-app pre-deploy

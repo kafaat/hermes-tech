@@ -40,13 +40,13 @@
 | مخططات JSON والعقود والفهرس والسياسات | 34 فحصًا ناجحًا من 34 | tools/validate.py · الطبقة 1 |
 | قواعد الاتساق المنطقي والسياسة الإحصائية ومعجم الإخفاقات | 136 فحصًا ناجحًا من 136 | tools/validate.py · الطبقة 2 |
 | الحالة النهائية لقاعدة البيانات بعد كل الترحيلات (فحص ثابت) | 276 فحصًا ناجحًا من 276 | tools/validate.py · الطبقة 3 · tools/sql_state.py |
-| الاختبارات الآلية | 396 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
+| الاختبارات الآلية | 398 اختبارًا | python -m unittest discover -s tests (الجرد في 15.2) |
 | حارس المحتوى على المجموعة الذهبية | 10/10 حكمًا مطابقًا | tools/run_evals.py |
 | رصد الشكاوى بالكلمات وحدها (مجموعة تطوير 20 شكوى) | استدعاء 13/20 = 65% | tools/run_evals.py · تقرير لا حكم قبول |
 | سلسلة التوريد | 0 fail · 0 warn | tools/check_supply_chain.py (15.5 و16) |
 | حالات SQL على Postgres فعلي | 62 حالة و73 إشعار نجاح مكتوبة؛ **لم يُنفَّذ أي منها هنا** | CI: run_isolation.sh وثلاثة سكربتات سباق |
 
-المجموع: 446/446 فحصًا ناجحًا في أداة التحقق، و396 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
+المجموع: 446/446 فحصًا ناجحًا في أداة التحقق، و398 اختبارًا. هذا الجدول مولّد (tools/check_spec.py)؛ لا يُعدَّل يدويًا.
 <!-- /gen:status -->
 
 ### وسوم المصدر
@@ -165,7 +165,7 @@ hermes-tech/
 ├── policies/             acceptance_policy.json · acceptance_policy.schema.json · complaint_keywords.json · complaint_keywords.schema.json · content_rules.json · content_rules.schema.json · fetch_policy.json
 ├── db/migrations/        0001 · 0002 · 0003 · 0004 · 0005 · 0006 · 0007 · 0008 · 0009 · 0010 · 0011 · 0012 · 0013 · 0014 · 0015 · 0016 · 0017 · 0018 · 0019 · 0020 · 0021 · 0022 · 0023 · 0024 · 0025 · 0026 · 0027 · 0028 · 0029 · 0030 · 0031 · 0032   (32 files)
 ├── db/local/             0000_supabase_shim.sql   (plain Postgres testing only; creates the plain owner hermes_owner)
-├── db/tests/             build_fence.sql · concurrency_build_fence.py · concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · ops_cli_pg.py · outbox_operator_retry.sql · rls_isolation_test.sql · run_isolation.sh · run_local.sh
+├── db/tests/             build_fence.sql · concurrency_build_fence.py · concurrency_lease.sh · concurrency_outbox.sh · concurrency_reserve.sh · e2e_pilot.py · ops_cli_pg.py · outbox_operator_retry.sql · rls_isolation_test.sql · run_isolation.sh · run_local.sh · staging_auto_activation.py
 ├── tools/                acceptance.py · admission.py · anonymize.py · audit_checkpoint.py · build_manifest.py · check_claims.py · check_spec.py · check_supply_chain.py · complaints.py · content_guard.py · derive.py · enforce.py · export_ops_summary.py · gate_guard.py · run_evals.py · safe_fetch.py · sql_state.py · stats.py · triage.py · validate.py · validate_schema.py
 ├── service/              __init__.py · app.py · auth.py · build_identity.py · competitor.py · crawler.py · dispatcher.py · email_inbound.py · health.py · jobs.py · jwks.py · media_policy.py · model.py · ops_api.py · ops_store.py · outbox_model.py · pg.py · portal.py · qr.py · redact.py · render.py · site_form.py · site_seo.py · structured.py · supabase_auth.py · telemetry.py · tiktok_oauth.py · token_box.py · webhook.py · worker.py
 ├── tests/                48 modules (inventory in §15.2)
@@ -1018,7 +1018,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_safe_fetch | حارس SSRF: البيانات الوصفية والشبكات الخاصة وIPv6 الحامل لـ IPv4 وإعادة التوجيه | 7 |
 | test_service_boundaries | مسار واحد لكل ضمان: الزاحف وحده يفتح اتصالًا، لا إدراج HTML خام، لا حلقة إعادة في الموزّع | 5 |
 | test_service_build_authority | تفعيل إصدار معتمد وجيل متزايد؛ حجز ذري يرفض العامل القديم | 4 |
-| test_service_build_identity | رفض هوية إصدار أو جيل مفقود أو غير صالح | 4 |
+| test_service_build_identity | رفض هوية إصدار أو جيل مفقود أو غير صالح | 6 |
 | test_service_competitor | فحص المنافسين اليومي: المستحقّون، والحالات الثلاث (حقائق، بلا بيانات منظمة، محجوب)، والفرق المحسوب | 10 |
 | test_service_crawler | الزاحف: العنوان المثبّت، إعادة الحل لكل قفزة، الوكيل الوسيط من البيئة، robots وصفحات الدخول والحجم | 15 |
 | test_service_dispatcher | الموزّع: الغامض لا يُعاد، قبل الإرسال يُحرَّر، الرفض نهائي، مطابقة رموز الآلة للترحيل 0010 | 19 |
@@ -1047,7 +1047,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | test_supply_chain | غياب CODEOWNERS فشل، pull_request_target فشل، والتعليقات لا تُعدّ إجراءات | 4 |
 | test_triage | المرحلة الثانية تضيف ولا تلغي، العتبة، استفسارات المالك | 5 |
 | test_validator_negative | اختبارات طفرات: يُدخل كل عيب وُجد في المراجعات ويتأكد أن المتحقق يرفضه | 13 |
-| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **396** |
+| **المجموع** | يُحسب من اكتشاف الاختبارات لا يُكتب | **398** |
 <!-- /gen:tests -->
 
 ### 15.3 العيوب التي تمنعها اختبارات الطفرات
@@ -1295,7 +1295,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 ### 21.3 شروط ما قبل التجربة (مولّدة منذ 1.8)
 
 <!-- gen:conditions -->
-قائمة مولّدة من docs/claims.yaml (كل ادعاء قراره fix_before_pilot) وحالته المحسوبة الآن. «في CI فقط» تعني أن الاختبار مكتوب ولم يُشغَّل؛ الشرط الأول مشترك بينها كلها: أول تشغيل ناجح لمهمة database على Postgres فعلي يغطي 71 ادعاءً بجزء إنتاجي ينتظر CI، ومنها كل حالات السلطة والعزل.
+قائمة مولّدة من docs/claims.yaml (كل ادعاء قراره fix_before_pilot) وحالته المحسوبة الآن. «في CI فقط» تعني أن الاختبار مكتوب ولم يُشغَّل؛ الشرط الأول مشترك بينها كلها: أول تشغيل ناجح لمهمة database على Postgres فعلي يغطي 72 ادعاءً بجزء إنتاجي ينتظر CI، ومنها كل حالات السلطة والعزل.
 
 | الادعاء | الشرط | الحالة الآن |
 | --- | --- | --- |
@@ -1330,6 +1330,7 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 | P22 | أوامر المشغّل عبر hermes بجلسته الموثقة بعامل ثانٍ دون اعتماد قاعدة البيانات على جهازه، وكل كتابة تُسجَّل في التدقيق بسببها في المعاملة نفسها، والدور يحدد الأمر | متحقق هنا + ينتظر CI |
 | P23 | التقرير الشهري في البوابة يُعدّ من صفوف المنشأة نفسها في جلسة المالك، الشهر الجاري بجانب السابق، بلا تقدير | متحقق هنا + ينتظر CI |
 | P24 | نداء النموذج يحجز ميزانيته ويسأل الدائرة قبله ويسوّي التكلفة ويسجّل النداء بلا نص بعده، والمرحلة الثانية تضيف تصعيدًا فقط وكل فشل يترك نتيجة الكلمات | متحقق هنا + ينتظر CI |
+| P25 | التفعيل الآلي للإصدار في staging وحده: يُرفض حيث Graph حي، وكل نشر يأخذ جيلًا أعلى بدور المالك، والإصدار غير المفعّل لا يُقلع | متحقق هنا + ينتظر CI |
 | P3 | سعر واتساب لليمن وترخيص صور FLUX التجاري مؤكدان كتابيًا | إجرائي |
 
 خارج المصفوفة ولا يُولَّد: اختبار القبول للشكاوى ليس شرطًا للتجربة بل لأي سياسة إرسال دون موافقة لكل رد (22.2).
@@ -1702,14 +1703,14 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 <!-- gen:claims -->
 | الحالة | العدد |
 | --- | --- |
-| متحقق هنا | 55 |
+| متحقق هنا | 56 |
 | في CI فقط | 43 |
 | بنيوي فقط | 4 |
 | تشغيل مسجّل | 1 |
 | إجرائي | 4 |
-| **المجموع** | **107** |
+| **المجموع** | **108** |
 
-منها 71 بجزء إنتاجي ينتظر أول تشغيل في CI. ادعاءات بقرار «مقبول» معلن لا تحجب الإصدار: C9.4، A26، A35؛ منها A35 حد ثقة مسمّى (27.5) لا نقص تنفيذ.
+منها 72 بجزء إنتاجي ينتظر أول تشغيل في CI. ادعاءات بقرار «مقبول» معلن لا تحجب الإصدار: C9.4، A26، A35؛ منها A35 حد ثقة مسمّى (27.5) لا نقص تنفيذ.
 <!-- /gen:claims -->
 
 ### 27.7 ما بقي مفتوحًا
@@ -2445,6 +2446,30 @@ derived/alerts.yaml يُولَّد من الأهداف ومن العقود: قا
 **التحقق:** tests/test_service_model.py: الترتيب، والسقوف، والدائرة، والفشل، والجواب المشوّه، وشكل الطلب الحي، وغياب النص. وفي e2e_pilot الخطوة 2ب: شكوى بصيغة سؤال عن الساعات تُصعَّد بفئتها ولا يُقترح لها رد، بنداء واحد مسجّل ومُسوّى. الادعاء P24.
 
 **ما لم يُبنَ:** عتبة 30% ونسبة الاستدعاء الحقيقية تُقاسان في اختبار القبول على رسائل حقيقية (9.5)، لا هنا. نجاح المحاكاة يثبت التوصيل لا جودة النموذج. بقية الوكلاء لم تُستدعَ بعد.
+
+### 28.38 staging بعد توقف 31 أكتوبر، والتفعيل الآلي للإصدار فيه
+
+**ما حدث:**
+- في 31 أكتوبر 04:05 UTC أُزيلت كل نشرات staging، ومعها Postgres. بقيت وحدة التخزين.
+- في 1 نوفمبر أُعيد Postgres والمهام المجدولة، ونُفّذ انتقال 0031 المنسّق: الإصدار 9f6a6fd بالجيل 1.
+- الاختبار الشامل على staging نجح كله إلا فحص `/deps`، لأن المحو اليومي فاته أثناء التوقف.
+- بعد 25 دقيقة أُزيلت كل النشرات مرة أخرى. **السبب، بتأكيد المالك: نفاد رصيد Railway.** وهو على الأرجح سبب 5 أكتوبر أيضًا. لا خلل في الشيفرة.
+
+**الفجوة التي كشفها الانتقال:** بعد 0031 يحتاج كل نشر جيلًا أكبر وتفعيلًا بدور المالك (28.29). staging ينشر مع كل دفع إلى main، فكان عامله سيتوقف عن الحجز بعد كل دفع حتى يُفعَّل يدويًا. وكان الاختبار الشامل سيفشل.
+
+**البناء:**
+- `HERMES_BUILD_AUTO_ACTIVATE=staging` مع `HERMES_BUILD_GENERATION=auto` على hermes-app.
+- تفعّل خطوة ما قبل النشر (`ops/railway/migrate.sh` بـ`MIGRATE_ONLY=1`) الإصدار الجديد بالجيل التالي، بدور المالك وتحت قفل الترحيلات.
+- يقرأ التطبيق جيل إصداره من `app.service_build`. إن لم يكن إصداره هو المفعّل رفض الإقلاع، ولا يبقى حيًّا بلا سلطة.
+- **حدوده:**
+  - يُرفض حيث `HERMES_GRAPH` ليس `simulate`، فلا يصل الإنتاج.
+  - إعادة نشر الإصدار نفسه تأخذ جيلًا جديدًا، فلا تبقى للحاوية القديمة سلطة.
+  - التفعيل بدور المالك في خطوة النشر، لا عند تسجيل العامل، فقاعدة 28.29 باقية.
+
+**التحقق:**
+- tests/test_service_build_identity.py: الرفض خارج staging.
+- db/tests/staging_auto_activation.py في CI على Postgres: الرفض مع Graph حي، والجيل 1 ثم 2 ثم 3، وقراءة الجيل، ورفض الإصدار السابق.
+- e2e_pilot يُقلع التطبيق بهذا الوضع. الادعاء P25.
 
 ## الملحق أ · رموز الأخطاء
 

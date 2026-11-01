@@ -207,6 +207,17 @@ def make_http_handler(webhook: Handler, verify_token: str, monitor: Database | N
     return H
 
 
+def active_generation(db, commit: str) -> int:
+    """HERMES_BUILD_GENERATION=auto (staging only, spec 28.38): the generation the pre-deploy step activated for this
+    very commit. Another commit active means this build was not activated: refuse to start rather than sit fenced."""
+    with db.tx() as cur:
+        cur.execute("select generation from app.service_build where id = 1 and commit = %s and generation > 0", (commit,))
+        row = cur.fetchone()
+    if row is None:
+        raise RuntimeError("staging auto-activation: this build is not the active one (did the pre-deploy step run?)")
+    return int(row[0])
+
+
 def ops_from_env(env, url: str, secret: str, keys):
     """The operator API (service/ops_api.py) when sessions can be verified; its staging login exactly where the
     portal's is allowed (HERMES_GRAPH=simulate, a login code and a staging operator)."""
@@ -247,6 +258,8 @@ def main():
         tiktok_tokens = TikTokTokens(Database(url, "hermes_worker"), box, tiktok) if tiktok is not None else None
         adapters = adapters_for(os.environ, tiktok_tokens)
         worker_db = Database(url, "hermes_worker")
+        if generation is None:                                 # staging: the pre-deploy step activated this build (28.38)
+            generation = active_generation(worker_db, build)
         triage = triage_from_env(os.environ, worker_db)        # a half model configuration refuses to start
     except (RuntimeError, ValueError) as exc:
         sys.exit(str(exc))

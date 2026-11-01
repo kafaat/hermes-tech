@@ -30,5 +30,9 @@
 | ربط تيك توك | `HERMES_TIKTOK_CLIENT_KEY`، `HERMES_TIKTOK_CLIENT_SECRET`، `HERMES_TIKTOK_REDIRECT_URI` (`https://<التطبيق>/portal/connect/tiktok/callback`)، `HERMES_TOKEN_KEYS` | TikTok for Developers (صلاحية `video.publish`) | 28.30 |
 | خصوصية تيك توك | `HERMES_TIKTOK_PRIVACY` (الافتراضي `SELF_ONLY` حتى تراجع تيك توك التطبيق) | — | 28.23 |
 | المراقبة | `HERMES_MONITOR_TOKEN`، وفي GitHub: `HERMES_DEPS_URL` و`HERMES_MONITOR_TOKEN` | — | 28.15 |
+| المرحلة الثانية لرصد الشكاوى | `HERMES_MODEL=live`، `HERMES_OPENAI_API_KEY` (مفتاح مشروع بسقف إنفاق شهري) | OpenAI | 28.37 |
+| واجهة المشغّل (hermes) | لا متغير جديد: تعمل متى ضُبط دخول المالك. يدخل المشغّل من جهازه بـ `python -m cli.hermes login` | — | 28.35 |
+
+`HERMES_MODEL`: دونه لا يُستدعى أي نموذج، والكلمات المفتاحية وحدها تصنّف. `simulate` لـ staging وCI. `live` يحتاج المفتاح، ولا يبدأ دونه. قبل `live`: سقف إنفاق في حساب OpenAI، وقراءة صفحة النموذج في وثائق OpenAI لتأكيد شكل الطلب (28.37).
 
 `HERMES_TOKEN_KEYS`: مفتاح أو أكثر، كل منها 32 بايتًا بترميز base64، مفصولة بفواصل والأحدث أولًا. يولَّد بـ `python3 -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())"`، ولا يُحفظ إلا في متغيرات الخدمة.

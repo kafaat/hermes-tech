@@ -10,6 +10,7 @@ The driver speaks only the outside interfaces: signed webhooks over HTTP, and th
 check each step. Seeding is idempotent and uses a fixed staging tenant; every run uses fresh message ids.
   1. a question with an approved answer  -> inquiry, reply proposal (pending), task waiting
   2. a complaint                          -> escalated to the owner (notify.owner sent), NO reply proposal
+  2b. a complaint phrased as a question   -> stage 2 (agent_triage, simulated) escalates it; one budgeted call logged
   3. redelivery of the same webhook       -> 200, no second event or task
   4. a bad signature                      -> 401, nothing stored
   5. the owner approves IN THE PORTAL     -> signed in with a session token, sees the proposal (another user does
@@ -173,7 +174,7 @@ def start_app():
     env = {**os.environ, "HERMES_WEBHOOK_SECRETS": secret, "HERMES_GRAPH": "simulate", "PORT": str(port),
            "RAILWAY_GIT_COMMIT_SHA": commit, "HERMES_BUILD_GENERATION": str(generation),
            "HERMES_MONITOR_TOKEN": MONITOR_TOKEN, "HERMES_JWT_SECRET": JWT_SECRET,
-           "HERMES_APPROVAL_POLL_SECONDS": "1", "HERMES_VERIFY_TOKEN": "e2e", "HERMES_EMAIL_INBOUND_SECRETS": EMAIL_SECRET}
+           "HERMES_APPROVAL_POLL_SECONDS": "1", "HERMES_VERIFY_TOKEN": "e2e", "HERMES_MODEL": "simulate", "HERMES_EMAIL_INBOUND_SECRETS": EMAIL_SECRET}
     proc = subprocess.Popen([sys.executable, "-m", "service.app"], cwd=ROOT, env=env)
     return f"http://127.0.0.1:{port}", secret, proc
 
@@ -250,6 +251,29 @@ def main():
         inq = q("select matched_category::text from app.inquiries where customer_id = %s and body in (%s, %s)",
                 (CUSTOMER, "متى تفتحون اليوم؟", "الفاتورة غلط ودفعت مرتين"))
         check("pricing" in {r[0] for r in inq}, "inquiries recorded with the matched category")
+
+        # 2b. stage 2 of complaint detection (spec 9.6, 28.37): an hours question that is really a complaint the keyword
+        #     list misses goes to the owner, never to a reply; agent_triage's call is budgeted and logged, text-free.
+        #     Staging runs HERMES_MODEL=simulate as CI does; without it (an older deployment) the step says so.
+        p_ext = f"wamid.E2E.{run}.p"
+        post(url, secret, message_payload({"contacts": [{"wa_id": "967700000004"}], "messages": [
+            {"from": "967700000004", "id": p_ext, "type": "text", "text": {"body": "متى تفتحون؟ الأكل وصل بارد والطلب ناقص"}}]}))
+        done = wait("paraphrased complaint handled", lambda: (task_status(p_ext) or ("queued",))[0] not in ("queued", "running"))
+        calls = q("select k.outcome::text, k.cost_usd, k.tokens_in from app.agent_calls k join app.tasks t on t.id = k.task_id"
+                  " where t.idempotency_key = %s and k.agent_id = 'agent_triage'", (f"wh:whatsapp_cloud:{p_ext}",))
+        if calls or not os.environ.get("HERMES_APP_URL"):
+            check(bool(wait("paraphrase escalated", lambda: (task_status(p_ext) or ("",))[0] == "escalated"))
+                  and not q("select 1 from app.approvals where target_id = %s", (p_ext,)),
+                  "stage 2: a complaint the keywords miss is escalated, no reply proposed")
+            check(bool(q("select 1 from app.inquiries where customer_id = %s and event_ref = %s and matched_category = 'quality'",
+                         (CUSTOMER, p_ext[:200]))), "stage 2: the inquiry carries the classifier's category")
+            check(len(calls) == 1 and calls[0][0] == "success" and calls[0][1] > 0 and calls[0][2] > 0,
+                  f"stage 2: one agent_triage call, budgeted and logged {calls}")
+            spent = q("select spent_usd, reserved_usd from app.agent_state where customer_id = %s and agent_id = 'agent_triage'"
+                      " and month_id = to_char(now() at time zone 'UTC', 'YYYY-MM')", (CUSTOMER,))
+            check(bool(spent) and spent[0][0] > 0 and spent[0][1] == 0, f"stage 2: spent settled, nothing left reserved {spent}")
+        else:
+            print(f"INFO stage 2 not configured on this service (HERMES_MODEL unset): {bool(done)}", flush=True)
         check(q("select count(*) from app.inquiries where customer_id = %s and event_ref in (%s, %s)", (CUSTOMER, q_ext, c_ext))[0][0] == 2,
               "one inquiry per inbound message, keyed by its message id (0018)")
         check(not q("select 1 from app.outbox where topic = 'reply.send' and target_id = %s", (q_ext,)), "nothing sent before the owner decides")

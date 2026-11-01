@@ -23,6 +23,8 @@
                   only with X-Monitor-Token = HERMES_MONITOR_TOKEN; otherwise the code and "ok" / "degraded".
                   Railway checks /healthz at deploy time only and never reports a skipped or hung cron run, so this
                   is read from outside.
+HERMES_MODEL=simulate|live (live: HERMES_OPENAI_API_KEY) turns on stage 2 of complaint detection (service/model.py,
+spec 28.37); unset, no model is called.
 The worker runs in a thread as hermes_worker. Outbound connections go through crawler.ApiClient only (spec 28.12):
 the portal's calls to the Supabase project host, and with HERMES_GRAPH=live the Graph API. HERMES_GRAPH must be
 "simulate" or "live" (spec 28.14), and anything else refuses to start.
@@ -40,6 +42,7 @@ from service.pg import Database, Ingest, PortalDb
 from service.portal import Portal
 from service.ops_api import MAX_BODY_BYTES as OPS_MAX_BYTES, OpsApi
 from service.ops_store import OpsStore
+from service.model import triage_from_env
 from service.supabase_auth import from_env as supabase_from_env
 from service.tiktok_oauth import SimulatedTikTokOAuth, TikTokOAuth, TikTokTokens
 from service.token_box import TokenBox
@@ -243,6 +246,8 @@ def main():
         tiktok, box = tiktok_link_from_env(os.environ)
         tiktok_tokens = TikTokTokens(Database(url, "hermes_worker"), box, tiktok) if tiktok is not None else None
         adapters = adapters_for(os.environ, tiktok_tokens)
+        worker_db = Database(url, "hermes_worker")
+        triage = triage_from_env(os.environ, worker_db)        # a half model configuration refuses to start
     except (RuntimeError, ValueError) as exc:
         sys.exit(str(exc))
     secrets = [s.strip().encode() for s in os.environ["HERMES_WEBHOOK_SECRETS"].split(",") if s.strip()]
@@ -250,8 +255,9 @@ def main():
         sys.exit("HERMES_WEBHOOK_SECRETS is empty")
     ingest = Ingest(Database(url, "hermes_ingest"))
     webhook = Handler(secrets, ingest)
-    worker = Worker(Database(url, "hermes_worker"), worker_name(), adapters,
-                    approval_poll_seconds=int(os.environ.get("HERMES_APPROVAL_POLL_SECONDS", "60")), build=build, build_generation=generation)
+    worker = Worker(worker_db, worker_name(), adapters,
+                    approval_poll_seconds=int(os.environ.get("HERMES_APPROVAL_POLL_SECONDS", "60")), build=build, build_generation=generation,
+                    triage=triage)
     stop = threading.Event()
     worker_thread = threading.Thread(target=worker.loop, kwargs={"stop": stop}, name="worker", daemon=True)
     port = int(os.environ.get("PORT", "8080"))

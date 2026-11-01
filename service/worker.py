@@ -19,6 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 from complaints import Matcher, normalize  # noqa: E402
+from triage import combined_route  # noqa: E402
 from service.email_inbound import clean  # noqa: E402
 from content_guard import ContentGuard  # noqa: E402
 
@@ -195,8 +196,9 @@ def accepted(ref: str, delay: float, outbox_id=None, timeout: float | None = Non
 
 class Worker:
     def __init__(self, db, name: str, adapters: dict, lease_seconds: int = 120, approval_poll_seconds: int = 60,
-                 build: str | None = None, build_generation: int | None = None):
+                 build: str | None = None, build_generation: int | None = None, triage=None):
         self.db, self.name, self.adapters, self.build = db, name, adapters, build
+        self.triage = triage                        # service/model.Triage: stage 2 of complaint detection, or None
         self.build_generation = build_generation
         self._beat, self._fenced = 0.0, False
         self.lease, self.poll = lease_seconds, approval_poll_seconds
@@ -441,6 +443,16 @@ class Worker:
             cur.execute("select topic, fact from app.kb_facts where approved_by_owner"
                         " and (valid_until is null or valid_until >= current_date) order by updated_at, id")   # the latest wins
             facts = dict(cur.fetchall())
+        answerable = kind == "text" and bool(text) and not (
+            source_kind == "email" and ((email or {}).get("spam") or not EMAIL_ADDRESS.fullmatch(sender)))
+        if self.triage is not None and answerable and decide(text, route, facts, self.guard, self.matcher.rules)["action"] == "propose":
+            # stage 2 (spec 9.6, 28.37) where a reply would be proposed, possibly sent at once by a standing approval:
+            # a complaint the keywords missed goes to the owner instead; anything short of a clean answer changes nothing
+            try:
+                route = combined_route(self.matcher, text, "patron", lambda s: self.triage.classify(t, s))
+            except Exception as exc:                    # noqa: BLE001 - a fault in stage 2 never holds the message back
+                log.error("stage 2 failed, keywords stand: %s", type(exc).__name__)
+        with self.db.tx(t.bind) as cur:
             cats = route.get("categories") or []
             cur.execute("insert into app.inquiries (customer_id, source, body, matched_category, owner_inquiry, routed_to, event_ref,"
                         " message_type) values (%s, %s, %s, %s, %s, %s, %s, %s)"

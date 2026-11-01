@@ -153,9 +153,53 @@ class PortalDb:
             tiktok = {}
             for r in cur.fetchall():                             # the link's health, never a token (0028 column grants)
                 tiktok.setdefault(str(r[0]), []).append({"account": r[1], "failures": r[2], "refresh_expires_at": r[3]})
+            report = self._report(cur, ids)
         return {"customers": customers, "approvals": approvals, "inquiries": inquiries, "facts": facts, "switches": switches,
                 "channels": channels, "posts": posts, "notify": notify, "tiktok": tiktok,
-                "competitors": competitors}
+                "competitors": competitors, "report": report}
+
+    @staticmethod
+    def _report(cur, ids: list) -> dict:
+        """The monthly report (spec 28.36): this month so far and the last one, per business, counted from the owner's
+        own rows (the owner policies decide what is read). Months are Aden time (UTC+3), the pilot's; a reply 'unanswered'
+        is one whose window closed undecided."""
+        cur.execute(
+            "with m as (select d as local_start, d at time zone 'Asia/Aden' as s, (d + interval '1 month') at time zone 'Asia/Aden' as e"
+            "   from generate_series(date_trunc('month', now() at time zone 'Asia/Aden') - interval '1 month',"
+            "                        date_trunc('month', now() at time zone 'Asia/Aden'), interval '1 month') d),"
+            " r as (select a.* from app.approvals a where a.customer_id = any(%(ids)s::uuid[]) and a.proposal_action = 'reply:send')"
+            " select c.id, m.local_start,"
+            "  (select count(*) from app.inquiries i where i.customer_id = c.id and i.received_at >= m.s and i.received_at < m.e),"
+            "  (select count(*) from app.inquiries i where i.customer_id = c.id and i.received_at >= m.s and i.received_at < m.e"
+            "     and i.matched_category is not null),"
+            "  (select coalesce(jsonb_object_agg(src, n), '{}'::jsonb) from (select i.source::text as src, count(*) as n"
+            "     from app.inquiries i where i.customer_id = c.id and i.received_at >= m.s and i.received_at < m.e group by 1) x),"
+            "  (select count(*) from r where r.customer_id = c.id and r.requested_at >= m.s and r.requested_at < m.e"
+            "     and r.decision = 'approved' and coalesce(r.decided_via, 'owner') = 'owner'),"
+            "  (select count(*) from r where r.customer_id = c.id and r.requested_at >= m.s and r.requested_at < m.e"
+            "     and r.decision = 'approved' and r.decided_via = 'standing'),"
+            "  (select count(*) from r where r.customer_id = c.id and r.requested_at >= m.s and r.requested_at < m.e"
+            "     and r.decision = 'rejected'),"
+            "  (select count(*) from r where r.customer_id = c.id and r.requested_at >= m.s and r.requested_at < m.e"
+            "     and (r.decision = 'expired' or (r.decision = 'pending' and r.expires_at <= now()))),"
+            "  (select percentile_cont(0.5) within group (order by extract(epoch from r.decided_at - r.requested_at)) from r"
+            "     where r.customer_id = c.id and r.requested_at >= m.s and r.requested_at < m.e"
+            "     and r.decision in ('approved', 'rejected') and coalesce(r.decided_via, 'owner') = 'owner'),"
+            "  (select count(*) from app.content_items p where p.customer_id = c.id and p.kind = 'post' and p.status = 'published'"
+            "     and p.published_at >= m.s and p.published_at < m.e),"
+            "  (select count(*) from app.competitor_snapshots k where k.customer_id = c.id and k.fetched_at >= m.s and k.fetched_at < m.e)"
+            " from app.customers c cross join m where c.id = any(%(ids)s::uuid[]) order by c.id, m.local_start", {"ids": ids})
+        keys = ("inquiries", "complaints", "by_source", "approved", "instant", "rejected", "unanswered", "median_seconds",
+                "posts", "competitor_checks")
+        out: dict = {}
+        for row in cur.fetchall():
+            cid, start, values = str(row[0]), row[1], dict(zip(keys, row[2:]))
+            entry = out.setdefault(cid, {})
+            if "last" not in entry:                          # ordered by month: the earlier one comes first
+                entry.update(last=values, last_start=start)
+            else:
+                entry.update(now=values, now_start=start)
+        return out
 
     def decide(self, claims: dict, approval_id: str, decision: str) -> bool:
         with self.db.tx(claims=claims) as cur:

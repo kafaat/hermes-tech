@@ -22,7 +22,7 @@ check each step. Seeding is idempotent and uses a fixed staging tenant; every ru
      task and the worker sends it; the operator API of the hermes command line answers the aal2 operator only
   9. competitor check (workflow, 28.11): the daily job as hermes_jobs finds the due competitor, reads the Arabic
      restaurant fixture (no network in CI), files an 'ok' snapshot with the inventory, is not due again the same week,
-     and the owner sees it in the portal. HERMES_E2E_COMPETITOR_URL (staging) adds one real page for the daily job.
+     and the owner sees it in the portal, with the monthly report's counts equal to the database's. HERMES_E2E_COMPETITOR_URL (staging) adds one real page for the daily job.
  10. GET /deps (external monitor): without X-Monitor-Token only the code and one word; with it, numbers only, and
      nothing failing after this run (a purge not yet due is not stale: the database knows when it is due)
 """
@@ -629,6 +629,13 @@ def main():
             check(not [c for c in jobs.due(200) if c["id"] == comp_id], "competitor job: not due again the same week")
             status, _, page = portal(url, issue_staging_token(OWNER, JWT_SECRET))
             check(status == 200 and f"e2e {run}" in page and "أول لقطة" in page, "portal: the owner sees the competitor snapshot")
+            n = q("select count(*) from app.inquiries where customer_id = %s and received_at >="
+                  " date_trunc('month', now() at time zone 'Asia/Aden') at time zone 'Asia/Aden'", (CUSTOMER,))[0][0]
+            checks_n = q("select count(*) from app.competitor_snapshots where customer_id = %s and fetched_at >="
+                         " date_trunc('month', now() at time zone 'Asia/Aden') at time zone 'Asia/Aden'", (CUSTOMER,))[0][0]
+            check("تقرير الشهر" in page and f"<tr><td>رسائل وصلت</td><td>{n}</td>" in page
+                  and f"<tr><td>فحوص المنافسين</td><td>{checks_n}</td>" in page,
+                  f"portal: the monthly report counts this month's {n} messages and {checks_n} competitor checks (28.36)")
         finally:
             q("update app.competitors set active = false where id = %s", (comp_id,))   # the daily job must not fetch it
         real = os.environ.get("HERMES_E2E_COMPETITOR_URL")

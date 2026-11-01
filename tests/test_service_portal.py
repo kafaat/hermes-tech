@@ -207,6 +207,30 @@ class TestPortal(unittest.TestCase):
         self.assertIn("تغيّر سعر مندي: 4500 ← 5000 YER", page)
         self.assertIn("لم يُفحص بعد", page)
 
+    def test_the_monthly_report_shows_this_month_beside_the_last_counted_not_estimated(self):
+        store = FakeStore()
+        base = store.overview
+
+        def overview(claims):
+            data = base(claims)
+            data["report"] = {"c1": {
+                "now_start": datetime(2026, 11, 1), "last_start": datetime(2026, 10, 1),
+                "now": {"inquiries": 12, "complaints": 1, "by_source": {"whatsapp": 9, "site_form": 2, "<b>x</b>": 1},
+                        "approved": 7, "instant": 3, "rejected": 1, "unanswered": 0, "median_seconds": 540.0, "posts": 2,
+                        "competitor_checks": 4},
+                "last": {"inquiries": 0, "by_source": {}, "median_seconds": None}}}
+            return data
+        store.overview = overview
+        page = portal(store).handle("GET", "/portal", cookie(sign(GOOD)), b"")[2].decode()
+        self.assertIn("تقرير الشهر", page)
+        self.assertIn("نوفمبر 2026 حتى اليوم", page)
+        self.assertIn("أكتوبر 2026", page)
+        self.assertIn("<tr><td>رسائل وصلت</td><td>12</td><td>0</td></tr>", page)
+        self.assertIn("واتساب 9، نموذج الموقع 2، &lt;b&gt;x&lt;/b&gt; 1", page)          # an unknown source name, escaped
+        self.assertIn("<tr><td>وسيط وقت قرارك</td><td>9 دقيقة</td><td>—</td></tr>", page)
+        self.assertIn("<tr><td>ردود فورية بموافقتك الدائمة</td><td>3</td><td>0</td></tr>", page)
+        self.assertNotIn("تقرير الشهر", portal().handle("GET", "/portal", cookie(sign(GOOD)), b"")[2].decode())
+
     def test_a_standing_approval_is_offered_for_low_risk_topics_only_and_toggles(self):
         store = FakeStore()
         base = store.overview

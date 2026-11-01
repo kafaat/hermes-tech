@@ -132,6 +132,18 @@ POST_STATE = {"draft": "يُفحص", "pending_approval": "ينتظر موافق�
 PLATFORM_AR = {"facebook": "فيسبوك", "instagram": "إنستغرام", "tiktok": "تيك توك"}
 ACCOUNT_AR = {"facebook_page": "فيسبوك: ", "instagram_business": "إنستغرام: ", "tiktok_business": "تيك توك: "}
 NONE = """<p class="meta">{{text}}</p>"""
+REPORT_H = """<h2>تقرير الشهر</h2><p class="meta">أرقام منشأتك محسوبة من سجلاتها مباشرة، بلا تقدير ولا نموذج.</p>"""
+REPORT_OPEN = """<div class="card"><div class="meta">{{name}}</div><table style="width:100%;border-collapse:collapse">
+<tr><th style="text-align:start"></th><th style="text-align:start">{{now}}</th><th style="text-align:start">{{last}}</th></tr>"""
+REPORT_ROW = """<tr><td>{{label}}</td><td>{{now}}</td><td>{{last}}</td></tr>"""
+REPORT_CLOSE = "</table></div>"
+MONTHS_AR = ("يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر")
+INQUIRY_SOURCE_AR = {"whatsapp": "واتساب", "facebook": "ماسنجر", "instagram": "إنستغرام", "site_form": "نموذج الموقع",
+             "email": "البريد", "tiktok": "تيك توك", "phone": "الهاتف", "other": "أخرى"}
+REPORT_LINES = (("رسائل وصلت", "inquiries"), ("حسب القناة", None), ("منها شكاوى صُعّدت إليك", "complaints"),
+                ("ردود وافقت عليها", "approved"), ("ردود فورية بموافقتك الدائمة", "instant"), ("ردود رفضتها", "rejected"),
+                ("ردود انتهت مهلتها دون قرار", "unanswered"), ("وسيط وقت قرارك", None), ("منشورات نُشرت", "posts"),
+                ("فحوص المنافسين", "competitor_checks"))
 INQUIRIES_H = """<h2>رسائل الأيام السبعة الأخيرة ({{count}})</h2>"""
 INQUIRY = """<div class="card"><div class="meta">{{when}} · {{category}}{{flag}}</div><div class="body">{{body}}</div></div>"""
 COMPETITORS_H = """<h2>منافسوك ({{count}})</h2><p class="meta">فحص أسبوعي لما ينشره موقع المنافس من قائمة وأسعار وساعات وتقييم.</p>"""
@@ -230,6 +242,43 @@ def _r(template: str, **fields) -> str:
     if refused:                                            # no url placeholders here; a refusal means a bug
         raise ValueError(f"refused fields {refused}")
     return html
+
+
+def _duration(seconds) -> str:
+    if seconds is None:
+        return "—"
+    s = float(seconds)
+    if s < 120:
+        return "أقل من دقيقتين"
+    if s < 3600:
+        return f"{round(s / 60)} دقيقة"
+    return f"{s / 3600:.1f} ساعة"
+
+
+def _sources(month: dict) -> str:
+    by = month.get("by_source") or {}
+    return "، ".join(f"{INQUIRY_SOURCE_AR.get(k, k)} {n}" for k, n in sorted(by.items(), key=lambda kv: (-kv[1], kv[0]))) or "—"
+
+
+def report_rows(now: dict, last: dict) -> list[tuple[str, str, str]]:
+    """The month so far beside the last month, one line per measure; the counts are the database's, untouched."""
+    rows = []
+    for label, key in REPORT_LINES:
+        if key is not None:
+            rows.append((label, str(now.get(key) or 0), str(last.get(key) or 0)))
+        elif label == "حسب القناة":
+            rows.append((label, _sources(now), _sources(last)))
+        else:
+            rows.append((label, _duration(now.get("median_seconds")), _duration(last.get("median_seconds"))))
+    return rows
+
+
+def _month_label(start, so_far: bool) -> str:
+    try:
+        name = f"{MONTHS_AR[start.month - 1]} {start.year}"
+    except (AttributeError, IndexError):
+        return "—"
+    return name + (" حتى اليوم" if so_far else "")
 
 
 def _mask(phone) -> str:
@@ -611,6 +660,17 @@ class Portal:
             for post in data.get("posts", []):
                 out.append(_r(POST_ROW, where=PLATFORM_AR.get(post["platform"], "—"), when=_when(post["created_at"]),
                               state=POST_STATE.get(post["status"], post["status"]), body=post["body"]))
+        report = data.get("report") or {}
+        if report:
+            out.append(REPORT_H)
+            for c in data["customers"]:
+                months = report.get(c["id"])
+                if not months:
+                    continue
+                out.append(_r(REPORT_OPEN, name=c["name"], now=_month_label(months["now_start"], True),
+                              last=_month_label(months["last_start"], False)))
+                out += [_r(REPORT_ROW, label=label, now=n, last=l) for label, n, l in report_rows(months["now"], months["last"])]
+                out.append(REPORT_CLOSE)
         out.append(_r(INQUIRIES_H, count=len(data["inquiries"])))
         for q in data["inquiries"]:
             out.append(_r(INQUIRY, when=_when(q["received_at"]), category=CATEGORY_AR.get(q["category"] or "", "بلا تصنيف"),

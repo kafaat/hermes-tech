@@ -1,7 +1,7 @@
 {
  "package_version": "1.8",
  "registry_version": "1.8.0",
- "source_id": "867d29b78854c006fcf210b35f9b1e72e20d3964497e2f756482a57a5dea9dc0",
+ "source_id": "684389cbed3bce604d5b7c513302599a2a0727a93d65676003a14f27b38f138e",
  "file_count": 270,
  "files": {
   ".dockerignore": "51acffa125b3d041889f51bdfe771d46303571b7407c6cc29621dbc9d2c1ce38",
@@ -117,7 +117,7 @@
   "docs/load_targets.md": "59b2a33baba331085d54e252b2219aeec9d3614407e873a47aebff9a7517cae3",
   "docs/lock_order.md": "d9c5083038916b6896cc332d3a754aafe0e472c09e2a42f927df8f643bed7412",
   "docs/positioning.md": "8bd87db7aec4677d176a74513c34400a18e24e31e76f1170868c35ea9260e09a",
-  "docs/reference_projects.md": "3e9149cdf719a6802edf244b7ad6d83d5ab95767ed4d526bc5c797c1330aca25",
+  "docs/reference_projects.md": "d4be8deeb0a2296a4c14cdb086a82635f426ce5d4631724df2c77dbce9a22e49",
   "docs/review_response_independent.md": "e0cdfbe41f3a247d04288fa2635ccfd7a5cf198f99def75add0788b980ae3815",
   "docs/review_response_v11.md": "78eae9b215e02e28940c61aa971675467ab8080647664fe567a91192754d9821",
   "docs/review_response_v13.md": "775a9eed55215cf78d1a4b758161d4b849eba82635f5cc1c189ebfa482fc43d4",
@@ -125,7 +125,7 @@
   "docs/review_response_v17.md": "256a484883fba9f362e9ea91bcc722e8e1f7033b692b542a68911cffafb89804",
   "docs/security_definer_inventory.md": "1a9adffa3e76483ab7f88372ed00956a2f70b6b6348e25b5a62fa3d648fcadf2",
   "docs/setup_guide.md": "c14a4d37f36337c5cd61ac1c031702a273ae3f88a6abf152603adb2f59894803",
-  "docs/whatsapp_cost_scenarios.md": "0cccecaff3d283c0fdde130eaa986202567bd195d21042432043ffe701368c82",
+  "docs/whatsapp_cost_scenarios.md": "b7f3b8fc9d430e928ee8bc15c122748da84129702fcd239d4485fd9f146c4d2b",
   "evals/complaints_seed.jsonl": "1943e83f60be881130d52a843ed9cb65ea917bfd8fdb09ee39cef61105a7bcfc",
   "evals/content_guard_golden.jsonl": "af6b8009f590f8877626a0dc7d6901729b7cb7023ad05b2028443b6e515f4acc",
   "evals/model_admission.json": "c72c3b806e5eae60ed597d815a62da406a04e3731c3d25638834b23da3655c26",

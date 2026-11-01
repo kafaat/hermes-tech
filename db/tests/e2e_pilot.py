@@ -47,6 +47,7 @@ SITE_KEY = "e2esiteKEYAAAAAAAAAAAAAAAA01"
 EMAIL_INBOX = "e2e-shop@inbound.hermes.example"
 EMAIL_SECRET = (os.environ.get("HERMES_EMAIL_INBOUND_SECRETS") or "").split(",")[0].strip() or f"postmark:{uuid.uuid4().hex}"
 HOURS = "نفتح يوميًا من ٩ صباحًا إلى ١١ مساءً"
+ACK = "وصلت رسالتك، وسيرد عليك صاحب المنشأة قريبًا."
 MONITOR_TOKEN = os.environ.get("HERMES_MONITOR_TOKEN") or uuid.uuid4().hex   # staging: the service's own (shared var)
 JWT_SECRET = os.environ.get("HERMES_JWT_SECRET") or uuid.uuid4().hex * 2       # staging: the service's own (shared var)
 failures = []
@@ -563,8 +564,46 @@ def main():
                     pending_id = q("select id from app.approvals where target_id = %s", (r_ext,))[0][0]
                     portal(url, token, "POST", {"_path": "/portal/decide", "approval": str(pending_id), "decision": "rejected",
                                                 "csrf": csrf_token(token, JWT_SECRET)})     # closes that task before the end checks
+
+                    # the instant acknowledgement (0033, 28.40): no answer yet, but the customer hears at once that it arrived
+                    if not q("select 1 from app.kb_facts where customer_id = %s and topic = 'ack' and fact = %s and approved_by_owner",
+                             (CUSTOMER, ACK)):
+                        q("insert into app.kb_facts (customer_id, topic, fact, approved_by_owner) values (%s, 'ack', %s, true)",
+                          (CUSTOMER, ACK), claims=owner_claims)
+                    ack_id = str(q("select id from app.kb_facts where customer_id = %s and topic = 'ack' and approved_by_owner"
+                                   " order by updated_at desc, id desc limit 1", (CUSTOMER,))[0][0])
+                    status, where, _ = portal(url, token, "POST", {"_path": "/portal/facts/standing", "fact": ack_id, "on": "1",
+                                                                   "csrf": csrf_token(token, JWT_SECRET)})
+                    check(status == 303 and where == "/portal?done=standing_on", "acknowledgement: the owner grants the text once")
+                    who = "9677" + str(int(time.time()))[-8:]                    # a new sender each run: once a day per sender
+                    a_ext, a2_ext, ac_ext = (f"wamid.E2E.{run}.{x}" for x in ("ack", "ack2", "ackc"))
+                    post(url, secret, message_payload({"messages": [
+                        {"from": who, "id": a_ext, "type": "text", "text": {"body": "عندكم توصيل لحي حدة؟"}}]}))
+                    acked = wait("acknowledgement sent", lambda: q(
+                        "select o.payload->>'body', a.decided_via from app.outbox o join app.approvals a on a.id = o.approval_id"
+                        " where o.target_id = %s and o.dispatched_at is not null", (f"ack:{a_ext}",)))
+                    check(bool(acked) and acked[0] == (ACK, "standing") and bool(wait("owner told", lambda: q(
+                        "select 1 from app.outbox where topic = 'notify.owner' and target_id = %s", (a_ext,)))),
+                          "acknowledgement: sent at once in the owner's words, and the owner is still told")
+                    post(url, secret, message_payload({"messages": [
+                        {"from": who, "id": a2_ext, "type": "text", "text": {"body": "وكم سعر التوصيل؟"}}]}))
+                    wait("second message handled", lambda: (task_status(a2_ext) or ("queued",))[0] == "escalated")
+                    check(not q("select 1 from app.approvals where target_id = %s", (f"ack:{a2_ext}",)),
+                          "acknowledgement: once a day per sender, and nothing left waiting for the owner")
+                    post(url, secret, message_payload({"messages": [
+                        {"from": "9677" + str(int(time.time()) + 7)[-8:], "id": ac_ext, "type": "text",
+                         "text": {"body": "الفاتورة غلط ودفعت مرتين"}}]}))
+                    wait("complaint handled", lambda: (task_status(ac_ext) or ("queued",))[0] == "escalated")
+                    check(not q("select 1 from app.approvals where target_id = %s", (f"ack:{ac_ext}",)),
+                          "acknowledgement: never to a complaint")
                 finally:
                     q(revoke, (OWNER, CUSTOMER), claims=owner_claims)
+                n_ext = f"wamid.E2E.{run}.ackn"                 # the grant revoked, the approved text still there
+                post(url, secret, message_payload({"messages": [
+                    {"from": "9677" + str(int(time.time()) + 13)[-8:], "id": n_ext, "type": "text", "text": {"body": "عندكم حجز للعزايم؟"}}]}))
+                wait("message without a grant handled", lambda: (task_status(n_ext) or ("queued",))[0] == "escalated")
+                check(not q("select 1 from app.approvals where target_id = %s", (f"ack:{n_ext}",)),
+                      "acknowledgement: without a live grant nothing is sent and no proposal stays behind")
                 receipt = message_payload({"statuses": [{"id": wamid, "status": "delivered", "recipient_id": "967700000001",
                                                          "timestamp": str(int(time.time()))}]})
                 check(post(url, secret, receipt) == 200, "delivery receipt accepted (200)")

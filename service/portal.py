@@ -158,7 +158,7 @@ FACT = """<div class="card"><div class="meta">{{topic}} · {{state}}</div><div c
 FACT_STANDING = """<div class="card"><div class="meta">{{topic}} · معتمدة · {{state}}</div><div class="body">{{fact}}</div>
 <form method="post" action="/portal/facts/standing"><input type="hidden" name="fact" value="{{id}}">
 <input type="hidden" name="on" value="{{on}}"><input type="hidden" name="csrf" value="{{csrf}}"><button class="{{cls}}">{{label}}</button></form></div>"""
-STANDING_TOPICS = ("hours", "location", "payment")
+STANDING_TOPICS = ("hours", "location", "payment", "ack")      # 0020, and 0033: the instant acknowledgement
 SWITCH = """<div class="note">{{name}} · الإرسال الفوري {{state}}
 <form method="post" action="/portal/standing/pause"><input type="hidden" name="customer" value="{{customer}}">
 <input type="hidden" name="paused" value="{{paused}}"><input type="hidden" name="csrf" value="{{csrf}}"><button class="{{cls}}">{{label}}</button></form></div>"""

@@ -154,7 +154,7 @@ journalctl -u hermes-orchestrator -n 200 --since "30 min ago"
 2. `customers add --name ... --sector restaurant --city ... --zone zone_a --reason "..."`؛ احفظ `public_ref`.
 3. أنشئ مستخدم المالك في Supabase (Authentication ← Add user)، ثم `owners link --customer <ref> --user-id <uuid>`.
 4. `channels add` لكل قناة: رقم واتساب (`phone_number_id`)، وصفحة فيسبوك، وحساب إنستغرام، وعنوان البريد الوارد. نموذج الموقع يولّد مفتاحه بلا `--external-id`. ثم `channels verify --id` بعد تحقق Meta فقط.
-5. `facts add` لساعات العمل والموقع والدفع. المالك يوافق عليها في البوابة، ولا يُرد بحقيقة لم يوافق عليها.
+5. `facts add` لساعات العمل والموقع والدفع، ولنص الإقرار الفوري (`--topic ack`، مثل «وصلت رسالتك، وسيرد عليك صاحب المنشأة قريبًا.»). المالك يوافق عليها في البوابة، ولا يُرد بحقيقة لم يوافق عليها. ويمنح الإقرار «أرسلها فورًا» إن أراده (28.40).
 6. `competitors add` لمنافسين اثنين على الأكثر.
 7. دور finance: `billing subscribe`، ثم `billing invoice`، ثم `billing payment` حين يصل الإيصال. بعد التحقق من الإيصال عند الجهة: `billing match`، ثم `billing activate`.
 8. `customers show --customer <ref>`: مالك واحد على الأقل، القنوات نشطة، الحقائق موافق عليها، الاشتراك نشط.

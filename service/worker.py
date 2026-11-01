@@ -36,6 +36,9 @@ BUILD_STALE_SECONDS, BUILD_BEAT_SECONDS = 60, 20   # stale heartbeat is diagnost
 POST_DECISION_DAYS = 7          # a post proposal waits a week for the owner, then lapses
 REPLY_WINDOW_HOURS = 19          # a reply:send proposal must be decidable inside the 20 h window (approvals_reply_window)
 
+ACK_REASONS = ("no_approved_answer", "non_text:audio", "non_text:image", "non_text:video", "non_text:document")
+# ^ when the instant acknowledgement may go out (0033, 28.40): a question nobody has answered yet, or media the owner
+#   opens himself. Never a complaint, an email that failed authentication, or a guard refusal.
 # Questions answered only from owner-approved facts (kb_facts.topic). Keywords are normalised like complaints.
 CANNED_TOPICS = {
     "hours": ("متى", "ساعات", "دوام", "الدوام", "تفتحون", "تفتح", "مفتوح", "تقفلون", "تسكرون"),
@@ -469,15 +472,16 @@ class Worker:
             d = {"action": "escalate", "reason": f"non_text:{kind}", "categories": [], "sla_minutes": None}
         else:
             d = decide(text, route, facts, self.guard, self.matcher.rules)
-        if d["action"] == "propose":
+        def reply_to(body: str, topic: str) -> dict:
             if source_kind == "whatsapp_cloud":
-                reply = {"phone_number_id": channel, "to": sender, "body": d["body"], "in_reply_to": ext, "topic": d["topic"]}
-            elif source_kind == "email":                # back to the sender, in the same thread
-                reply = {"channel": "email", "account_id": channel, "to": sender, "subject": reply_subject((email or {}).get("subject")),
-                         "body": d["body"], "in_reply_to": ext, "message_id": (email or {}).get("message_id"), "topic": d["topic"]}
-            else:                                       # the same channel the customer wrote on (Messenger, Instagram Direct)
-                reply = {"channel": source_kind, "account_id": channel, "to": sender, "body": d["body"], "in_reply_to": ext,
-                         "topic": d["topic"]}
+                return {"phone_number_id": channel, "to": sender, "body": body, "in_reply_to": ext, "topic": topic}
+            if source_kind == "email":                  # back to the sender, in the same thread
+                return {"channel": "email", "account_id": channel, "to": sender, "subject": reply_subject((email or {}).get("subject")),
+                        "body": body, "in_reply_to": ext, "message_id": (email or {}).get("message_id"), "topic": topic}
+            return {"channel": source_kind, "account_id": channel, "to": sender, "body": body, "in_reply_to": ext,
+                    "topic": topic}                     # the same channel the customer wrote on (Messenger, Instagram Direct)
+        if d["action"] == "propose":
+            reply = reply_to(d["body"], d["topic"])
             with self.db.tx(t.bind) as cur:
                 cur.execute("insert into app.approvals (customer_id, scope, proposal_action, payload, requested_by_agent, target_id, expires_at)"
                             " values (%s, 'customer', 'reply:send', %s, 'agent_replies', %s, now() + make_interval(hours => %s))"
@@ -495,9 +499,35 @@ class Worker:
         notice = {"event": ext, "reason": d["reason"], "categories": d["categories"], "sla_minutes": d["sla_minutes"]}
         outbox_id = self._notify(t, notice, ext)        # a reference, never the message text: the owner reads it in the portal
         self._dispatch(t, outbox_id)
+        if d["reason"] in ACK_REASONS and facts.get("ack") and sender and (
+                source_kind in ("whatsapp_cloud", "facebook_page", "instagram_business")
+                or (source_kind == "email" and (email or {}).get("authenticated"))):
+            self._acknowledge(t, ext, reply_to(facts["ack"], "ack"))
         self._processed(t, event_id)
         self._complete(t, "escalated", d["reason"][:60])
         return "escalated"
+
+    def _acknowledge(self, t: Task, ext: str, reply: dict) -> bool:
+        """The instant acknowledgement (0033, spec 28.40): the owner's own approved text, sent at once only under the
+        owner's standing grant for 'ack', at most once a day to the same sender. Without a live grant nothing stays
+        behind: the proposal is rolled back, so the owner never finds an acknowledgement waiting for a decision."""
+        with self.db.tx(t.bind) as cur:
+            cur.execute("select 1 from app.outbox where topic = 'reply.send' and payload->>'topic' = 'ack'"
+                        " and payload->>'to' = %s and created_at > now() - interval '24 hours' limit 1", (reply["to"],))
+            if cur.fetchone():
+                return False                            # already told today: one acknowledgement, not one per message
+            cur.execute("savepoint ack")
+            cur.execute("insert into app.approvals (customer_id, scope, proposal_action, payload, requested_by_agent, target_id, expires_at)"
+                        " values (%s, 'customer', 'reply:send', %s, 'agent_replies', %s, now() + make_interval(hours => %s))"
+                        " returning id", (t.customer_id, _json(reply), "ack:" + ext, REPLY_WINDOW_HOURS))
+            approval_id = cur.fetchone()[0]
+            cur.execute("select app.approve_by_standing(%s)", (approval_id,))   # the database decides (0020-0022)
+            if not cur.fetchone()[0]:
+                cur.execute("rollback to savepoint ack")
+                return False
+            cur.execute("select app.enqueue_outbox('reply.send', %s, %s, %s)", (_json(reply), approval_id, "ack:" + ext))
+            outbox_id = cur.fetchone()[0]
+        return self._dispatch(t, outbox_id) == SENT
 
     def _after_proposal(self, t: Task, event_id: int, ext: str, proposal) -> str:
         approval_id, decision, payload, expired = proposal

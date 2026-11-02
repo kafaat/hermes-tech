@@ -1,6 +1,6 @@
 """FI-NO-SKIP (spec 28.43): no test is skipped, disabled or removed to get green. Each case builds a small git
 repository, changes its tests the way a change would, and runs tools/test_guard.py on it as CI does."""
-import os, shutil, subprocess, sys, tempfile, unittest
+import json, os, shutil, subprocess, sys, tempfile, unittest
 from pathlib import Path
 import yaml
 
@@ -67,8 +67,8 @@ class Repo:
         self.git("checkout", "-q", "-f", self.base)
         self.git("clean", "-qfdx")
 
-    def guard(self, base=None):
-        args = [sys.executable, str(GUARD), "--repo", str(self.path)] + (["--base", base] if base else [])
+    def guard(self, base=None, *extra):
+        args = [sys.executable, str(GUARD), "--repo", str(self.path)] + (["--base", base] if base else []) + list(extra)
         return subprocess.run(args, cwd=self.path, env=self.env, capture_output=True, text=True)
 
 
@@ -180,6 +180,59 @@ class TestTestGuard(unittest.TestCase):
         shutil.rmtree(self.repo.path / ".git")
         self.repo.write("tests/test_a.py", module())
         self.assertFails(self.repo.guard("HEAD"), "unreadable")
+
+
+class TestTestGuardElsewhere(unittest.TestCase):
+    """Another repository reuses the guard at a pinned commit (spec 28.45): its own test directories, and an exact
+    list of the markers it accepts, each with a reason."""
+
+    def setUp(self):
+        self.repo = Repo()
+        self.addCleanup(shutil.rmtree, self.repo.path, True)
+        for d in ("backend/tests", "adapters/tests"):
+            self.repo.write(f"{d}/test_x.py", module())
+        self.repo.base = self.repo.commit("two more test directories")
+        self.dirs = ("--tests", "backend/tests", "--tests", "adapters/tests")
+
+    def allow(self, *entries):
+        self.repo.write("allow.json", json.dumps({"allowed_markers": list(entries)}))
+        return ("--allow", str(self.repo.path / "allow.json"))
+
+    def test_other_test_directories_are_scanned_and_judged(self):
+        self.assertPasses(self.repo.guard(None, *self.dirs), "6 tests in 2 modules")
+        self.repo.write("adapters/tests/test_x.py", module(decorator="    @pytest.mark.skip(reason='flaky')\n"))
+        self.assertFails(self.repo.guard(None, *self.dirs), "adapters/tests/test_x.py:", "`pytest.mark.skip`")
+        self.repo.reset()
+        self.repo.write("backend/tests/test_x.py", module(free=""))
+        self.repo.commit("drop one")
+        self.assertFails(self.repo.guard(self.repo.base, *self.dirs),
+                         "removed without a Tests-Removed trailer: backend/tests/test_x.py::test_free")
+        self.assertFails(self.repo.guard(None, "--tests", "missing/tests"), "unreadable: no missing/tests/ directory")
+        for bad in ("../outside", "/etc"):
+            self.assertFails(self.repo.guard(None, "--tests", bad), "is not a directory inside the repository")
+
+    def test_an_allowance_excuses_exactly_its_markers(self):
+        skipping = "        pytest.skip('Docker absent')\n"
+        entry = {"file": "adapters/tests/test_x.py", "marker": "pytest.skip", "count": 1, "reason": "CI requires Docker"}
+        self.repo.write("adapters/tests/test_x.py", module(body=skipping))
+        self.assertFails(self.repo.guard(None, *self.dirs), "`pytest.skip`")
+        self.assertPasses(self.repo.guard(None, *self.dirs, *self.allow(entry)),
+                          "allowed marker adapters/tests/test_x.py:", "CI requires Docker", "no unallowed skip")
+        self.repo.write("adapters/tests/test_x.py", module(body=skipping) + "\n\ndef test_more():\n    pytest.skip('x')\n")
+        self.assertFails(self.repo.guard(None, *self.dirs, *self.allow(entry)), "2 `pytest.skip` marker(s)", "names 1")
+        self.repo.write("adapters/tests/test_x.py", module())
+        self.assertFails(self.repo.guard(None, *self.dirs, *self.allow(entry)), "stale allowance: no `pytest.skip`")
+
+    def test_an_unusable_allowance_fails_closed(self):
+        for entry in ({"file": "a.py", "marker": "pytest.skip", "reason": " "},
+                      {"file": "a.py", "marker": "pytest.skip", "reason": "x", "count": 0},
+                      {"marker": "pytest.skip", "reason": "x"}):
+            with self.subTest(entry=entry):
+                self.assertFails(self.repo.guard(None, *self.dirs, *self.allow(entry)), "needs file, marker, a reason")
+        self.assertFails(self.repo.guard(None, "--allow", str(self.repo.path / "absent.json")), "unreadable: --allow")
+
+    assertFails = TestTestGuard.assertFails
+    assertPasses = TestTestGuard.assertPasses
 
 
 class TestTestGuardInCI(unittest.TestCase):

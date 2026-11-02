@@ -1,8 +1,8 @@
 {
  "package_version": "1.8",
  "registry_version": "1.8.0",
- "source_id": "eae5136353454fcea8de330c4b00deb62d9e1e7a587af24fa0185cebb3583208",
- "file_count": 274,
+ "source_id": "5d646ea7de36dc50490cbdce829919b6b28cf11bf90a216515ccb8995b38c6a0",
+ "file_count": 275,
  "files": {
   ".dockerignore": "51acffa125b3d041889f51bdfe771d46303571b7407c6cc29621dbc9d2c1ce38",
   ".github/CODEOWNERS": "a3754007304ecd885ebd798a4fee53959beda6e10130ca892b876b58a59f38eb",
@@ -11,7 +11,7 @@
   ".gitignore": "862263fa1f46c20f0d1e4dac5ffcc75abd55c08211b2c3864c5f8764b9d87793",
   "AGENTS.md": "3af610635740448c4caaa164257c73dc40a807d130d4fd0a09632993b6d6960f",
   "CLAUDE.md": "7380a2746272b52d0127a82757ebd9f8215241cf385793c45905da135461b81c",
-  "Hermes_Technical_Specification_v1.8.md": "955d6051b1b6af498045fbad6f500d11819b90102f58126b1a99aeb2762ca5f0",
+  "Hermes_Technical_Specification_v1.8.md": "bb2f904fc6ee4b0097f972ceb2edc6274d58471e544003b75ccb084ed84c68ed",
   "README.md": "db8f877c98e1f5def72c6c1b269cd5fa2a1b50e26f13f492a353032339f7c9df",
   "VERSION": "d2e181481b9515797bc42f282b122d2529d24ea985125bd5c95ded5004e0c7c9",
   "cli/__init__.py": "d2794e2384bbebb78a5bc3527d40d6c3286b1c0624ef7c59162095134e8ef0a6",
@@ -263,7 +263,7 @@
   "tools/audit_checkpoint.py": "f7f5b6bf78502336eb63f8d2e09fbc314132c789865c2424907c72851d853a16",
   "tools/build_manifest.py": "6de0ef1315192116bc5df94b20a8eca05dcc4c94e6d5b7386d12f60852ce2430",
   "tools/check_claims.py": "0656a2d9f383a5cf42b99e7543880c499aa9973dbf8e5046012d2b074ea68000",
-  "tools/check_spec.py": "ebf3a5744d63408f52ad57f8053e1e6ebd4364fd456d03a5e8be7d2d2cb01abf",
+  "tools/check_spec.py": "c99c7c6c4ed918554099ff58f61160f0232daaedb8179856836eea41ececf37a",
   "tools/check_supply_chain.py": "52fd340b87b97bd080ac3577d1627b5c272f3a81092ff4df35e75721c6f2a901",
   "tools/complaints.py": "b9070a08fbd0a3441684076292ab35eedef9aa75d23961ad0b30d36536bf07ef",
   "tools/content_guard.py": "9ea88ffa509244a5c4e72046aa5cacce23147823860e66c174d1b1f970829826",
@@ -275,6 +275,7 @@
   "tools/safe_fetch.py": "5173bd21039033c403b22ce7f7da1ea9f2e9d08282d943087abcb767cd5b2b0b",
   "tools/sql_state.py": "73a2cac36c8153663ba36b04face5074a5193f50b84e3d6927d37e39f1744b16",
   "tools/stats.py": "3c31272b4b2337f2c5b980614f8bde14efe211074a296bc3b3fc1a69a4a24248",
+  "tools/test_guard.py": "ce9f0031b8caf6bf398c6a2ad765f59b61f4d6b4a7ba02afaaf300aef9db236c",
   "tools/triage.py": "f4f610bca0ac850f7fbefa794441368bb7b79df8103d70b00bb35231fa890ee2",
   "tools/validate.py": "12835fbb910b3e0cf1414c8dcc09d82b3bb189b89c5dad264292d30fcc06d20b",
   "tools/validate_schema.py": "4baea0a590a6fb8d11f4e74b5a5722b577f061ef019970e158a6f767e7f199f3"

@@ -71,8 +71,26 @@ jobs:
       # cannot resolve the contract schema's $ref and crashed the base validator (first CI runs)
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0 (node24)
         with: { python-version: "3.12" }
+      # The base whose checkers judge this change (spec 28.44): a pull request's base; for a push to the default
+      # branch, the commit before the push; for a push to any other branch, its fork point with the default branch.
+      # Never a branch's own previous head: the change's author controls it, and after main is merged in it can
+      # predate checkers already on main, so they judged main's own content and failed (hermes-tech PR #5, 78262be).
+      - id: base
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+          DEFAULT: ${{ github.event.repository.default_branch }}
+        run: |
+          base="$PR_BASE"
+          if [ -z "$base" ] && [ "$GITHUB_REF" = "refs/heads/$DEFAULT" ]; then
+            base="$BEFORE"
+          elif [ -z "$base" ] && [ "${GITHUB_REF#refs/heads/}" != "$GITHUB_REF" ]; then
+            base=$(git merge-base "refs/remotes/origin/$DEFAULT" HEAD 2>/dev/null || true)
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "judged against base ${base:-<none>}"
       - run: |
-          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          base="${{ steps.base.outputs.base }}"
           if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null || ! git cat-file -e "$base:tools/gate_guard.py" 2>/dev/null; then
             echo "no usable base commit with a gate guard: the full job set below still has to pass"; exit 0
           fi
@@ -86,7 +104,7 @@ jobs:
       # and it judges EVERY change, not only gate paths: a change that touches tests/ alone never reaches gate_guard.
       # A test missing since base needs a "Tests-Removed: <test id> — <reason>" trailer in a commit of the change.
       - run: |
-          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          base="${{ steps.base.outputs.base }}"
           if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null || ! git cat-file -e "$base:tools/test_guard.py" 2>/dev/null; then
             echo "no usable base commit with a test guard: contracts-and-policy still scans every test for markers"; exit 0
           fi

@@ -94,5 +94,70 @@ class TestGateJob(unittest.TestCase):
                 self.assertIn(f.name, steps)
 
 
+
+class TestWorkflowGuardBase(unittest.TestCase):
+    """The base whose checkers judge a change (spec 28.44) is trusted: never a branch's own previous head."""
+    STEPS = yaml.safe_load((ROOT / ".github/workflows/validate.yml").read_text(encoding="utf-8"))["jobs"]["workflow-guard"]["steps"]
+
+    def setUp(self):
+        self.repo = Path(tempfile.mkdtemp(prefix="guard-base-"))
+        self.addCleanup(shutil.rmtree, self.repo, True)
+        self.env = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull,
+                        GIT_CEILING_DIRECTORIES=str(self.repo.parent))
+        self.git("init", "-q", "-b", "main")
+        for k, v in (("user.email", "t@t"), ("user.name", "t"), ("commit.gpgsign", "false")):
+            self.git("config", k, v)
+        # main: c0, then m1 (a checker change); feature: f1 from c0, then f2 = main merged in
+        self.c0 = self.commit("c0")
+        self.git("checkout", "-q", "-b", "feature")
+        self.f1 = self.commit("f1")
+        self.git("checkout", "-q", "main")
+        self.m1 = self.commit("m1: a new checker")
+        self.git("update-ref", "refs/remotes/origin/main", self.m1)
+        self.git("checkout", "-q", "feature")
+        self.git("merge", "-q", "--no-edit", "main")
+        self.f2 = self.git("rev-parse", "HEAD")
+
+    def git(self, *args):
+        p = subprocess.run(["git", *args], cwd=self.repo, env=self.env, capture_output=True, text=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return p.stdout.strip()
+
+    def commit(self, message):
+        self.git("commit", "-q", "--allow-empty", "-m", message)
+        return self.git("rev-parse", "HEAD")
+
+    def base(self, ref, pr_base="", before="", default="main", head=None):
+        self.git("checkout", "-q", head or self.f2)
+        step = next(s for s in self.STEPS if s.get("id") == "base")
+        out = self.repo / "github_output"
+        out.write_text("")
+        env = dict(self.env, PR_BASE=pr_base, BEFORE=before, DEFAULT=default, GITHUB_REF=ref, GITHUB_OUTPUT=str(out))
+        p = subprocess.run(["bash", "-e", "-c", step["run"]], cwd=self.repo, env=env, capture_output=True, text=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return dict(line.split("=", 1) for line in out.read_text().splitlines())["base"]
+
+    def test_a_branch_push_after_merging_main_is_judged_from_main_not_from_its_previous_head(self):
+        self.assertEqual(self.base("refs/heads/feature", before=self.f1), self.m1)
+
+    def test_a_first_branch_push_is_judged_from_its_fork_point(self):
+        self.assertEqual(self.base("refs/heads/feature", before="0" * 40, head=self.f1), self.c0)
+
+    def test_a_pull_request_is_judged_from_its_base_and_a_push_to_main_from_the_commit_before(self):
+        self.assertEqual(self.base("refs/pull/5/merge", pr_base=self.m1, before=self.f1), self.m1)
+        self.assertEqual(self.base("refs/heads/main", before=self.c0, head=self.m1), self.c0)
+
+    def test_a_tag_or_a_scheduled_run_has_no_base(self):
+        self.assertEqual(self.base("refs/tags/v1.8", before="0" * 40), "")
+        self.assertEqual(self.base("refs/heads/main", default=""), "")
+
+    def test_both_guards_read_that_base_and_nothing_else(self):
+        runs = [s["run"] for s in self.STEPS if "_guard.py" in s.get("run", "")]
+        self.assertEqual(len(runs), 2)
+        for run in runs:
+            self.assertIn('base="${{ steps.base.outputs.base }}"', run)
+            self.assertNotIn("github.event", run)
+
+
 if __name__ == "__main__":
     unittest.main()

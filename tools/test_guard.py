@@ -14,9 +14,16 @@ tests/**/test*.py (the unittest discovery pattern). A rename is a removal plus a
 Unreadable input (a file that does not parse, a base that is not a commit, git failing) fails closed: exit 1.
 CI runs this file from the BASE commit in workflow-guard, the way it runs gate_guard.py, so a change cannot weaken
 the guard that judges it; contracts-and-policy also runs the marker scan where there is no base (weekly runs).
+
+Other repositories reuse this file at a pinned commit instead of copying it (spec 28.45):
+  --tests DIR      a test directory relative to --repo, repeatable; default: tests
+  --allow FILE     JSON {"allowed_markers": [{"file", "marker", "count", "reason"}]}: exactly `count` markers of that
+                   kind in that file are excused and printed with their reason. More or fewer fails, so the list
+                   cannot outlive the markers it names. An entry without a reason, or an unreadable file, fails.
+Hermes itself runs it with neither option, so the behaviour above is unchanged here.
 """
 from __future__ import annotations
-import argparse, ast, re, subprocess, sys
+import argparse, ast, json, re, subprocess, sys
 from collections import Counter
 from pathlib import Path
 
@@ -45,8 +52,35 @@ def parse(rel: str, src: str) -> ast.Module:
         raise Unreadable(f"{rel}: does not parse ({e})") from e
 
 
-def is_test_file(rel: str) -> bool:
-    return rel.startswith("tests/") and Path(rel).name.startswith("test") and rel.endswith(".py")
+def is_test_file(rel: str, dirs: tuple[str, ...] = ("tests",)) -> bool:
+    return any(rel.startswith(d + "/") for d in dirs) and Path(rel).name.startswith("test") and rel.endswith(".py")
+
+
+def test_dirs(values: list[str] | None) -> tuple[str, ...]:
+    raw = [v.strip() for v in (values or ["tests"])]
+    for v in raw:
+        if not v.rstrip("/") or v.startswith("/") or ".." in Path(v).parts:
+            raise Unreadable(f"--tests {v!r} is not a directory inside the repository")
+    return tuple(dict.fromkeys(v.rstrip("/") for v in raw))
+
+
+def allowances(path: str | None) -> list[dict]:
+    """The exact markers a repository accepts, each with a reason and a count."""
+    if not path:
+        return []
+    try:
+        entries = json.loads(Path(path).read_text(encoding="utf-8"))["allowed_markers"]
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        raise Unreadable(f"--allow {path}: {e}") from e
+    out = []
+    for i, e in enumerate(entries if isinstance(entries, list) else [None]):
+        ok = (isinstance(e, dict) and isinstance(e.get("file"), str) and isinstance(e.get("marker"), str)
+              and isinstance(e.get("reason"), str) and e["reason"].strip()
+              and isinstance(e.get("count", 1), int) and e.get("count", 1) >= 1)
+        if not ok:
+            raise Unreadable(f"--allow {path}: entry {i} needs file, marker, a reason and a positive count")
+        out.append({**e, "count": e.get("count", 1)})
+    return out
 
 
 def is_test(node: ast.AST) -> bool:
@@ -95,28 +129,30 @@ def markers(tree: ast.Module) -> list[tuple[int, str]]:
     return sorted(set(found))
 
 
-def head_files(repo: Path) -> dict[str, str]:
-    """Every .py file under tests/ in the tree being judged, as text."""
-    tests = repo / "tests"
-    if not tests.is_dir():
-        raise Unreadable(f"no tests/ directory under {repo}")
+def head_files(repo: Path, dirs: tuple[str, ...] = ("tests",)) -> dict[str, str]:
+    """Every .py file under the test directories in the tree being judged, as text."""
     out = {}
-    for p in sorted(tests.rglob("*.py")):
-        if "__pycache__" in p.parts:
-            continue
-        rel = p.relative_to(repo).as_posix()
-        try:
-            out[rel] = p.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as e:
-            raise Unreadable(f"{rel}: {e}") from e
+    for d in dirs:
+        tests = repo / d
+        if not tests.is_dir():
+            raise Unreadable(f"no {d}/ directory under {repo}")
+        for p in sorted(tests.rglob("*.py")):
+            if "__pycache__" in p.parts:
+                continue
+            rel = p.relative_to(repo).as_posix()
+            try:
+                out[rel] = p.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as e:
+                raise Unreadable(f"{rel}: {e}") from e
     return out
 
 
-def base_ids(repo: Path, base: str) -> list[str]:
-    names = [n for n in git(repo, "ls-tree", "-r", "-z", "--name-only", base, "--", "tests/").split("\0") if n]
+def base_ids(repo: Path, base: str, dirs: tuple[str, ...] = ("tests",)) -> list[str]:
+    paths = [f"{d}/" for d in dirs]
+    names = [n for n in git(repo, "ls-tree", "-r", "-z", "--name-only", "--full-name", base, "--", *paths).split("\0") if n]
     ids = []
     for rel in names:
-        if is_test_file(rel):
+        if is_test_file(rel, dirs):
             ids += test_ids(rel, parse(f"{base[:12]}:{rel}", git(repo, "show", f"{base}:{rel}")))
     return ids
 
@@ -143,29 +179,47 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=RULE)
     ap.add_argument("--base", help="a test present at this commit must still exist, or be named in a Tests-Removed trailer")
     ap.add_argument("--repo", default=".")
+    ap.add_argument("--tests", action="append", metavar="DIR", help="test directory relative to --repo, repeatable; default: tests")
+    ap.add_argument("--allow", metavar="FILE", help="JSON list of exact markers this repository accepts, each with a reason")
     a = ap.parse_args(argv)
     repo = Path(a.repo).resolve()
     fails: list[str] = []
+    trees: dict = {}
+    dirs: tuple[str, ...] = ("tests",)
     try:
-        files = head_files(repo)
-        trees, ids = {}, []
+        dirs, allowed = test_dirs(a.tests), allowances(a.allow)
+        files = head_files(repo, dirs)
+        ids = []
         for rel, src in files.items():
             try:
                 trees[rel] = parse(rel, src)
             except Unreadable as e:
                 fails.append(f"unreadable: {e}")
+        found: dict[tuple[str, str], list[int]] = {}
         for rel, tree in trees.items():
-            fails += [f"{rel}:{line}: skip or disable marker `{what}`" for line, what in markers(tree)]
-            if is_test_file(rel):
+            for line, what in markers(tree):
+                found.setdefault((rel, what), []).append(line)
+            if is_test_file(rel, dirs):
                 ids += test_ids(rel, tree)
                 fails += [f"disabled by redefinition: {r}" for r in redefinitions(rel, tree)]
+        for e in allowed:
+            lines = found.pop((e["file"], e["marker"]), [])
+            if len(lines) == e["count"]:
+                print(f"test guard: allowed marker {e['file']}:{','.join(map(str, lines))} `{e['marker']}` — {e['reason']}")
+            elif not lines:
+                fails.append(f"stale allowance: no `{e['marker']}` in {e['file']}; remove the entry")
+            else:
+                fails.append(f"{e['file']}: {len(lines)} `{e['marker']}` marker(s) at line(s) "
+                             f"{', '.join(map(str, lines))}, the allowance names {e['count']}")
+        fails += [f"{rel}:{line}: skip or disable marker `{what}`"
+                  for (rel, what), lines in sorted(found.items()) for line in lines]
         note = ""
         if a.base:
             try:
                 git(repo, "rev-parse", "--verify", "--quiet", f"{a.base}^{{commit}}")
             except Unreadable as e:
                 raise Unreadable(f"--base {a.base} is not a commit in {repo}") from e
-            gone = sorted(set(base_ids(repo, a.base)) - set(ids))
+            gone = sorted(set(base_ids(repo, a.base, dirs)) - set(ids))
             named, bad = removal_trailers(repo, a.base)
             fails += [f"Tests-Removed trailer unusable, {b}" for b in bad]
             fails += [f"removed without a {TRAILER} trailer: {t}" for t in gone if t not in named]
@@ -185,8 +239,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  a test removed or renamed on purpose is named, one per line, at the end of a commit message in "
                   f"base..HEAD:\n  {TRAILER}: <test id> — <reason>")
         return 1
-    print(f"test guard: {len(ids)} tests in {sum(1 for r in trees if is_test_file(r))} modules, "
-          f"no skip or disable marker{note}")
+    print(f"test guard: {len(ids)} tests in {sum(1 for r in trees if is_test_file(r, dirs))} modules, "
+          f"no {'unallowed ' if a.allow else ''}skip or disable marker{note}")
     return 0
 
 

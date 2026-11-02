@@ -17,3 +17,22 @@
 /VERSION                               @kafaat
 /AGENTS.md                              @kafaat
 /CLAUDE.md                              @kafaat
+# The service's own hashed lock (ADR-0008; CI audits it with pip-audit). The owner's change-tier table treats
+# every lock file as sensitive; this one is named *.txt, so it is listed by name.
+/requirements-service.txt              @kafaat
+# The owner's change-tier table (layer A, sensitive rules), at any depth, so that a matching file added later
+# also needs the owner's review: agent configuration, the table itself, lock files, trust and review records,
+# migrations, secrets, ownership files and agent instructions. Most match nothing today.
+.github/                               @kafaat
+.claude/                               @kafaat
+/governance/                           @kafaat
+*.lock*                                @kafaat
+*-lock.*                               @kafaat
+*_lock.*                               @kafaat
+trust.json                             @kafaat
+reviewed/                              @kafaat
+migrations/                            @kafaat
+secrets/                               @kafaat
+CODEOWNERS                             @kafaat
+AGENTS.md                              @kafaat
+CLAUDE.md                              @kafaat

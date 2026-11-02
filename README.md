@@ -34,6 +34,7 @@ python tools/check_supply_chain.py     # إجراءات غير مثبّتة وت
 python tools/check_claims.py           # كل ادعاء «يجب» مقابل ما يفرضه، بحالة محسوبة
 python tools/check_spec.py --check     # كل رقم وجرد في المواصفة مطابق لمصدره
 python tools/build_manifest.py --check # الملفات والتقارير تخص الإصدار المعلن في VERSION
+python tools/test_guard.py --base origin/main   # لا اختبار مُتخطى أو معطَّل أو محذوف بلا سطر Tests-Removed بسببه (28.43)
 bash db/tests/run_local.sh             # مهمة database كاملة محليًا: العزل والسباقات والمسار الكامل وواجهة الأوامر (Docker، أو PGHOST=... لخادم قائم)
 ```
 

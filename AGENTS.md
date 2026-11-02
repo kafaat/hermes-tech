@@ -26,8 +26,10 @@ pip-audit -r requirements-ci.txt --strict && pip-audit -r requirements-service.t
 bash db/tests/run_local.sh                    # مهمة database كاملة: Docker، أو PGHOST=... لخادم قائم
 base=$(git rev-parse origin/main)             # حارس البوابة كما يشغّله CI: برنامج الأساس على تغييرك
 git show "$base:tools/gate_guard.py" > /tmp/gate_guard.py && python /tmp/gate_guard.py --base "$base"
+git show "$base:tools/test_guard.py" > /tmp/test_guard.py && python /tmp/test_guard.py --base "$base"   # لا اختبار مُتخطى أو محذوف (28.43)
 ```
 بعد الرفع تُقرأ نتيجة CI لكل التزام مرفوع، لا لآخرها وحده.
+اختبار يُحذف أو يُعاد تسميته عن قصد يُسمّى في آخر رسالة الالتزام: `Tests-Removed: <معرّف الاختبار> — <السبب>`، والمعرّف كما يطبعه الحارس.
 
 ## ترتيب الرفع
 وصف ترحيل جديد أو وحدة اختبار جديدة (`MIGRATION_DESCRIPTIONS` و`TEST_DESCRIPTIONS` في `tools/check_spec.py`)، أو استثناء في قواعد المتحقق، أو تبعية تستوردها الاختبارات: يُرفع إلى الفرع الرئيسي أولًا في التزام مستقل، ثم التغيير. التفصيل والسبب في `docs/delivery_protocol.md`، قسم «ترتيب الرفع حين يتغير ما يحكم به الحارس».

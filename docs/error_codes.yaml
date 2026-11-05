@@ -24,6 +24,19 @@ codes:
   REASON_REQUIRED:               {kind: error, since: "1.6", src: "0008 · 0010", ar: "قرار المشغّل يحتاج سببًا مكتوبًا (5 أحرف على الأقل)"}
   COMPLAINT_MATCH:               {kind: error, since: "1.0", src: complaints, ar: "الرسالة طابقت قاعدة شكوى فلم يُولَّد رد"}
   MODEL_PROVIDER_ERROR:          {kind: error, since: "1.6", src: enforce, ar: "خطأ مزوّد غير معروف: لا يُعاد تلقائيًا"}
+  MODEL_USAGE_UNKNOWN:           {kind: error, since: "28.47", src: "service/model · 0035", ar: "قياس الاستهلاك مفقود؛ يبقى الحجز حتى المصالحة بدليل"}
+  MODEL_USAGE_ESTIMATED:         {kind: error, since: "28.47", src: "service/model · 0035", ar: "استهلاك تقديري من محوّل خارجي؛ يبقى الحجز إلى قياس مؤكد"}
+  MODEL_USAGE_INVALID:           {kind: error, since: "28.47", src: "service/model · 0035", ar: "استهلاك مشوّه أو سالب أو تكلفة غير محدودة؛ لا تسوية بصفر"}
+  MODEL_USAGE_IMMUTABLE:         {kind: error, since: "28.47", src: "0035", ar: "هوية النداء وطلبه وأسعاره وحجزه ثابتة"}
+  MODEL_USAGE_FINAL:             {kind: error, since: "28.47", src: "0035", ar: "حالة الاستهلاك نهائية ولا يجوز تغييرها"}
+  MODEL_USAGE_BAD_TRANSITION:    {kind: error, since: "28.47", src: "0035", ar: "انتقال حالة الاستهلاك إلى الوراء مرفوض"}
+  MODEL_USAGE_NOT_READY:        {kind: error, since: "28.47", src: "0035", ar: "دليل القياس أو تطابق الحجز والأسعار غير مكتمل للمصالحة"}
+  MODEL_USAGE_TECH_ONLY:        {kind: error, since: "28.47", src: "0035", ar: "مصالحة استهلاك النموذج للمؤسس أو المشغّل التقني فقط"}
+  MODEL_BUDGET_INCONSISTENT:    {kind: error, since: "28.47", src: "0035", ar: "صف الميزانية مفقود أو المبلغ المحجوز لا يكفي؛ تتراجع المعاملة كاملة"}
+  MODEL_RECONCILIATION_CONFLICT: {kind: error, since: "28.47", src: "0035", ar: "المصالحة المكررة تختلف عن القياس أو الدليل الذي سُوّي"}
+  MODEL_CALL_NOT_FOUND:         {kind: error, since: "28.47", src: "0035", ar: "لا يوجد حجز مرئي لهوية نداء النموذج"}
+  MODEL_REQUEST_CONFLICT:       {kind: error, since: "28.47", src: "service/model", ar: "طلب مختلف لهوية المهمة نفسها؛ لا نداء جديد"}
+  MODEL_RESPONSE_UNOBSERVED:    {kind: error, since: "28.47", src: "0035", ar: "حجز دائم بلا صف رصد؛ نتيجة النموذج غير مسجلة"}
   NETWORK:                       {kind: error, since: "1.0", src: contract, ar: "خطأ شبكة عابر (قابل للإعادة حسب العقد)"}
   RATE_LIMIT:                    {kind: error, since: "1.0", src: contract, ar: "حد معدل المزوّد (قابل للإعادة حسب العقد)"}
   TIMEOUT:                       {kind: error, since: "1.0", src: contract, ar: "انتهت المهلة (قابل للإعادة حسب العقد)"}

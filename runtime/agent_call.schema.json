@@ -47,16 +47,34 @@
       ]
     },
     "tokens_in": {
-      "type": "integer",
-      "minimum": 0
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 2147483647
     },
     "tokens_out": {
-      "type": "integer",
-      "minimum": 0
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 2147483647
     },
     "cost_usd": {
-      "type": "number",
-      "minimum": 0
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 99999.99999
+    },
+    "usage_state": {
+      "enum": ["measured", "estimated", "unknown", "invalid"]
+    },
+    "usage_source": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:-]{1,120}$"
+    },
+    "usage_reason": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Z0-9_]{1,60}$"
+    },
+    "model_call_key": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
     },
     "duration_ms": {
       "type": "integer",

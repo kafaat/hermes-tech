@@ -275,7 +275,9 @@ class OpsStore:
         outcome = args.get("outcome")
         neg = bool(outcome and outcome.startswith("!"))
         cur.execute("select k.ts, k.agent_id, c.public_ref as customer, k.tool, k.model, k.tokens_in, k.tokens_out,"
-                    " k.cost_usd, k.duration_ms, k.outcome::text as outcome, k.error_code from app.agent_calls k"
+                    " k.cost_usd, k.duration_ms, k.outcome::text as outcome, k.error_code, k.usage_state, k.usage_source,"
+                    " k.usage_reason, k.observed_usage_state, k.observation_present, k.model_call_key"
+                    " from app.v_agent_calls_effective k"
                     " left join app.customers c on c.id = k.customer_id"
                     " where k.ts > now() - %(since)s::interval and (%(a)s::text is null or k.agent_id = %(a)s)"
                     " and (%(c)s::uuid is null or k.customer_id = %(c)s::uuid)"
@@ -288,11 +290,31 @@ class OpsStore:
     def _cost(self, cur, claims, args, role):
         cid = self._customer(cur, args["customer"]) if args.get("customer") else None
         key = "k.agent_id" if args.get("group_by") == "agent" else "coalesce(c.public_ref, '(acquisition)')"
-        cur.execute("select " + key + " as key, count(*) as calls, sum(k.cost_usd) as cost_usd from app.agent_calls k"
+        cur.execute("select " + key + " as key, count(*) as calls, sum(k.cost_usd) as cost_usd,"
+                    " count(*) filter (where k.usage_state <> 'measured') as unverified_calls"
+                    " from app.v_agent_calls_effective k"
                     " left join app.customers c on c.id = k.customer_id where k.ts > now() - %(since)s::interval"
                     " and (%(c)s::uuid is null or k.customer_id = %(c)s::uuid) group by 1 order by 3 desc nulls last",
                     {"since": _since(args.get("since"), "30d"), "c": cid})
         return {"rows": _rows(cur)}
+
+    def _usage_pending(self, cur, claims, args, role):
+        cid = self._customer(cur, args["customer"]) if args.get("customer") else None
+        cur.execute("select h.call_key, h.task_id, c.public_ref as customer, h.agent_id, h.model, h.created_at,"
+                    " h.month_id, h.reserved_usd, h.state, h.usage_state, h.usage_source, h.usage_reason, h.error_code"
+                    " from app.model_usage_holds h join app.customers c on c.id = h.customer_id"
+                    " where h.state in ('reserved','pending_usage') and (%(c)s::uuid is null or h.customer_id = %(c)s::uuid)"
+                    " order by h.created_at limit %(n)s", {"c": cid, "n": args.get("limit", 50)})
+        return {"rows": _rows(cur)}
+
+    def _usage_reconcile(self, cur, claims, args, role):
+        # Source, price and actor come from the server/locked row/authenticated session, never caller arguments.
+        cur.execute("select app.reconcile_model_usage(%s,%s,%s,%s,%s,%s)",
+                    (args["call_key"], args["tokens_in"], args["tokens_out"], args["evidence_sha256"],
+                     args["provider_ref"], args["reason"]))
+        out = cur.fetchone()[0]
+        return {**out, "_customer": out["customer_id"], "_target": args["call_key"],
+                "_details": {"changed": out["changed"], "usage_source": "operator.provider_receipt"}}
 
     def _queue_breakdown(self, cur, claims, args, role):
         cur.execute("select agent_id, kind, status::text as status, priority, count(*) as tasks,"
@@ -423,9 +445,15 @@ class OpsStore:
                     " where customer_id = %s and ts > now() - %s::interval order by id", (cid, since))
         audit = _rows(cur)
         cur.execute("select ts, task_id, agent_id, tool, model, tokens_in, tokens_out, cost_usd, duration_ms,"
-                    " outcome::text as outcome, error_code from app.agent_calls where customer_id = %s"
+                    " outcome::text as outcome, error_code, usage_state, usage_source, usage_reason, model_call_key"
+                    " from app.agent_calls where customer_id = %s"
                     " and ts > now() - %s::interval order by ts", (cid, since))
-        return {"audit": audit, "agent_calls": _rows(cur), "_customer": cid, "_target": cid,
+        calls = _rows(cur)
+        cur.execute("select call_key, task_id, agent_id, model, created_at, state, usage_state, usage_source, usage_reason,"
+                    " reserved_usd, tokens_in, tokens_out, cost_usd, evidence_sha256, provider_ref, settled_at"
+                    " from app.model_usage_holds where customer_id = %s and created_at > now() - %s::interval"
+                    " order by created_at", (cid, since))
+        return {"audit": audit, "agent_calls": calls, "model_usage": _rows(cur), "_customer": cid, "_target": cid,
                 "_details": {"audit_rows": len(audit)}}
 
     # ------------------------------------------------------------------ the site (28.39)

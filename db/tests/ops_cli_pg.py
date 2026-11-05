@@ -13,7 +13,17 @@ operator, an incident closed without cause and prevention. Every read command ru
 nowhere else), every write leaves its audit row with the operator and the reason, and the chain still verifies.
 """
 from __future__ import annotations
-import json, os, subprocess, sys, tempfile, threading, uuid
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import threading
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -25,6 +35,8 @@ from service.auth import issue_staging_token  # noqa: E402
 from service.ops_api import OpsApi  # noqa: E402
 from service.ops_store import OpsStore  # noqa: E402
 from service.pg import Database  # noqa: E402
+from service.model import OpenAIModel, Triage  # noqa: E402
+from service.worker import Task  # noqa: E402
 
 DB = os.environ["DATABASE_URL"]
 SECRET = uuid.uuid4().hex * 2
@@ -88,6 +100,130 @@ def hermes(sess, *argv):
 def audit(action, target=None):
     return q("select actor_type::text, actor_id, details from app.audit_log where action = %s"
              " and (%s::text is null or target = %s) order by id desc limit 1", (action, target, target))
+
+
+def model_usage_journey(cid, ref, founder, ops, fin):
+    """P29: REAL PostgreSQL accounting/RLS/transactions and real CLI->HTTP->store.
+    Only the provider transport is synthetic; loss of the second DB transaction is an explicit fault injection.
+    No paid model or external provider endpoint is called. Fixture leases do not replace app.bind_task checks.
+    """
+    db = Database(DB, "hermes_worker")
+
+    def task():
+        tid, tok = str(uuid.uuid4()), str(uuid.uuid4())
+        q("insert into app.tasks(id,public_ref,customer_id,agent_id,kind,idempotency_key,status)"
+          " values (%s,%s,%s,'agent_triage','usage-fixture',%s,'running')", (tid, "t_" + uuid.uuid4().hex, cid, "usage:" + tid))
+        fencing = q("insert into app.task_leases(task_id,customer_id,agent_id,token,worker,fencing,lease_until)"
+                    " values (%s,%s,'agent_triage',%s,'usage-fixture',nextval('app.fencing_seq'),clock_timestamp()+interval '1 hour')"
+                    " returning fencing", (tid, cid, tok))[0][0]
+        return Task(tid, tok, fencing, cid)
+
+    class Transport:
+        def __init__(self, usage):
+            self.usage, self.calls = usage, 0
+
+        def request(self, method, url, body, headers):
+            self.calls += 1
+            return 200, {"status": "completed", "usage": self.usage,
+                         "output": [{"type": "message", "content": [{"type": "output_text", "text":
+                                     '{"complaint": true, "category": "quality", "confidence": 0.9}'}]}]}
+
+    def balance(t):
+        return q("select reserved_usd,spent_usd from app.task_budget where task_id=%s and agent_id='agent_triage'", (t.id,))[0]
+
+    def receipt_args(key):
+        return ["usage", "reconcile", "--call-key", key, "--tokens-in", "300", "--tokens-out", "20",
+                "--evidence-sha256", hashlib.sha256(b"synthetic provider receipt 300/20").hexdigest(),
+                "--provider-ref", "fixture-" + key[:12], "--reason", "synthetic provider receipt checked"]
+
+    measured = task()
+    transport = Transport({"input_tokens": 300, "output_tokens": 20})
+    triage = Triage(db, OpenAIModel("fixture-not-a-credential", transport))
+    first = triage.classify(measured, "fixture normal complaint")
+    again = triage.classify(measured, "fixture normal complaint")
+    check(first == again == (True, "quality", .9) and transport.calls == 1 and balance(measured) == (0, Decimal(".00009")),
+          "P29 measured usage settles once; replay reuses the answer without a second provider call or reservation")
+
+    unknown = task()
+    missing_transport = Transport(None)
+    missing = Triage(db, OpenAIModel("fixture-not-a-credential", missing_transport))
+    check(missing.classify(unknown, "fixture missing usage") == (False, None, 0.0),
+          "P29 missing provider usage leaves the keyword route")
+    held = balance(unknown)
+    missing.classify(unknown, "fixture missing usage")
+    check(held[0] > 0 and held[1] == 0 and balance(unknown) == held and missing_transport.calls == 1,
+          "P29 missing usage retains real reserved money; retry cannot release it or call again")
+    key = q("select call_key from app.model_usage_holds where task_id=%s", (unknown.id,))[0][0]
+    obs = q("select tokens_in,tokens_out,cost_usd,usage_state from app.agent_calls where model_call_key=%s", (key,))[0]
+    check(obs == (None, None, None, "unknown"), "P29 missing usage is a nullable observation, never a zero receipt")
+    code, pending, _ = hermes(fin, "usage", "pending", "--customer", ref)
+    check(code == 0 and any(r["call_key"] == key for r in pending["rows"]), "P29 pending reservations are visible to operators")
+    for session_file in (ops, fin):
+        code, _, err = hermes(session_file, *receipt_args(key))
+        check(code == 3 and "role" in err, "P29 only founder/tech can reconcile through the operator API")
+    with db.tx() as cur:
+        cur.execute("select app.complete_task(%s,%s,%s,'succeeded',null)", (unknown.id, unknown.token, unknown.fencing))
+        check(cur.fetchone()[0], "P29 original task can finish while its usage awaits evidence")
+    code, reconciled, err = hermes(founder, *receipt_args(key))
+    check(code == 0 and reconciled.get("changed") is True and balance(unknown) == (0, Decimal(".00009")),
+          "P29 operator receipt settles all accounting after the worker lease ends" + (": " + err if code else ""))
+    code, duplicate, _ = hermes(founder, *receipt_args(key))
+    check(code == 0 and duplicate.get("changed") is False and balance(unknown) == (0, Decimal(".00009")),
+          "P29 repeated operator receipt does not charge twice")
+    conflicting = receipt_args(key)
+    conflicting[conflicting.index("--tokens-in") + 1] = "301"
+    code, _, err = hermes(founder, *conflicting)
+    check(code == 5 and "MODEL_RECONCILIATION_CONFLICT" in err and balance(unknown) == (0, Decimal(".00009")),
+          "P29 conflicting receipt is rejected atomically")
+
+    class LoseSettlementTransaction:
+        def __init__(self):
+            self.calls = 0
+
+        @contextmanager
+        def tx(self, bind=None):
+            self.calls += 1
+            if self.calls == 2:
+                raise ConnectionError("fixture: provider answered but the result transaction was lost")
+            with db.tx(bind) as cur:
+                yield cur
+
+    lost = task()
+    lost_transport = Transport({"input_tokens": 300, "output_tokens": 20})
+    model = OpenAIModel("fixture-not-a-credential", lost_transport)
+    try:
+        Triage(LoseSettlementTransaction(), model).classify(lost, "fixture lost response")
+        check(False, "P29 injected database response loss reached the caller")
+    except ConnectionError:
+        check(True, "P29 injected database response loss reached the caller")
+    lost_hold = balance(lost)
+    Triage(db, model).classify(lost, "fixture lost response")
+    lost_key = q("select call_key from app.model_usage_holds where task_id=%s", (lost.id,))[0][0]
+    check(lost_transport.calls == 1 and lost_hold[0] > 0 and lost_hold[1] == 0 and balance(lost) == lost_hold
+          and q("select count(*) from app.agent_calls where model_call_key=%s", (lost_key,))[0][0] == 0,
+          "P29 response loss leaves a durable hold; retry neither replays the provider nor invents a log")
+    q("update app.task_leases set lease_until=clock_timestamp()-interval '1 second' where task_id=%s", (lost.id,))
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: hermes(founder, *receipt_args(lost_key)), range(2)))
+    check(all(r[0] == 0 for r in results) and sorted(r[1].get("changed") for r in results) == [False, True]
+          and balance(lost) == (0, Decimal(".00009")),
+          "P29 two concurrent CLI reconciliations settle a lost response exactly once")
+    check(q("select count(*) from app.audit_log where action='model_usage.reconciled' and target=%s", (lost_key,))[0][0] == 1,
+          "P29 concurrent reconciliation has one authenticated effect audit")
+    effective = q("select cost_usd,usage_state,observation_present from app.v_agent_calls_effective where model_call_key=%s",
+                  (lost_key,))
+    check(effective == [(Decimal(".00009"), "measured", False)],
+          "P29 a reconciled lost response appears once in cost reports without an invented observation")
+
+    zero = task()
+    zero_transport = Transport({"input_tokens": 0, "output_tokens": 0})
+    Triage(db, OpenAIModel("fixture-not-a-credential", zero_transport)).classify(zero, "fixture measured zero")
+    check(zero_transport.calls == 1 and balance(zero) == (0, 0), "P29 explicit measured zero releases its reservation")
+    check(q("select reserved_usd,spent_usd from app.customer_ai_budget where customer_id=%s and month_id=to_char(now(),'YYYY-MM')",
+            (cid,)) == [(0, Decimal(".00027"))]
+          and q("select reserved_usd,spent_usd from app.agent_state where customer_id=%s and agent_id='agent_triage'"
+                " and month_id=to_char(now(),'YYYY-MM')", (cid,)) == [(0, Decimal(".00027"))],
+          "P29 customer and agent accounting match the three measured calls and the measured zero")
 
 
 def main():
@@ -222,6 +358,9 @@ def main():
         check(hermes(founder, "gates", "record", "--gate", "0.1", "--value", "0.97", "--source", "cli test",
                      "--reason", "measured")[0] == 0, "gates record by the founder")
 
+        # ---- usage accounting: synthetic provider transport, actual PostgreSQL and CLI transactions (P29)
+        model_usage_journey(cid, ref, founder, ops, fin)
+
         # ---- quality flags
         flag = q("insert into app.quality_flags (customer_id, source, rule_id, severity) values (%s, 'content_guard',"
                  " 'cli_test', 'review') returning id::text", (cid,))[0][0]
@@ -237,7 +376,7 @@ def main():
                  ["calls"], ["calls", "--outcome", "!success", "--since", "7d", "--limit", "5"], ["cost"],
                  ["cost", "--group-by", "agent", "--customer", ref], ["queue", "breakdown"], ["approvals", "list", "--pending"],
                  ["approvals", "list", "--customer", ref], ["outbox", "attention"], ["flags", "list", "--open"],
-                 ["incident", "list"], ["billing", "list", "--customer", ref]]
+                 ["incident", "list"], ["billing", "list", "--customer", ref], ["usage", "pending"]]
         bad = [r for r in reads if hermes(fin, *r)[0] != 0]
         check(not bad, f"every read command answers for any operator role ({len(reads)} commands){bad or ''}")
         code, shown, _ = hermes(ops, "customers", "show", "--customer", ref)

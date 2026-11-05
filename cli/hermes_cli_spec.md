@@ -49,6 +49,8 @@ python -m cli.hermes logout
 | `agent reset-circuit` | `--agent ID --customer CUST` | إغلاق الدائرة يدويًا | tech | `agent.circuit_reset` |
 | `calls` | `[--agent] [--customer] [--since 24h] [--outcome X\|!X] [--limit N]` | قراءة سجل النداءات | read | — |
 | `cost` | `[--customer] [--since 30d] [--group-by customer\|agent]` | تقارير التكلفة | read | — |
+| `usage pending` | `[--customer] [--limit N]` | الحجوزات ذات القياس المفقود أو غير المحسوم، ومنها توقف العامل قبل رصد الاستجابة | read | — |
+| `usage reconcile` | `--call-key SHA256 --tokens-in N --tokens-out N --evidence-sha256 SHA256 --provider-ref REF --reason TEXT` | مصالحة القياس بأعداد صحيحة غير سالبة ودليل فُحص؛ المصدر والأسعار والفاعل من الخادم؛ التكرار المطابق بلا إنفاق جديد | tech | `model_usage.reconciled` للأثر مرة، و`model_usage.reconciliation_requested` لكل طلب مقبول |
 | `queue breakdown` | — | عمق الطابور حسب الوكيل والنوع والأولوية | read | — |
 | `approvals list` | `[--customer] [--pending]` | عرض المقترحات | read | — |
 | `outbox attention` | — | صفوف الصندوق الصادر التي تنتظر إنسانًا (v_outbox_attention) | read | — |
@@ -64,6 +66,8 @@ python -m cli.hermes logout
 2. لا أمر يحذف بيانات دائمًا؛ الحذف إجراء مراجَع خارج الواجهة. «الإزالة» تعطيل (`active = false`).
 3. الوسيط المجهول يُرفض ولا يُتجاهل؛ كل وسيط مقيد بنوعه وطوله.
 4. التجميد لا يوقف أثرًا وافق عليه المالك قبله؛ يظهر في `outbox attention` ويُحسم هناك.
+5. `usage reconcile` يحتاج السبب دائمًا، حتى داخل حادث مفتوح، ولا يقبل تكلفة أو سعرًا أو عميلًا أو فاعلًا من المستدعي. البصمة تربط بايتات الدليل المحفوظ لدى المشغّل ولا تثبت أصالته؛ المصالحة إقرار مشغّل موثق بعد فحص الدليل.
+6. `calls` يعرض حالة القياس ومصدره وحالة الرصد الأصلية و`observation_present`. و`cost` يعرض `unverified_calls`؛ وجوده يجعل المجموع غير مكتمل التحقق. `logs export` يحتفظ بصف الرصد الأصلي ويضيف `model_usage` لعرض المصالحة منفصلة.
 
 ## غير مبني، ولماذا
 

@@ -210,6 +210,12 @@ COMMANDS = {
                                                    limit=_int(1, 500))),
     "cost":                Command("read", args=_a(customer=CUSTOMER, since=SINCE,
                                                    group_by=_enum("customer", "agent"))),
+    "usage.pending":       Command("read", args=_a(customer=CUSTOMER, limit=_int(1, 500))),
+    "usage.reconcile":     Command("tech", True, "model_usage.reconciliation_requested", _a(
+                               call_key=(_pattern(r"[0-9a-f]{64}"), R),
+                               tokens_in=(_int(0, 2_147_483_647), R), tokens_out=(_int(0, 2_147_483_647), R),
+                               evidence_sha256=(_pattern(r"[0-9a-f]{64}"), R),
+                               provider_ref=(_pattern(r"[A-Za-z0-9._:-]{1,128}"), R)), reason_required=True),
     "queue.breakdown":     Command("read"),
     # ---- approvals, outbox, quality flags
     "approvals.list":      Command("read", args=_a(customer=CUSTOMER, pending=_bool)),

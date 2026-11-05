@@ -2,7 +2,14 @@
 argument typed and bounded, an unknown one refused; the staging login only where it is configured; no answer
 carries an exception text; the command line holds its session in a 0600 file, talks HTTPS only (http on loopback),
 and maps every answer to the exit codes of spec 14. The database side runs in db/tests/ops_cli_pg.py."""
-import io, json, os, stat, sys, tempfile, threading, unittest
+import io
+import json
+import os
+import stat
+import sys
+import tempfile
+import threading
+import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
@@ -93,6 +100,24 @@ class ApiTests(unittest.TestCase):
             args = {"customer": "cust_ab12", "kind": kind, **({"external_id": ext} if ext else {})}
             with self.assertRaises(OpsError):
                 clean_args("channels.add", args)
+
+    def test_usage_reconciliation_requires_integer_counts_evidence_and_server_owned_authority(self):
+        args = {"call_key": "a" * 64, "tokens_in": 0, "tokens_out": 12, "evidence_sha256": "b" * 64,
+                "provider_ref": "receipt-test-1", "reason": "provider receipt checked"}
+        self.assertEqual(clean_args("usage.reconcile", args), args)
+        self.assertEqual(COMMANDS["usage.reconcile"].role, "tech")
+        for field, value in (("tokens_in", True), ("tokens_in", 1.0), ("tokens_out", "12"),
+                             ("tokens_out", -1), ("tokens_in", 2**31), ("evidence_sha256", "bad"),
+                             ("provider_ref", "private response with whitespace")):
+            with self.subTest(field=field, value=value), self.assertRaises(OpsError):
+                clean_args("usage.reconcile", {**args, field: value})
+        for field in ("customer_id", "usage_source", "price_in", "actor_id", "usage_state"):
+            with self.subTest(field=field), self.assertRaises(OpsError) as ctx:
+                clean_args("usage.reconcile", {**args, field: "caller cannot choose"})
+            self.assertEqual(ctx.exception.code, "unknown_argument")
+        args.pop("reason")
+        self.assertEqual(call(self.api, "usage.reconcile", args, token())[0], 400)
+        self.assertEqual(self.store.calls, [])
 
     def test_a_reason_is_required_where_no_incident_stands_in_for_it(self):
         for name, args in (("agent.enable", {"agent": "agent_replies"}),

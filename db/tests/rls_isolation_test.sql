@@ -1592,7 +1592,7 @@ do $$ declare got text; bad text; begin
   if bad is not null then raise exception 'FAIL app functions executable by PUBLIC: %', bad; end if;
   select string_agg(p.proname, ',' order by p.proname collate "C") into got from pg_proc p
    where p.pronamespace = 'app'::regnamespace and p.prosecdef;
-  if got is distinct from 'activate_service_build,approve_by_standing,audit_chain,audit_effect,audit_head,audit_verify,bind_task,claim_task,claim_task,complete_task,current_user_customer_ids,extend_task_lease,health_signals,heartbeat_service_build,is_operator,jwt_aal,link_provider_account,outbox_before_write,requeue_task,worker_context,worker_customer_id' then raise exception 'FAIL definer functions differ from the inventory: %', got; end if;
+  if got is distinct from 'activate_service_build,approve_by_standing,audit_chain,audit_effect,audit_head,audit_verify,bind_task,claim_task,claim_task,complete_task,current_user_customer_ids,extend_task_lease,health_signals,heartbeat_service_build,is_operator,jwt_aal,link_provider_account,outbox_before_write,reconcile_model_usage,requeue_task,worker_context,worker_customer_id' then raise exception 'FAIL definer functions differ from the inventory: %', got; end if;
   select string_agg(p.proname, ',') into bad from pg_proc p where p.pronamespace = 'app'::regnamespace and p.prosecdef
      and not exists (select 1 from unnest(coalesce(p.proconfig, '{}'::text[])) c where c like 'search_path=%');
   if bad is not null then raise exception 'FAIL definer functions without a pinned search_path: %', bad; end if;
@@ -1796,6 +1796,278 @@ begin
   exception when insufficient_privilege then null;
   end;
   raise notice 'PASS the owner answers only their own customers, as themselves, inside the window, on a channel that can be answered';
+end $$;
+reset role;
+
+-- 64. P29: unknown usage retains the real reservation; explicit zero and legacy observations remain distinct.
+reset role;
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000a');
+select set_config('test.usage_task', current_setting('app.task_id'), true),
+       set_config('test.usage_token', current_setting('app.task_token'), true);
+set local role hermes_worker;
+do $$
+declare t uuid := current_setting('app.task_id')::uuid; n int;
+begin
+  insert into app.model_usage_holds(call_key,request_sha256,task_id,customer_id,agent_id,tool,month_id,model,
+                                   reserved_usd,monthly,price_in,price_out)
+  values (repeat('6',64),repeat('a',64),t,'00000000-0000-0000-0000-00000000000a','agent_usage_probe',
+          'queue.classify','2099-11','fixture',.05,true,.000001,.000002);
+  if app.reserve_budget('agent_usage_probe','2099-11',t,.05,.1,.1,1,2) <> 'OK' then
+    raise exception 'FAIL usage reservation refused';
+  end if;
+  update app.model_usage_holds set state = 'pending_usage', usage_reason = 'MISSING_USAGE'
+    where call_key = repeat('6',64);
+  insert into app.agent_calls(task_id,customer_id,agent_id,tool,model,tokens_in,tokens_out,cost_usd,duration_ms,
+                              outcome,error_code,idempotency_key,usage_state,usage_source,usage_reason,model_call_key)
+  values (t,'00000000-0000-0000-0000-00000000000a','agent_usage_probe','queue.classify','fixture',null,null,null,1,
+          'failure','MODEL_USAGE_UNKNOWN','usage-test-unknown','unknown','openai.responses.usage','MISSING_USAGE',repeat('6',64));
+  insert into app.model_usage_holds(call_key,request_sha256,task_id,customer_id,agent_id,tool,month_id,model,
+                                   reserved_usd,monthly,price_in,price_out)
+  values (repeat('6',64),repeat('a',64),t,'00000000-0000-0000-0000-00000000000a','agent_usage_probe',
+          'queue.classify','2099-11','fixture',.05,true,.000001,.000002)
+    on conflict (call_key) do nothing;
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'FAIL duplicate model identity inserted'; end if;
+  if not exists (select 1 from app.customer_ai_budget where month_id = '2099-11' and reserved_usd = .05 and spent_usd = 0)
+     or not exists (select 1 from app.task_budget where task_id = t and reserved_usd = .05 and spent_usd = 0)
+     or not exists (select 1 from app.agent_state where agent_id = 'agent_usage_probe' and month_id = '2099-11'
+                     and reserved_usd = .05 and spent_usd = 0) then
+    raise exception 'FAIL unknown usage released or duplicated the reservation';
+  end if;
+  insert into app.agent_calls(task_id,customer_id,agent_id,tool,tokens_in,tokens_out,cost_usd,duration_ms,outcome,
+                              idempotency_key,usage_state,usage_source,usage_reason)
+  values (t,'00000000-0000-0000-0000-00000000000a','agent_usage_probe','queue.classify',0,0,0,1,'success',
+          'usage-test-zero','measured','openai.responses.usage',null);
+  insert into app.agent_calls(task_id,customer_id,agent_id,tool,tokens_in,tokens_out,cost_usd,duration_ms,outcome,idempotency_key)
+  values (t,'00000000-0000-0000-0000-00000000000a','agent_usage_probe','queue.classify',32,4,.001,1,'success','usage-test-legacy');
+  if not exists (select 1 from app.agent_calls where idempotency_key = 'usage-test-legacy' and tokens_in = 32
+                 and cost_usd = .001 and usage_state = 'unknown' and usage_reason = 'LEGACY_UNVERIFIED') then
+    raise exception 'FAIL legacy observation was asserted measured';
+  end if;
+  if not exists (select 1 from app.v_agent_calls_effective where model_call_key = repeat('6',64)
+                 and tokens_in is null and cost_usd is null and usage_state = 'unknown' and observation_present) then
+    raise exception 'FAIL effective view invented a zero measurement';
+  end if;
+  raise notice 'PASS unknown usage retains reservation, duplicate identity is inert and legacy usage remains unverified';
+end $$;
+
+-- 65. P29: model holds follow both the tenant and the exact live task; an owner is not a reconciler.
+reset role;
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000b');
+set local role hermes_worker;
+do $$ begin
+  if exists (select 1 from app.model_usage_holds) then raise exception 'FAIL another tenant sees a model hold'; end if;
+  begin
+    insert into app.model_usage_holds(call_key,request_sha256,task_id,customer_id,agent_id,tool,month_id,model,
+                                     reserved_usd,monthly,price_in,price_out)
+    values (repeat('8',64),repeat('a',64),current_setting('test.usage_task')::uuid,
+            '00000000-0000-0000-0000-00000000000a','agent_usage_probe','queue.classify','2099-11','fixture',.05,true,0,0);
+    raise exception 'FAIL another tenant writes a model hold';
+  exception when insufficient_privilege then null; end;
+  raise notice 'PASS model usage tenant isolation';
+end $$;
+reset role;
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000a');
+set local role hermes_worker;
+do $$ begin
+  if exists (select 1 from app.model_usage_holds) then raise exception 'FAIL another task sees a model hold'; end if;
+  raise notice 'PASS model usage exact task isolation';
+end $$;
+reset role;
+select pg_temp.as_user('11111111-1111-1111-1111-111111111111','aal2');
+set local role authenticated;
+do $$ begin
+  if exists (select 1 from app.model_usage_holds) then raise exception 'FAIL an owner sees model holds'; end if;
+  begin
+    perform app.reconcile_model_usage(repeat('6',64),10,5,repeat('c',64),'fixture-receipt','fixture checked');
+    raise exception 'FAIL an owner reconciled model usage';
+  exception when insufficient_privilege then null; end;
+  raise notice 'PASS model usage requires an operator, not a customer owner';
+end $$;
+
+-- 66. P29: invalid usage never becomes a measurement (real PostgreSQL constraints and budget function).
+reset role;
+select set_config('app.task_id',current_setting('test.usage_task'),true),
+       set_config('app.task_token',current_setting('test.usage_token'),true);
+set local role hermes_worker;
+do $$
+declare t uuid := current_setting('app.task_id')::uuid;
+begin
+  begin
+    insert into app.agent_calls(task_id,customer_id,agent_id,tool,tokens_in,tokens_out,cost_usd,duration_ms,outcome,
+                                idempotency_key,usage_state,usage_source,usage_reason)
+    values (t,'00000000-0000-0000-0000-00000000000a','agent_usage_probe','queue.classify',1,1,'NaN',1,'success',
+            'usage-test-nan','measured','openai.responses.usage',null);
+    raise exception 'FAIL NaN usage stored';
+  exception when check_violation then null; end;
+  begin
+    update app.model_usage_holds set usage_state = 'measured', tokens_in = -1, tokens_out = 0, cost_usd = 0
+      where call_key = repeat('6',64);
+    raise exception 'FAIL negative usage stored';
+  exception when check_violation then null; end;
+  begin
+    update app.model_usage_holds set tokens_in = 0 where call_key = repeat('6',64);
+    raise exception 'FAIL unknown usage accepted numeric totals';
+  exception when check_violation then null; end;
+  begin
+    perform app.settle_budget('agent_usage_probe','2099-11',t,.05,'NaN',true);
+    raise exception 'FAIL NaN usage settled';
+  exception when raise_exception then if sqlerrm <> 'MODEL_USAGE_INVALID' then raise; end if; end;
+  begin
+    perform app.settle_budget('agent_usage_probe','2099-11',t,.05,-.01,true);
+    raise exception 'FAIL negative usage settled';
+  exception when raise_exception then if sqlerrm <> 'MODEL_USAGE_INVALID' then raise; end if; end;
+  if not exists (select 1 from app.task_budget where task_id = t and reserved_usd = .05 and spent_usd = 0) then
+    raise exception 'FAIL invalid usage mutated budget';
+  end if;
+  raise notice 'PASS malformed or nonfinite usage is rejected without touching the reservation';
+end $$;
+
+-- 69. P29: no authenticated operator can bypass the reconciliation function, even with a forged session flag.
+reset role;
+insert into app.operators(auth_user_id,display_name,role,mfa_enrolled,active) values
+  ('69000000-0000-0000-0000-000000000001','usage tech','tech',true,true),
+  ('69000000-0000-0000-0000-000000000002','usage ops','ops',true,true),
+  ('69000000-0000-0000-0000-000000000003','usage finance','finance',true,true);
+set local role authenticated;
+do $$ declare u uuid; begin
+  perform set_config('app.reconcile_model_usage','true',true);
+  for u in select * from (values ('22222222-2222-2222-2222-222222222222'::uuid),
+                                ('69000000-0000-0000-0000-000000000001'::uuid),
+                                ('69000000-0000-0000-0000-000000000002'::uuid),
+                                ('69000000-0000-0000-0000-000000000003'::uuid)) identities(id) loop
+    perform pg_temp.as_user(u,'aal2');
+    begin
+      update app.model_usage_holds set state='settled',usage_state='measured',usage_source='operator.provider_receipt',
+        tokens_in=0,tokens_out=0,cost_usd=0,settled_at=clock_timestamp(),evidence_sha256=repeat('f',64),provider_ref='forged'
+        where call_key=repeat('6',64);
+      raise exception 'FAIL an operator directly changed a usage hold';
+    exception when insufficient_privilege then null; end;
+    begin
+      perform app.settle_budget('agent_usage_probe','2099-11',current_setting('test.usage_task')::uuid,.05,0,true);
+      raise exception 'FAIL an operator bypassed usage reconciliation via settle_budget';
+    exception when insufficient_privilege then null; end;
+  end loop;
+  -- The last identity is finance: even the approved entry point must refuse it.
+  begin
+    perform app.reconcile_model_usage(repeat('6',64),0,0,repeat('f',64),'forged','not a permitted role');
+    raise exception 'FAIL finance reconciled through direct SQL';
+  exception when insufficient_privilege then
+    if sqlerrm <> 'MODEL_USAGE_TECH_ONLY' then raise; end if;
+  end;
+  if not exists (select 1 from app.model_usage_holds where call_key=repeat('6',64)
+                 and state='pending_usage' and usage_state='unknown' and cost_usd is null) then
+    raise exception 'FAIL refused bypass changed the hold';
+  end if;
+  raise notice 'PASS founder tech ops finance cannot update holds or settle directly, and a session flag gives no authority';
+end $$;
+reset role;
+do $$ begin
+  if not exists (select 1 from pg_roles where rolname='hermes_usage_reconciler'
+                 and not rolcanlogin and not rolinherit and not rolsuper and not rolbypassrls
+                 and not rolcreatedb and not rolcreaterole)
+     or has_schema_privilege('hermes_usage_reconciler','app','CREATE')
+     or has_table_privilege('authenticated','app.model_usage_holds','UPDATE')
+     or has_any_column_privilege('authenticated','app.model_usage_holds','UPDATE')
+     or has_function_privilege('authenticated','app.settle_budget(text,text,uuid,numeric,numeric,boolean)','EXECUTE')
+     or has_table_privilege('hermes_usage_reconciler','app.customer_ai_budget','UPDATE')
+     or has_table_privilege('hermes_usage_reconciler','app.model_usage_holds','INSERT')
+     or pg_has_role('authenticated','hermes_usage_reconciler','MEMBER')
+     or pg_has_role('hermes_worker','hermes_usage_reconciler','MEMBER') then
+    raise exception 'FAIL model reconciler holds broad privileges or can be assumed by the application';
+  end if;
+  if (select pg_get_userbyid(proowner) from pg_proc where oid='app.reconcile_model_usage(text,int,int,text,text,text)'::regprocedure)
+       <> 'hermes_usage_reconciler' then raise exception 'FAIL model reconciliation runs as migration owner'; end if;
+  raise notice 'PASS model reconciler is a private narrow owner with column grants and FORCE RLS';
+end $$;
+
+-- 67. P29: reconciliation uses the authenticated operator and frozen prices; a duplicate or conflict cannot charge twice.
+reset role;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222','aal1');
+set local role authenticated;
+do $$ begin
+  begin
+    perform app.reconcile_model_usage(repeat('6',64),10,5,repeat('c',64),'fixture-receipt','fixture checked');
+    raise exception 'FAIL aal1 reconciled model usage';
+  exception when insufficient_privilege then null; end;
+  raise notice 'PASS model reconciliation requires aal2';
+end $$;
+reset role;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222','aal2');
+set local role authenticated;
+do $$
+declare r jsonb; t uuid := current_setting('test.usage_task')::uuid;
+begin
+  begin
+    perform app.reconcile_model_usage(repeat('6',64),-1,5,repeat('c',64),'fixture-receipt','fixture checked');
+    raise exception 'FAIL negative operator counts accepted';
+  exception when raise_exception then if sqlerrm <> 'MODEL_USAGE_INVALID' then raise; end if; end;
+  begin
+    perform app.reconcile_model_usage(repeat('6',64),true,5,repeat('c',64),'fixture-receipt','fixture checked');
+    raise exception 'FAIL boolean operator count accepted';
+  exception when undefined_function then null; end;
+  r := app.reconcile_model_usage(repeat('6',64),10,5,repeat('c',64),'fixture-receipt','fixture checked');
+  if not (r->>'changed')::boolean or (r->>'cost_usd')::numeric <> .00002 then raise exception 'FAIL reconciliation cost'; end if;
+  r := app.reconcile_model_usage(repeat('6',64),10,5,repeat('c',64),'fixture-receipt','retry after response loss');
+  if (r->>'changed')::boolean then raise exception 'FAIL reconciliation charged twice'; end if;
+  begin
+    perform app.reconcile_model_usage(repeat('6',64),11,5,repeat('c',64),'fixture-receipt','conflicting receipt');
+    raise exception 'FAIL conflicting reconciliation accepted';
+  exception when raise_exception then if sqlerrm <> 'MODEL_RECONCILIATION_CONFLICT' then raise; end if; end;
+  if not exists (select 1 from app.customer_ai_budget where customer_id = '00000000-0000-0000-0000-00000000000a'
+                 and month_id = '2099-11' and reserved_usd = 0 and spent_usd = .00002)
+     or not exists (select 1 from app.agent_state where agent_id = 'agent_usage_probe' and month_id = '2099-11'
+                     and reserved_usd = 0 and spent_usd = .00002)
+     or not exists (select 1 from app.task_budget where task_id = t and agent_id = 'agent_usage_probe'
+                     and reserved_usd = 0 and spent_usd = .00002) then
+    raise exception 'FAIL reconciliation did not settle every budget exactly once';
+  end if;
+  if (select count(*) from app.audit_log where action = 'model_usage.reconciled' and target = repeat('6',64)
+       and actor_id = auth.uid()::text and details->>'usage_source' = 'operator.provider_receipt') <> 1 then
+    raise exception 'FAIL reconciliation has no unique authenticated audit';
+  end if;
+  if not exists (select 1 from app.v_agent_calls_effective where model_call_key = repeat('6',64)
+                 and observed_usage_state = 'unknown' and usage_state = 'measured' and cost_usd = .00002)
+     or not exists (select 1 from app.agent_calls where model_call_key = repeat('6',64)
+                     and usage_state = 'unknown' and cost_usd is null) then
+    raise exception 'FAIL reconciliation rewrote the original observation';
+  end if;
+  raise notice 'PASS model reconciliation settles once, preserves evidence and refuses conflicting repeats';
+end $$;
+
+-- 68. P29: a lost response (no agent_calls row) stays visible and can be reconciled after the worker lease ends.
+reset role;
+select pg_temp.bind_as('00000000-0000-0000-0000-00000000000a');
+set local role hermes_worker;
+do $$ declare t uuid := current_setting('app.task_id')::uuid; begin
+  insert into app.model_usage_holds(call_key,request_sha256,task_id,customer_id,agent_id,tool,month_id,model,
+                                   reserved_usd,monthly,price_in,price_out)
+  values (repeat('7',64),repeat('a',64),t,'00000000-0000-0000-0000-00000000000a','agent_usage_lost',
+          'queue.classify','2099-11','fixture',.05,true,.000001,.000002);
+  if app.reserve_budget('agent_usage_lost','2099-11',t,.05,.1,.1,1,2) <> 'OK' then raise exception 'FAIL lost response reserve'; end if;
+  if not exists (select 1 from app.v_agent_calls_effective where model_call_key = repeat('7',64)
+                  and not observation_present and usage_state = 'unknown' and cost_usd is null) then
+    raise exception 'FAIL an unobserved call disappeared from reports';
+  end if;
+  raise notice 'PASS lost response remains visible without inventing an agent observation';
+end $$;
+reset role;
+update app.task_leases set lease_until = clock_timestamp() - interval '1 second' where task_id = current_setting('app.task_id')::uuid;
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222','aal2');
+set local role authenticated;
+do $$ declare r jsonb; begin
+  r := app.reconcile_model_usage(repeat('7',64),0,0,repeat('d',64),'fixture-zero-receipt','provider confirmed no usage');
+  if (r->>'cost_usd')::numeric <> 0 or not (r->>'changed')::boolean then raise exception 'FAIL zero receipt reconciliation'; end if;
+  if not exists (select 1 from app.v_agent_calls_effective where model_call_key = repeat('7',64)
+                  and not observation_present and usage_state = 'measured' and cost_usd = 0)
+     or (select count(*) from app.v_agent_calls_effective where model_call_key = repeat('7',64)) <> 1 then
+    raise exception 'FAIL lost response resolution not visible exactly once';
+  end if;
+  if not exists (select 1 from app.customer_ai_budget where customer_id = '00000000-0000-0000-0000-00000000000a'
+                  and month_id = '2099-11' and reserved_usd = 0 and spent_usd = .00002) then
+    raise exception 'FAIL lost response settlement changed prior spend';
+  end if;
+  raise notice 'PASS evidence reconciliation works after lease expiry and a measured zero is not unknown';
 end $$;
 reset role;
 

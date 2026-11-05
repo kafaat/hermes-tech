@@ -58,6 +58,7 @@ create table app.model_usage_holds (
   created_at timestamptz not null default clock_timestamp(),
   settled_at timestamptz,
   unique (task_id, agent_id),
+  unique (call_key, task_id, customer_id, agent_id),
   check (
     (usage_state in ('unknown','invalid') and tokens_in is null and tokens_out is null and cost_usd is null)
     or (usage_state in ('measured','estimated') and tokens_in is not null and tokens_out is not null and cost_usd is not null)
@@ -160,7 +161,15 @@ revoke all on function app.model_usage_hold_guard() from public;
 create trigger model_usage_hold_guard before update on app.model_usage_holds
   for each row execute function app.model_usage_hold_guard();
 
-alter table app.agent_calls add column model_call_key text references app.model_usage_holds(call_key);
+alter table app.agent_calls add column model_call_key text;
+-- A known call key alone is not authority to attach another tenant's or
+-- task's observation. Legacy rows may omit the key; a linked row must have
+-- every identity component, so MATCH SIMPLE cannot skip a NULL customer.
+alter table app.agent_calls add constraint agent_calls_model_identity_present check (
+  model_call_key is null or (task_id is not null and customer_id is not null and agent_id is not null)
+);
+alter table app.agent_calls add constraint agent_calls_model_identity foreign key (model_call_key,task_id,customer_id,agent_id)
+  references app.model_usage_holds(call_key,task_id,customer_id,agent_id);
 create unique index agent_calls_model_call_once on app.agent_calls(model_call_key) where model_call_key is not null;
 
 -- Existing accounting authority, with a narrowly bound operator branch.

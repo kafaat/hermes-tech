@@ -1848,6 +1848,15 @@ begin
                  and tokens_in is null and cost_usd is null and usage_state = 'unknown' and observation_present) then
     raise exception 'FAIL effective view invented a zero measurement';
   end if;
+  -- A second, zero-bound fixture has no observation yet. The controls in
+  -- case 65 must fail on identity, not on the once-only observation index.
+  insert into app.model_usage_holds(call_key,request_sha256,task_id,customer_id,agent_id,tool,month_id,model,
+                                   reserved_usd,monthly,price_in,price_out)
+  values (repeat('8',64),repeat('a',64),t,'00000000-0000-0000-0000-00000000000a','agent_usage_link',
+          'queue.classify','2099-11','fixture',0,true,0,0);
+  if app.reserve_budget('agent_usage_link','2099-11',t,0,.1,.1,1,2) <> 'OK' then
+    raise exception 'FAIL zero-bound identity fixture refused';
+  end if;
   raise notice 'PASS unknown usage retains reservation, duplicate identity is inert and legacy usage remains unverified';
 end $$;
 
@@ -1860,10 +1869,17 @@ do $$ begin
   begin
     insert into app.model_usage_holds(call_key,request_sha256,task_id,customer_id,agent_id,tool,month_id,model,
                                      reserved_usd,monthly,price_in,price_out)
-    values (repeat('8',64),repeat('a',64),current_setting('test.usage_task')::uuid,
+    values (repeat('9',64),repeat('a',64),current_setting('test.usage_task')::uuid,
             '00000000-0000-0000-0000-00000000000a','agent_usage_probe','queue.classify','2099-11','fixture',.05,true,0,0);
     raise exception 'FAIL another tenant writes a model hold';
   exception when insufficient_privilege then null; end;
+  begin
+    insert into app.agent_calls(task_id,customer_id,agent_id,tool,tokens_in,tokens_out,cost_usd,duration_ms,outcome,
+                                idempotency_key,usage_state,usage_source,usage_reason,model_call_key)
+    values (current_setting('app.task_id')::uuid,'00000000-0000-0000-0000-00000000000b','agent_usage_link',
+            'queue.classify',null,null,null,1,'failure','usage-cross-tenant','unknown','model.adapter','MISSING_USAGE',repeat('8',64));
+    raise exception 'FAIL another tenant attached an observation to a known model key';
+  exception when foreign_key_violation then null; end;
   raise notice 'PASS model usage tenant isolation';
 end $$;
 reset role;
@@ -1871,7 +1887,51 @@ select pg_temp.bind_as('00000000-0000-0000-0000-00000000000a');
 set local role hermes_worker;
 do $$ begin
   if exists (select 1 from app.model_usage_holds) then raise exception 'FAIL another task sees a model hold'; end if;
+  begin
+    insert into app.agent_calls(task_id,customer_id,agent_id,tool,tokens_in,tokens_out,cost_usd,duration_ms,outcome,
+                                idempotency_key,usage_state,usage_source,usage_reason,model_call_key)
+    values (current_setting('app.task_id')::uuid,'00000000-0000-0000-0000-00000000000a','agent_usage_link',
+            'queue.classify',null,null,null,1,'failure','usage-cross-task','unknown','model.adapter','MISSING_USAGE',repeat('8',64));
+    raise exception 'FAIL another task attached an observation to a known model key';
+  exception when foreign_key_violation then null; end;
   raise notice 'PASS model usage exact task isolation';
+end $$;
+reset role;
+select set_config('app.task_id',current_setting('test.usage_task'),true),
+       set_config('app.task_token',current_setting('test.usage_token'),true);
+set local role hermes_worker;
+do $$ begin
+  begin
+    insert into app.agent_calls(task_id,customer_id,agent_id,tool,tokens_in,tokens_out,cost_usd,duration_ms,outcome,
+                                idempotency_key,usage_state,usage_source,usage_reason,model_call_key)
+    values (current_setting('app.task_id')::uuid,'00000000-0000-0000-0000-00000000000a','agent_usage_other',
+            'queue.classify',null,null,null,1,'failure','usage-cross-agent','unknown','model.adapter','MISSING_USAGE',repeat('8',64));
+    raise exception 'FAIL another agent attached an observation to a known model key';
+  exception when foreign_key_violation then null; end;
+  raise notice 'PASS a model observation must match the hold agent as well as its tenant and task';
+end $$;
+reset role;
+do $$ begin
+  -- The administrator fixture bypasses RLS so this specifically proves the
+  -- NOT NULL identity condition, not merely the worker's tenant policy.
+  begin
+    insert into app.agent_calls(task_id,customer_id,agent_id,tool,tokens_in,tokens_out,cost_usd,duration_ms,outcome,
+                                idempotency_key,usage_state,usage_source,usage_reason,model_call_key)
+    values (current_setting('test.usage_task')::uuid,null,'agent_usage_link','queue.classify',null,null,null,1,'failure',
+            'usage-null-identity','unknown','model.adapter','MISSING_USAGE',repeat('8',64));
+    raise exception 'FAIL null customer bypassed the composite model identity';
+  exception when check_violation then null; end;
+end $$;
+set local role hermes_worker;
+do $$ begin
+  insert into app.agent_calls(task_id,customer_id,agent_id,tool,tokens_in,tokens_out,cost_usd,duration_ms,outcome,
+                              idempotency_key,usage_state,usage_source,usage_reason,model_call_key)
+  values (current_setting('app.task_id')::uuid,'00000000-0000-0000-0000-00000000000a','agent_usage_link',
+          'queue.classify',null,null,null,1,'failure','usage-matched-identity','unknown','model.adapter','MISSING_USAGE',repeat('8',64));
+  if (select count(*) from app.agent_calls where model_call_key=repeat('8',64)) <> 1 then
+    raise exception 'FAIL valid model observation identity was refused or duplicated';
+  end if;
+  raise notice 'PASS a null customer cannot skip model identity checks and an exactly matched observation is accepted';
 end $$;
 reset role;
 select pg_temp.as_user('11111111-1111-1111-1111-111111111111','aal2');

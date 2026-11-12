@@ -1,11 +1,12 @@
 {
  "package_version": "1.8",
  "registry_version": "1.8.0",
- "source_id": "4d11a1e960151e417786c246b6950e60fc35e99a7f50618c7cd9522383e12961",
- "file_count": 277,
+ "source_id": "586328e2ce3199192f0c6e7fa62b1336b02360570f71f8f0f891d4109fc3fd40",
+ "file_count": 278,
  "files": {
   ".dockerignore": "51acffa125b3d041889f51bdfe771d46303571b7407c6cc29621dbc9d2c1ce38",
   ".github/CODEOWNERS": "c018c2cd6c2c92297a723a677c2a91e36e198fc830ce93f41266bad0e322917f",
+  ".github/scripts/single_writer_guard.py": "57731d5b8a964414352681c76ced900f03db92ee62d7fa32384a803b8793339c",
   ".github/workflows/monitor.yml": "9eb1b8c77cf1be7c3aa6afc3b526323a123d0d767fb2635205a8ff7b1646584e",
   ".github/workflows/validate.yml": "e132f0c8bca806d8f1d45971fe50286bf2b1b36299a30388b75fa5c49db153a1",
   ".gitignore": "862263fa1f46c20f0d1e4dac5ffcc75abd55c08211b2c3864c5f8764b9d87793",
@@ -265,7 +266,7 @@
   "tools/audit_checkpoint.py": "f7f5b6bf78502336eb63f8d2e09fbc314132c789865c2424907c72851d853a16",
   "tools/build_manifest.py": "6de0ef1315192116bc5df94b20a8eca05dcc4c94e6d5b7386d12f60852ce2430",
   "tools/check_claims.py": "0656a2d9f383a5cf42b99e7543880c499aa9973dbf8e5046012d2b074ea68000",
-  "tools/check_spec.py": "711f320e444c32a81e4c4987534116585d89a1dd4a0f136588440d9053e6e315",
+  "tools/check_spec.py": "e8f04464e279fb82f6030a5eb4c5b04f4650575011ef21f69aae17c3f8d7385d",
   "tools/check_supply_chain.py": "52fd340b87b97bd080ac3577d1627b5c272f3a81092ff4df35e75721c6f2a901",
   "tools/complaints.py": "b9070a08fbd0a3441684076292ab35eedef9aa75d23961ad0b30d36536bf07ef",
   "tools/content_guard.py": "9ea88ffa509244a5c4e72046aa5cacce23147823860e66c174d1b1f970829826",

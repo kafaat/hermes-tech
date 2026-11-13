@@ -151,9 +151,9 @@ class TestWorkflowGuardBase(unittest.TestCase):
         self.assertEqual(self.base("refs/tags/v1.8", before="0" * 40), "")
         self.assertEqual(self.base("refs/heads/main", default=""), "")
 
-    def test_both_guards_read_that_base_and_nothing_else(self):
+    def test_every_guard_reads_that_base_and_nothing_else(self):
         runs = [s["run"] for s in self.STEPS if "_guard.py" in s.get("run", "")]
-        self.assertEqual(len(runs), 2)
+        self.assertEqual(len(runs), 3)                   # gate_guard, test_guard (28.43), single_writer_guard (28.48)
         for run in runs:
             self.assertIn('base="${{ steps.base.outputs.base }}"', run)
             self.assertNotIn("github.event", run)

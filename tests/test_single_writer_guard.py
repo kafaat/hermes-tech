@@ -37,7 +37,8 @@ class FakeGitHub(guard.GitHub):
         return self.pages[url]
 
 
-def site(*prs, page_size=None):
+def site(*prs, page_size=None, list_page_size=None):
+    """page_size splits a file list over two pages; list_page_size splits the open pull request list the same way."""
     pages = {}
     for body, files in prs:
         n = body["number"]
@@ -48,7 +49,11 @@ def site(*prs, page_size=None):
         else:
             pages[url] = (files, None)
     listing = [{k: v for k, v in body.items() if k != "changed_files"} for body, _ in prs if body["state"] == "open"]
-    pages[f"{BASE}/pulls?state=open&per_page=100"] = (listing, None)
+    url = f"{BASE}/pulls?state=open&per_page=100"
+    if list_page_size and len(listing) > list_page_size:
+        pages[url], pages[f"{url}&page=2"] = (listing[:list_page_size], f"{url}&page=2"), (listing[list_page_size:], None)
+    else:
+        pages[url] = (listing, None)
     return pages
 
 
@@ -69,6 +74,8 @@ class TestSingleWriter(unittest.TestCase):
         self.assertEqual(run(site(pr(1, ["old.py"]), pr(2, [], renamed={"old.py": "new.py"})), 1)[0], 1)  # a rename's old path
         many = [f"f{i}.py" for i in range(5)]
         self.assertEqual(run(site(pr(1, ["f4.py"]), pr(2, many), page_size=3), 1)[0], 1)         # the second page is read
+        code, report = run(site(pr(1, ["s.py"]), pr(2, ["o.py"]), pr(3, ["s.py"]), list_page_size=2), 1)
+        self.assertEqual((code, [c["number"] for c in report["conflicts"]]), (1, [3]))          # and of the open list
         self.assertEqual(run(site(pr(1, ["a.py"], state="closed"), pr(2, ["a.py"])), 1)[0], 0)  # a closed PR guards nothing
 
     def test_a_stacked_pair_is_not_a_conflict(self):
@@ -95,6 +102,12 @@ class TestSingleWriter(unittest.TestCase):
         malformed = site(pr(1, ["a.py"]), pr(2, ["b.py"]))
         malformed[f"{BASE}/pulls/2"] = ({"number": 2, "changed_files": 1}, None)
         self.assertEqual(run(malformed, 1)[0], 2)                                                 # no head or base
+        paged = site(pr(1, ["a.py"]), pr(2, ["b.py"]), pr(3, ["a.py"]), list_page_size=2)
+        del paged[f"{BASE}/pulls?state=open&per_page=100&page=2"]
+        self.assertEqual(run(paged, 1)[0], 2)                                                     # open list, page 2 unreadable
+        paged = site(pr(1, ["a.py"]), pr(2, ["a.py"]))
+        paged[f"{BASE}/pulls?state=open&per_page=100"] = ({"message": "rate limited"}, None)
+        self.assertEqual(run(paged, 1)[0], 2)                                                     # open list not a list
         for error in (ConnectionResetError("reset"), http.client.IncompleteRead(b"{")):        # dropped mid-read
             with self.subTest(error=type(error).__name__), mock.patch.object(guard.urllib.request, "urlopen", side_effect=error):
                 with self.assertRaises(guard.Unknown):

@@ -1,7 +1,7 @@
 {
  "package_version": "1.8",
  "registry_version": "1.8.0",
- "source_id": "a68b1899c7f377d957101e2de42b016e2b3af80c8c1809607b0aa3ee3bb397d7",
+ "source_id": "06d4a44c2f75839b2f24c3b06835954119cd09b3e24b3cfbf5ea023f7560cac6",
  "file_count": 279,
  "files": {
   ".dockerignore": "51acffa125b3d041889f51bdfe771d46303571b7407c6cc29621dbc9d2c1ce38",
@@ -12,7 +12,7 @@
   ".gitignore": "862263fa1f46c20f0d1e4dac5ffcc75abd55c08211b2c3864c5f8764b9d87793",
   "AGENTS.md": "0e4d81e2edc97fc942944984d53222365e3bc7feb23096104f22f46f7b4edabb",
   "CLAUDE.md": "7380a2746272b52d0127a82757ebd9f8215241cf385793c45905da135461b81c",
-  "Hermes_Technical_Specification_v1.8.md": "f0cb199719533c5239e2ac2fc08d9130660b8d2103b7c0e35621f636c0fa07ba",
+  "Hermes_Technical_Specification_v1.8.md": "5e3c5c3cde97dfaf6885ff9319ef847e994924c0e1dbf8edb0313b3af93f99cb",
   "README.md": "9bd1dccf9eab087ca6bd0a5a801a7c5769a9af4aa748abec91fa95c98a16d71a",
   "VERSION": "d2e181481b9515797bc42f282b122d2529d24ea985125bd5c95ded5004e0c7c9",
   "cli/__init__.py": "d2794e2384bbebb78a5bc3527d40d6c3286b1c0624ef7c59162095134e8ef0a6",
@@ -255,7 +255,7 @@
   "tests/test_service_token_box.py": "6b7ffd98c38ffbe8ea17b2b9b2869bd0a4162d63f00efffada526d1bac94f5b4",
   "tests/test_service_webhook.py": "5bf8c32a2ec125c5bcd96acd138565f71ac704a82adcf0ed2e883c6cd2c381cd",
   "tests/test_service_worker.py": "2568683f03df45406ab45b6d7b0d87489d150cc500602d85d8fcda4e048e9408",
-  "tests/test_single_writer_guard.py": "26b74dce584ae435a5cbfd62b7b94732d3e9e139b863d5fff5860f670f68f4e7",
+  "tests/test_single_writer_guard.py": "9af0e2951e623dd615a3d068ae328bad1e1d4e79a5a2efde9bf7a5fb769575cf",
   "tests/test_spec_consistency.py": "c1450dd1f469a142642d71225f66d44fa34e9a8cdb8376b168bcf15dd5541681",
   "tests/test_supply_chain.py": "f10becc23ff8e034926f475b206864b87a28208c67654908b5b2a49c416efc11",
   "tests/test_test_guard.py": "ee4cfd21231df8106b2f694516160f8f53ee7904310f4b0270fb3e3341dddd9b",

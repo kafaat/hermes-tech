@@ -64,6 +64,10 @@ jobs:
     # A change to ANY gate path (checkers, policies, claims, inventories, tests of the database, CI) is judged
     # by the checkers of the BASE commit, run on the change's data. The guard program itself comes from base.
     runs-on: ubuntu-24.04   # pinned: the image changes only by a deliberate, tested edit
+    # pull-requests: read for the single-writer guard below, which lists the open pull requests and their files
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 (node24)
         with: { fetch-depth: 0 }
@@ -110,6 +114,23 @@ jobs:
           fi
           git show "$base:tools/test_guard.py" > "$RUNNER_TEMP/test_guard.py"
           python3 "$RUNNER_TEMP/test_guard.py" --base "$base"
+      # CC-SINGLE-WRITER and CC-NO-AGE-RELEASE (spec 28.48): an open pull request reserves the files it changes, and
+      # another open pull request on any of them fails here until the first merges or closes (a stacked pair excepted).
+      # Age, draft state and inactivity never release a file; an incomplete or unreadable GitHub answer is UNKNOWN and
+      # fails. The guard also comes from BASE, byte for byte the copy pinned in kafaat/- (engineering-skills/skills.lock.json).
+      # Pull requests only: a push has no pull request of its own to compare.
+      - if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          base="${{ steps.base.outputs.base }}"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null || ! git cat-file -e "$base:.github/scripts/single_writer_guard.py" 2>/dev/null; then
+            echo "no usable base commit with a single-writer guard: unknown, not a pass"; exit 1
+          fi
+          git show "$base:.github/scripts/single_writer_guard.py" > "$RUNNER_TEMP/single_writer_guard.py"
+          python3 "$RUNNER_TEMP/single_writer_guard.py" --repo "$REPO" --pr "$NUMBER"
   release-gate:
     # Tags that may reach production: supply-chain warnings become failures (ADR-0008), every "must" claim needs a
     # test or a declared decision, and the database job must have run every case on a real Postgres.

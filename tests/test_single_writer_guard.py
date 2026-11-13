@@ -1,6 +1,6 @@
 """CC-SINGLE-WRITER and CC-NO-AGE-RELEASE (spec 28.48): one writer per file across open pull requests. The guard runs
 against a fake GitHub here (no network); in CI the BASE copy runs against the real one on every pull request."""
-import contextlib, hashlib, http.client, io, json, os, sys, unittest
+import contextlib, hashlib, http.client, io, json, os, subprocess, sys, tempfile, unittest
 from pathlib import Path
 from unittest import mock
 import yaml
@@ -120,6 +120,52 @@ class TestSingleWriter(unittest.TestCase):
         self.assertEqual(job["permissions"], {"contents": "read", "pull-requests": "read"})
         gate = yaml.safe_load((ROOT / ".github/workflows/validate.yml").read_text(encoding="utf-8"))["jobs"]["gate"]
         self.assertIn("workflow-guard", gate["needs"])                                            # and gate waits for it
+
+
+    def test_the_step_runs_the_base_copy_and_fails_without_one(self):
+        """The workflow step itself, run in a scratch repository: the guard that runs is the base commit's, never the
+        pull request's own copy, its exit code is the step's, and a base without a guard fails (28.48)."""
+        job = yaml.safe_load((ROOT / ".github/workflows/validate.yml").read_text(encoding="utf-8"))["jobs"]["workflow-guard"]
+        run_ = next(s["run"] for s in job["steps"] if "single_writer_guard.py" in s.get("run", ""))
+        with tempfile.TemporaryDirectory() as d:
+            repo, runner = Path(d) / "repo", Path(d) / "runner"
+            repo.mkdir(), runner.mkdir()
+            env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": d, "GIT_CONFIG_NOSYSTEM": "1",
+                   "RUNNER_TEMP": str(runner), "REPO": REPO, "NUMBER": "7"}
+            guard_file = repo / ".github/scripts/single_writer_guard.py"
+
+            def git(*args):
+                return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                                       "-c", "commit.gpgsign=false", *args], cwd=repo, env=env, check=True,
+                                      capture_output=True, text=True).stdout.strip()
+
+            def commit(guard_source=None):
+                if guard_source is not None:
+                    guard_file.parent.mkdir(parents=True, exist_ok=True)
+                    guard_file.write_text(guard_source, encoding="utf-8")
+                (repo / "n").write_text(str(len(list(repo.iterdir()))), encoding="utf-8")
+                git("add", "-A")
+                git("commit", "-q", "-m", "c")
+                return git("rev-parse", "HEAD")
+
+            def step(base):
+                script = run_.replace("${{ steps.base.outputs.base }}", base)
+                return subprocess.run(["bash", "-e", "-c", script], cwd=repo, env=env, capture_output=True, text=True)
+
+            git("init", "-q")
+            no_guard = commit()
+            passing = commit('print("BASE COPY")\n')
+            failing = commit('print("BASE COPY")\nraise SystemExit(1)\n')
+            guard_file.write_text('print("HEAD COPY")\n', encoding="utf-8")       # the pull request's own, weakened copy
+
+            r = step(passing)
+            self.assertEqual((r.returncode, "BASE COPY" in r.stdout, "HEAD COPY" in r.stdout), (0, True, False))
+            self.assertEqual(step(failing).returncode, 1)                           # the base guard's failure is the step's
+            for base in (no_guard, "", "0" * 40):                                   # no guard at base, no base, not a commit
+                with self.subTest(base=base[:7] or "empty"):
+                    r = step(base)
+                    self.assertEqual(r.returncode, 1)
+                    self.assertIn("unknown, not a pass", r.stdout)
 
 
 if __name__ == "__main__":
